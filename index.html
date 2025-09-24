@@ -1,0 +1,1866 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Abundant Intelligence Zine Atlas</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+        :root {
+            --bg-color: #f5f5f5;
+            --text-color: #222;
+            --border-color: #222;
+            --amp-color: #e63946;
+            --damp-color: #457b9d;
+            --seed-color: #2a9d8f;
+            --forage-color: #e9c46a;
+            --font-main: 'Press Start 2P', cursive;
+        }
+
+        body {
+            font-family: var(--font-main);
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            font-size: 12px;
+        }
+
+        header {
+            text-align: center;
+            padding: 20px;
+            border-bottom: 4px solid var(--border-color);
+            margin-bottom: 20px;
+        }
+
+        header h1 {
+            font-size: 24px;
+            text-transform: uppercase;
+        }
+
+        nav ul {
+            list-style: none;
+            padding: 0;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 15px;
+        }
+
+        nav a {
+            text-decoration: none;
+            color: var(--text-color);
+            background: #fff;
+            padding: 8px 12px;
+            border: 2px solid var(--border-color);
+            box-shadow: 4px 4px 0 var(--border-color);
+            transition: all 0.1s linear;
+        }
+
+        nav a:hover {
+            box-shadow: 2px 2px 0 var(--border-color);
+            transform: translate(2px, 2px);
+        }
+
+        .domain-level {
+            border: 4px solid var(--border-color);
+            margin-bottom: 40px;
+            padding: 20px;
+            background: #fff;
+        }
+
+        .domain-level > h2 {
+            font-size: 20px;
+            text-align: center;
+            margin-top: 0;
+            padding-bottom: 10px;
+            border-bottom: 2px solid var(--border-color);
+        }
+        
+        .spread {
+            margin-top: 30px;
+            border-top: 4px dotted var(--border-color);
+            padding-top: 20px;
+        }
+        
+        .spread > h3 {
+            font-size: 16px;
+            text-align: center;
+            background: var(--text-color);
+            color: var(--bg-color);
+            padding: 10px;
+            margin-bottom: 20px;
+        }
+
+        .gamepad-layout {
+            display: grid;
+            grid-template-columns: 1fr 2fr 1fr;
+            grid-template-rows: auto auto auto;
+            gap: 15px;
+            align-items: center;
+        }
+        
+        .seed-prompt {
+            grid-column: 2 / 3;
+            grid-row: 2 / 3;
+            border: 2px solid var(--seed-color);
+            padding: 15px;
+            text-align: center;
+        }
+
+        .seed-prompt h4, .prompt-title {
+            margin: 0 0 10px 0;
+            font-size: 14px;
+        }
+
+        .tetrad-prompt {
+            border: 2px solid var(--border-color);
+            padding: 15px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .tetrad-prompt:hover { background-color: #eee; }
+
+        .up { grid-column: 2 / 3; grid-row: 1 / 2; text-align: center; }
+        .down { grid-column: 2 / 3; grid-row: 3 / 4; text-align: center; }
+        .left { grid-column: 1 / 2; grid-row: 2 / 3; text-align: center; }
+        .right { grid-column: 3 / 4; grid-row: 2 / 3; text-align: center; }
+
+        .prompt-details {
+            display: none;
+            margin-top: 10px;
+            text-align: left;
+        }
+        
+        .prompt-details p { margin: 5px 0 15px 0; }
+        .prompt-details strong { display: block; }
+        .prompt-details strong.amp { color: var(--amp-color); }
+        .prompt-details strong.damp { color: var(--damp-color); }
+
+        .foraging-prompts {
+            margin-top: 20px;
+            border: 2px solid var(--forage-color);
+            padding: 15px;
+            cursor: pointer;
+        }
+        .foraging-prompts h4 { margin: 0; }
+        .foraging-prompts:hover { background-color: #fffbeB; }
+        
+        .active .prompt-details {
+            display: block;
+        }
+        
+        @media (max-width: 768px) {
+            body { font-size: 10px; padding: 10px; }
+            .gamepad-layout {
+                grid-template-columns: 1fr;
+                grid-template-rows: auto;
+            }
+            .seed-prompt, .up, .down, .left, .right {
+                grid-column: 1 / 2;
+                grid-row: auto;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>&#x1F3AE; Abundant Intelligence Zine Atlas &#x1F579;</h1>
+        <nav>
+            <ul>
+                <li><a href="#education">Education</a></li>
+                <li><a href="#medicine">Medicine</a></li>
+                <li><a href="#energy">Energy</a></li>
+                <li><a href="#governance">Governance</a></li>
+                <li><a href="#economy">Economy</a></li>
+                <li><a href="#creativity">Creativity</a></li>
+                <li><a href="#ethics">Ethics</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main>
+        <section id="education" class="domain-level">
+            <h2>LEVEL 1: Education</h2>
+
+            <div class="spread">
+                <h3>A. Destination</h3>
+                <div class="gamepad-layout">
+                    <div class="seed-prompt">
+                        <h4>&#x1F3AE; START</h4>
+                        <p>What evidence shows AI tutors measurably improving outcomes across diverse demographics, and which models are closest to universal deployment?</p>
+                    </div>
+                    <div class="tetrad-prompt up" onclick="toggleDetails(this)">
+                        <div class="prompt-title">&#x2B06;&#xFE0F; Enhances</div>
+                        <div class="prompt-details">
+                            <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> How does AI tutoring expand content diversity and create an R-loop where more micro-paths → more edge-case wins → more micro-paths? What constraints on content gatekeeping collapse?</p>
+                            <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> Which curricular guardrails + metadata standards absorb content variety so outcomes stay within learning-goal deviation bands? What signals show healthy attenuation (N-loop)?</p>
+                        </div>
+                    </div>
+                    <div class="tetrad-prompt left" onclick="toggleDetails(this)">
+                        <div class="prompt-title">&#x2B05;&#xFE0F; Obsolesces</div>
+                        <div class="prompt-details">
+                            <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> As fixed-pace classes obsolesce, which DIY/gray study hacks proliferate (peer prompt markets, shadow syllabi), increasing pathway variety beyond program control (R-loop)?</p>
+                            <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> Which credit-mapping & portability layers keep DIY paths compatible with diplomas, reducing deviation from accreditation requirements (N-loop thresholds)?</p>
+                        </div>
+                    </div>
+                    <div class="tetrad-prompt right" onclick="toggleDetails(this)">
+                        <div class="prompt-title">&#x27A1;&#xFE0F; Retrieves</div>
+                        <div class="prompt-details">
+                            <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> Retrieval of apprenticeship norms can multiply teacher practice variety (studio critiques, oral defenses). When does this over-differentiate assessment (R-loop fragmentation)?</p>
+                            <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What rubrics/calibration circles bound practice diversity while preserving pluralism (inter-rater reliability targets, variance caps) (N-loop)?</p>
+                        </div>
+                    </div>
+                    <div class="tetrad-prompt down" onclick="toggleDetails(this)">
+                        <div class="prompt-title">&#x2B07;&#xFE0F; Reverses</div>
+                        <div class="prompt-details">
+                            <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> If hyper-personalization flips into curricular splintering, how do incompatible knowledge graphs explode variety (content forks, exam misalignment) (R-loop)?</p>
+                            <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> Which interoperability profiles + common exams pull the system back into a shared competence envelope without crushing diversity (N-loop with graduated quotas)?</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="foraging-prompts" onclick="toggleDetails(this)">
+                    <h4>&#x1F4A1; Foraging Prompts (Click to Expand)</h4>
+                    <div class="prompt-details">
+                        <p><strong>&#x1F442; Pathetic Dot:</strong> Map the four forces constraining AI tutors: What new Laws (CIPA/FERPA)? Where are the Market pressures (freemium models)? What Norms (teacher union resistance)? How does the Code (API limits) restrict behavior?</p>
+                        <p><strong>&#x1F9F0; Levers:</strong> Propose a prompt to identify two key levers. How could [district content quotas] dampen curricular variety? Conversely, how could [open-standard item banks] amplify productive variety in assessment?</p>
+                        <p><strong>&#x1F4CA; KPIs:</strong> Design a dashboard prompt to track educational variety. What query would generate a 'Syllabus Diversity Index'? What prompt would calculate a 'Variety Absorption Ratio' for different learning styles?</p>
+                        <p><strong>&#x1F3AF; Bounds:</strong> Formulate a prompt to define the system's failure state. What are the min/max acceptable deviation bands for [assessment fairness] that, if breached, signal a need for intervention?</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="spread">
+              <h3>B. Embarrassing Gap</h3>
+              <div class="gamepad-layout">
+                  <div class="seed-prompt">
+                      <h4>&#x1F3AE; START</h4>
+                      <p>Which groups (rural, disabled, non-digital) are excluded from AI tutoring research?</p>
+                  </div>
+                  <div class="tetrad-prompt up" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B06;&#xFE0F; Enhances</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> How does highlighting exclusion create/expand the variety of governance models (co-ops, public options) via an R-loop where visible gaps → public pressure → new models?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What universal access mandates constrain platform competition, ensuring a baseline of service and absorbing variety in predatory pricing for underserved groups (N-loop)?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt left" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B05;&#xFE0F; Obsolesces</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> As universalist AI-for-all claims obsolesce, what unregulated niches for hyper-local, dialect-specific tutors open, increasing language/locale variety?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> Which compatibility layers (e.g., text-to-speech) keep legacy access methods present to reduce deviation and prevent total exclusion?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt right" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x27A1;&#xFE0F; Retrieves</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> Which revived practices of community-led education resurface to fill gaps, multiplying governance variety (e.g., library-hosted AI clubs)?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> How can we curate these retrieved models with federated standards to bound their variety, ensuring quality without forcing a single top-down approach?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt down" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B07;&#xFE0F; Reverses</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> If ignored, how do gaps flip into market splintering, where platform competition explodes into tiered access, creating incompatible ecosystems for rich and poor (R-loop)?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What counter-loops (public funding, open-source mandates) pull the system back from a two-tiered state into a viable range of equitable access?</p>
+                      </div>
+                  </div>
+              </div>
+              <div class="foraging-prompts" onclick="toggleDetails(this)">
+                  <h4>&#x1F4A1; Foraging Prompts (Click to Expand)</h4>
+                  <div class="prompt-details">
+                      <p><strong>&#x1F442; Pathetic Dot:</strong> Map the four forces creating this gap: What Laws (lack of ADA enforcement)? How does the Market (cost of rural broadband) fail these groups? What Norms (stigma against tech) create barriers? How does the Code (models trained on high-resource languages) reinforce the divide?</p>
+                      <p><strong>&#x1F9F0; Levers:</strong> Propose a prompt to find interventions. How could [public subsidies for rural access] dampen the access gap? How could [open data mandates for excluded groups] amplify their representation?</p>
+                      <p><strong>&#x1F4CA; KPIs:</strong> Design a dashboard prompt for equity. What query generates a 'Gini coefficient of model access'? What prompt calculates a 'Language/Dialect Availability Index'?</p>
+                      <p><strong>&#x1F3AF; Bounds:</strong> Formulate a prompt to define 'unacceptable exclusion.' What is the maximum allowable performance disparity between demographic groups before the system is flagged as discriminatory?</p>
+                  </div>
+              </div>
+            </div>
+
+            <div class="spread">
+              <h3>C. Faustian Bargain</h3>
+              <div class="gamepad-layout">
+                  <div class="seed-prompt">
+                      <h4>&#x1F3AE; START</h4>
+                      <p>If learning is outsourced to AI, will students lose critical thinking?</p>
+                  </div>
+                  <div class="tetrad-prompt up" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B06;&#xFE0F; Enhances</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> How does outsourcing rote tasks create/expand the variety of pedagogy for deep thinking (e.g., Socratic dialogue), creating an R-loop of higher-order skill development?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What assessment formats (e.g., oral exams) constrain the system, forcing students to demonstrate skills that AI can't fake and attenuating shallow learning?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt left" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B05;&#xFE0F; Obsolesces</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> As slow trial-and-error obsolesces, what unregulated niches for ‘prompt engineering’ skills open up, increasing the variety of student pathways to a ‘correct’ answer?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> Which fallbacks like mandatory ‘unplugged’ projects keep older practices present enough to reduce deviation from a baseline of non-AI-mediated thinking?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt right" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x27A1;&#xFE0F; Retrieves</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> Which revived practices like rote memorization (now for prompt patterns) resurface, multiplying the variety of cognitive styles seen as ‘successful’?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> How can we curate this retrieval, using metacognitive training to bound the use of rote techniques, preventing them from displacing critical analysis?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt down" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B07;&#xFE0F; Reverses</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> If pushed too far, how does reliance flip into cognitive dependency, exploding the variety of failure modes (e.g., inability to spot plausible hallucinations) in an R-loop?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What counter-loops (AI detection audits, required source-checking assignments) pull the system back into a viable range of human-AI cognitive partnership?</p>
+                      </div>
+                  </div>
+              </div>
+              <div class="foraging-prompts" onclick="toggleDetails(this)">
+                  <h4>&#x1F4A1; Foraging Prompts (Click to Expand)</h4>
+                  <div class="prompt-details">
+                      <p><strong>&#x1F442; Pathetic Dot:</strong> Map the four forces in this bargain: How do Laws (academic integrity policies) govern this? What Market is created for AI detection vs. paraphrasing tools? What Norms (peer pressure) drive adoption? How does Code (watermarking) try to regulate authenticity?</p>
+                      <p><strong>&#x1F9F0; Levers:</strong> Propose a prompt to manage the bargain. How could [banning AI in certain classes] dampen reliance? How could [teaching prompt craft as a formal skill] amplify student agency?</p>
+                      <p><strong>&#x1F4CA; KPIs:</strong> Design a dashboard prompt for critical thinking. What query measures the ratio of 'process vs. product' in grading? What prompt tracks plausible but false AI-generated claims in student work?</p>
+                      <p><strong>&#x1F3AF; Bounds:</strong> Formulate a prompt to define the 'point of no return.' What is the max percentage of a final grade from AI-assisted work before core competencies are considered compromised?</p>
+                  </div>
+              </div>
+            </div>
+
+            <div class="spread">
+              <h3>D. Negative Externality</h3>
+              <div class="gamepad-layout">
+                  <div class="seed-prompt">
+                      <h4>&#x1F3AE; START</h4>
+                      <p>Could AI tutoring monopolies standardize global curricula?</p>
+                  </div>
+                  <div class="tetrad-prompt up" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B06;&#xFE0F; Enhances</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> How does a monopoly's drive for efficiency ironically create/expand a variety of black-market curricula in an R-loop of resistance to homogenization?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What interoperability standards constrain a monopoly, forcing it to allow third-party content and absorbing its drive to create a walled garden (N-loop)?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt left" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B05;&#xFE0F; Obsolesces</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> As local curricular diversity is erased, what unregulated niches open for ‘banned knowledge’ tutors, increasing content variety on the fringes of the official system?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> Which fallbacks (e.g., mandating local history modules) keep local affordances present to reduce deviation from cultural preservation goals?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt right" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x27A1;&#xFE0F; Retrieves</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> Which revived myths of national identity resurface to fight the monopoly, multiplying the variety of politicized educational content?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> How can we curate this retrieval of national narratives to bound its variety, preventing jingoism while fostering healthy pluralism?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt down" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B07;&#xFE0F; Reverses</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> If pushed too far, how does efficiency flip into propaganda, exploding the variety of adversarial responses (state-sponsored curriculum forks, mass boycotts) in an R-loop?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What counter-loops (antitrust regulation, public utility mandates) pull the system back from monopoly control into a viable range of platform competition?</p>
+                      </div>
+                  </div>
+              </div>
+              <div class="foraging-prompts" onclick="toggleDetails(this)">
+                  <h4>&#x1F4A1; Foraging Prompts (Click to Expand)</h4>
+                  <div class="prompt-details">
+                      <p><strong>&#x1F442; Pathetic Dot:</strong> Map the forces enabling a monopoly: How do weak Laws (antitrust) fail to check power? How does the Market (network effects) create a winner-take-all dynamic? What Norms (desire for standardization) encourage a single provider? How does Code (closed-source models) prevent local adaptation?</p>
+                      <p><strong>&#x1F9F0; Levers:</strong> Propose a prompt to counter monopoly. How could [government funding for open-source alternatives] amplify platform competition? How could [mandating content interoperability] dampen a single player's control?</p>
+                      <p><strong>&#x1F4CA; KPIs:</strong> Design a dashboard prompt for market health. What query calculates the 'HHI' for the ed-tech market? What prompt measures the 'percentage of non-Western content' in the top 3 platforms?</p>
+                      <p><strong>&#x1F3AF; Bounds:</strong> Formulate a prompt to define monopoly power. What is the maximum market share for a single AI tutor provider that, if breached, triggers automatic antitrust review?</p>
+                  </div>
+              </div>
+            </div>
+
+            <div class="spread">
+              <h3>E. Black Swan</h3>
+              <div class="gamepad-layout">
+                  <div class="seed-prompt">
+                      <h4>&#x1F3AE; START</h4>
+                      <p>What if propaganda is injected into AI tutors?</p>
+                  </div>
+                  <div class="tetrad-prompt up" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B06;&#xFE0F; Enhances</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> How does the discovery of a propaganda vector create/expand the variety of governance models (e.g., adversarial audits, teacher co-ops) in a reactive R-loop?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What content provenance standards (e.g., cryptographic signatures) constrain the system, absorbing the variety of potential malicious inputs?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt left" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B05;&#xFE0F; Obsolesces</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> As the teacher-as-filter role obsolesces, what unregulated niches for third-party ‘truth wrapper’ services open up, increasing the variety of epistemological viewpoints?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> Which fallbacks, like school librarians trained in AI forensics, are kept present to reduce deviation from fact-based learning when filters fail?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt right" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x27A1;&#xFE0F; Retrieves</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> Which revived practices of Cold War-era media literacy resurface, multiplying the variety of teacher practices focused on critical consumption?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> How can we curate the retrieval of these skeptical practices to bound their variety, preventing a flip into reflexive, conspiratorial cynicism?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt down" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B07;&#xFE0F; Reverses</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> If effective, how does education flip into brainwashing, exploding the variety of splinter realities as different groups trust different tutors (R-loop)?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What counter-loops (public kill-switches for compromised models, mandatory viewpoint diversity indices) pull the system back from total epistemic fragmentation?</p>
+                      </div>
+                  </div>
+              </div>
+              <div class="foraging-prompts" onclick="toggleDetails(this)">
+                  <h4>&#x1F4A1; Foraging Prompts (Click to Expand)</h4>
+                  <div class="prompt-details">
+                      <p><strong>&#x1F442; Pathetic Dot:</strong> Map the forces of this propaganda vector: How could Laws (libel law) provide recourse? What Market incentive (reputational damage) exists to prevent this? What Norms (taboo of indoctrinating children) provide a defense? How does Code (ability to fine-tune on biased data) create the vulnerability?</p>
+                      <p><strong>&#x1F9F0; Levers:</strong> Propose a prompt to build resilience. How could [whistleblower protections for AI trainers] amplify the chance of discovery? How could [centralized blocklists for propaganda sources] dampen the spread?</p>
+                      <p><strong>&#x1F4CA; KPIs:</strong> Design a dashboard prompt for epistemic security. What query runs a political bias test on a tutor's output? What prompt tracks the 'number of documented propaganda incidents' per month?</p>
+                      <p><strong>&#x1F3AF; Bounds:</strong> Formulate a prompt to define a 'compromised system.' What is the maximum allowable deviation from a politically neutral baseline that, if breached, requires a model to be taken offline?</p>
+                  </div>
+              </div>
+            </div>
+        </section>
+
+        <section id="medicine" class="domain-level">
+            <h2>LEVEL 2: Medicine</h2>
+
+            <div class="spread">
+                <h3>A. Destination</h3>
+                <div class="gamepad-layout">
+                    <div class="seed-prompt">
+                        <h4>&#x1F3AE; START</h4>
+                        <p>Which AI-driven discoveries are advancing into clinical trials with higher success?</p>
+                    </div>
+                    <div class="tetrad-prompt up" onclick="toggleDetails(this)">
+                        <div class="prompt-title">&#x2B06;&#xFE0F; Enhances</div>
+                        <div class="prompt-details">
+                            <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> How does AI's ability to model novel compounds create/expand the variety of therapeutic modalities (e.g., bespoke proteins) in an R-loop where new tools enable new discoveries?</p>
+                            <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What regulatory frameworks (e.g., FDA guidelines for AI-generated INDs) constrain this new variety, ensuring safety and absorbing dangerous deviations?</p>
+                        </div>
+                    </div>
+                    <div class="tetrad-prompt left" onclick="toggleDetails(this)">
+                        <div class="prompt-title">&#x2B05;&#xFE0F; Obsolesces</div>
+                        <div class="prompt-details">
+                            <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> As trial-and-error bottlenecks shrink, what unregulated niches for n-of-1, AI-optimized trials open up, radically increasing the variety of trial designs?</p>
+                            <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> Which fallbacks like mandatory Phase 1 safety cohorts keep legacy practices present enough to reduce deviation from established ethical safety protocols?</p>
+                        </div>
+                    </div>
+                    <div class="tetrad-prompt right" onclick="toggleDetails(this)">
+                        <div class="prompt-title">&#x27A1;&#xFE0F; Retrieves</div>
+                        <div class="prompt-details">
+                            <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> Which revived practices of holistic, preventative medicine reappear, now AI-powered, multiplying the variety of care-paths beyond simple treatment?</p>
+                            <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> How can we curate this retrieval to bound its variety with evidence-based standards, preventing a slide into AI-powered pseudoscience?</p>
+                        </div>
+                    </div>
+                    <div class="tetrad-prompt down" onclick="toggleDetails(this)">
+                        <div class="prompt-title">&#x2B07;&#xFE0F; Reverses</div>
+                        <div class="prompt-details">
+                            <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> If rushed, how does precision medicine misfire, exploding the variety of iatrogenic errors when models overfit to incomplete data (R-loop of cascading harm)?</p>
+                            <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What counter-loops (real-world evidence monitoring, mandatory model recalibration) pull the system back into a viable range of safety and efficacy?</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="foraging-prompts" onclick="toggleDetails(this)">
+                    <h4>&#x1F4A1; Foraging Prompts (Click to Expand)</h4>
+                    <div class="prompt-details">
+                        <p><strong>&#x1F442; Pathetic Dot:</strong> Map the four forces on AI drug discovery: What Laws (FDA approval processes)? How does the Market (patent system) incentivize novelty? What Norms (Hippocratic Oath)? How does the Code (limits of simulations) constrain what's possible?</p>
+                        <p><strong>&#x1F9F0; Levers:</strong> Propose a prompt to accelerate discovery. How could [fast-track approval for AI-discovered drugs] amplify innovation? How could [standardized trial data formats] dampen errors?</p>
+                        <p><strong>&#x1F4CA; KPIs:</strong> Design a dashboard prompt for the drug pipeline. What query tracks the 'number of novel AI-identified drug targets'? What query measures the 'success rate improvement' in AI-assisted trials?</p>
+                        <p><strong>&#x1F3AF; Bounds:</strong> Formulate a prompt to define safety. What are the minimum acceptable efficacy and maximum acceptable side-effect profiles for an AI-designed therapeutic to proceed to human trials?</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="spread">
+              <h3>B. Embarrassing Gap</h3>
+              <div class="gamepad-layout">
+                  <div class="seed-prompt">
+                      <h4>&#x1F3AE; START</h4>
+                      <p>Where do missing datasets (rare diseases, non-Western demographics) limit safety?</p>
+                  </div>
+                  <div class="tetrad-prompt up" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B06;&#xFE0F; Enhances</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> How does highlighting data gaps create/expand the variety of vendors specializing in diverse data collection, creating an R-loop where demand for equity builds a new market?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What data standards (e.g., mandatory demographic reporting) constrain the system, absorbing excuses for non-representative cohorts?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt left" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B05;&#xFE0F; Obsolesces</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> As claims of universal cures obsolesce, what unregulated niches open for AI models trained on specific, previously ignored genotypes, increasing the variety of precision medicines?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> Which fallbacks, like doctors using clinical judgment to override biased AI recommendations, remain present to reduce deviation from equitable care?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt right" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x27A1;&#xFE0F; Retrieves</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> Which revived practices of community health and local knowledge resurface to provide context for missing data, multiplying the variety of inputs into health models?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> How can we curate this retrieval of qualitative data to bound its use, integrating it into models without compromising statistical rigor?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt down" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B07;&#xFE0F; Reverses</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> If ignored, how do data gaps flip into discriminatory care, exploding the variety of negative outcomes for underrepresented groups in a runaway feedback loop of harm?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What counter-loops (algorithmic auditing, synthetic data generation for rare diseases) pull the system back into a viable range of fairness and representation?</p>
+                      </div>
+                  </div>
+              </div>
+              <div class="foraging-prompts" onclick="toggleDetails(this)">
+                  <h4>&#x1F4A1; Foraging Prompts (Click to Expand)</h4>
+                  <div class="prompt-details">
+                      <p><strong>&#x1F442; Pathetic Dot:</strong> Map the forces that create data gaps: What Laws (HIPAA) make data sharing hard? How does the Market (high cost of recruiting) disincentivize inclusion? What Norms (distrust of medical studies) reduce participation? How does Code (algorithms that drop 'outliers') perpetuate exclusion?</p>
+                      <p><strong>&#x1F9F0; Levers:</strong> Propose a prompt to close the gap. How could [data trusts for underrepresented groups] amplify their power? How could [mandating algorithmic audits] dampen the deployment of biased models?</p>
+                      <p><strong>&#x1F4CA; KPIs:</strong> Design a dashboard prompt for medical equity. What query calculates a 'Genomic Representation Index' for major models? What query tracks the 'performance disparity' of a diagnostic AI across different ethnicities?</p>
+                      <p><strong>&#x1F3AF; Bounds:</strong> Formulate a prompt to define 'dangerous bias.' What is the maximum allowable accuracy gap between demographic groups before an AI diagnostic tool is recalled?</p>
+                  </div>
+              </div>
+            </div>
+
+            <div class="spread">
+              <h3>C. Faustian Bargain</h3>
+              <div class="gamepad-layout">
+                  <div class="seed-prompt">
+                      <h4>&#x1F3AE; START</h4>
+                      <p>Could pharma monopolize AI cures with restrictive IP?</p>
+                  </div>
+                  <div class="tetrad-prompt up" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B06;&#xFE0F; Enhances</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> How does a monopoly on an AI-discovered cure create/expand the variety of grey-market replication and biohacking efforts in a reactive R-loop?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What compulsory licensing laws constrain the system, absorbing a monopolist's power during public health crises and ensuring baseline access?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt left" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B05;&#xFE0F; Obsolesces</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> As open science fades, what unregulated niches for patent-pooling DAOs and open-source biology tools open up, increasing the variety of IP/ownership forms?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> Which fallbacks, like government research funding with open-access clauses, are kept present to reduce deviation from the norm of public scientific knowledge?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt right" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x27A1;&#xFE0F; Retrieves</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> Which revived myths of the lone genius inventor resurface in the age of AI, multiplying the variety of justifications for restrictive patents on discoveries that were computationally assisted?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> How can we curate this retrieval to bound its influence, using patent reform to acknowledge the AI's contribution and limit the scope of IP?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt down" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B07;&#xFE0F; Reverses</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> If pushed too far, how does monopoly provoke backlash, exploding the variety of responses from state-sponsored patent breaking to black markets for cures (R-loop)?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What counter-loops (publicly funded 'bio-fabs', prizes for open-source cures) pull the system back into a viable range of access and innovation?</p>
+                      </div>
+                  </div>
+              </div>
+              <div class="foraging-prompts" onclick="toggleDetails(this)">
+                  <h4>&#x1F4A1; Foraging Prompts (Click to Expand)</h4>
+                  <div class="prompt-details">
+                      <p><strong>&#x1F442; Pathetic Dot:</strong> Map the forces of this IP bargain: How do Laws (patent law) grant monopoly power? How does the Market (investor demand) drive aggressive IP strategies? What Norms (cures should be accessible) push back? How does Code (the black-box AI) make it hard to challenge novelty?</p>
+                      <p><strong>&#x1F9F0; Levers:</strong> Propose a prompt to rebalance the bargain. How could [prizes for open-source cures] amplify non-monopolistic innovation? How could [shorter patent terms for AI-derived drugs] dampen excessive profiteering?</p>
+                      <p><strong>&#x1F4CA; KPIs:</strong> Design a dashboard prompt for access to medicine. What query tracks the 'average cost of an AI-discovered drug'? What query measures the 'number of open-source therapeutic molecules' entering the public domain?</p>
+                      <p><strong>&#x1F3AF; Bounds:</strong> Formulate a prompt to define price gouging. What is the maximum price-to-R&D-cost ratio for an AI-discovered drug that, if breached, triggers government price negotiations?</p>
+                  </div>
+              </div>
+            </div>
+
+            <div class="spread">
+              <h3>D. Negative Externality</h3>
+              <div class="gamepad-layout">
+                  <div class="seed-prompt">
+                      <h4>&#x1F3AE; START</h4>
+                      <p>What if opaque diagnostics propagate systemic misdiagnosis?</p>
+                  </div>
+                  <div class="tetrad-prompt up" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B06;&#xFE0F; Enhances</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> How does the scale of AI diagnostics create/expand the variety of previously unseen, subtle correlations, some of which are spurious, leading to an R-loop of over-diagnosis?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What explainability standards (e.g., requiring models to cite evidence) constrain the system, absorbing the variety of nonsensical conclusions and forcing them into a human-interpretable range?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt left" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B05;&#xFE0F; Obsolesces</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> As careful physician reasoning is bypassed, what unregulated niches open for direct-to-consumer AI diagnostics, increasing the variety of unguided, anxiety-inducing care-path branching?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> Which fallbacks, like mandatory human oversight for critical diagnoses, are kept present to reduce deviation from a baseline of responsible care?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt right" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x27A1;&#xFE0F; Retrieves</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> Which revived patterns of ‘medical certainty’ based on infallible machines resurface, multiplying the variety of cases where physicians' gut feelings are wrongly dismissed?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> How can we curate this retrieval of certainty to bound its impact, training doctors in 'algorithmic skepticism' to prevent automation bias?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt down" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B07;&#xFE0F; Reverses</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> When scaled, how does misdiagnosis flip into mass harm, exploding the variety of correlated errors (e.g., a single flawed model telling millions of people they have a rare disease) in an R-loop?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What counter-loops (real-time anomaly detection in diagnostic patterns, using diverse model ensembles) pull the system back from propagating a single point of failure?</p>
+                      </div>
+                  </div>
+              </div>
+              <div class="foraging-prompts" onclick="toggleDetails(this)">
+                  <h4>&#x1F4A1; Foraging Prompts (Click to Expand)</h4>
+                  <div class="prompt-details">
+                      <p><strong>&#x1F442; Pathetic Dot:</strong> Map the forces behind opaque diagnostics: How do Laws (lack of liability for algorithmic harm) allow this? How does the Market (race to deploy) favor speed over transparency? What Norms ('the computer is right') lead to over-trust? How does Code (deep neural nets) create the opacity?</p>
+                      <p><strong>&#x1F9F0; Levers:</strong> Propose a prompt to ensure safety. How could [requiring 'second opinion' from a different AI model] amplify diagnostic variety? How could [mandating clinician explainability training] dampen blind acceptance?</p>
+                      <p><strong>&#x1F4CA; KPIs:</strong> Design a dashboard prompt for diagnostic safety. What query tracks the 'rate of physician overrides' of AI recommendations? What query measures the 'disagreement rate' between different AI models?</p>
+                      <p><strong>&#x1F3AF; Bounds:</strong> Formulate a prompt to define a systemic failure. What is the max number of identical, high-stakes misdiagnoses from a single model that, if breached, triggers an immediate, fleet-wide recall?</p>
+                  </div>
+              </div>
+            </div>
+
+            <div class="spread">
+              <h3>E. Black Swan</h3>
+              <div class="gamepad-layout">
+                  <div class="seed-prompt">
+                      <h4>&#x1F3AE; START</h4>
+                      <p>Could AI accidentally design novel pathogens?</p>
+                  </div>
+                  <div class="tetrad-prompt up" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B06;&#xFE0F; Enhances</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> How does the dual-use nature of generative biology create/expand the variety of actors (state, non-state, accidental) who could theoretically design a pathogen in an R-loop of proliferating capability?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What screening protocols (e.g., for DNA synthesis orders) constrain the system, absorbing the variety of dangerous sequences and flagging them for review?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt left" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B05;&#xFE0F; Obsolesces</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> As myths of biosafety collapse, what unregulated niches open for decentralized, unmonitored AI biology labs, increasing the variety of places where a dangerous discovery could be made?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> Which fallbacks, like institutional safety boards (IRBs), are kept present and given new powers to reduce deviation from established safety norms in the age of AI?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt right" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x27A1;&#xFE0F; Retrieves</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> Which revived anxieties from the Frankenstein myth to the Cold War biowar arms race resurface, multiplying the variety of fearful, potentially over-reactive policy responses?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> How can we curate this retrieval of fear to bound its impact, fostering responsible caution without triggering a panic that halts beneficial research?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt down" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B07;&#xFE0F; Reverses</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> When flipped, how does medicine become weaponry, exploding the variety of potential bioweapons (e.g., genetically targeted, stealthy) in a catastrophic R-loop?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What counter-loops (AI-powered pandemic surveillance, rapid-response vaccine platforms) pull the system back from apocalypse by preparing to absorb the impact of a novel pathogen?</p>
+                      </div>
+                  </div>
+              </div>
+              <div class="foraging-prompts" onclick="toggleDetails(this)">
+                  <h4>&#x1F4A1; Foraging Prompts (Click to Expand)</h4>
+                  <div class="prompt-details">
+                      <p><strong>&#x1F442; Pathetic Dot:</strong> Map the forces on generative biology: What Laws (Biological Weapons Convention) are ill-equipped for this? How does the Market (competition for breakthroughs) incentivize pushing boundaries? What Norms (open science) could lead to info-hazards? How does Code (generative models) create this new capability?</p>
+                      <p><strong>&#x1F9F0; Levers:</strong> Propose a prompt for managing dual-use. How could [funding AI for defensive countermeasures] amplify resilience? How could [requiring 'know-your-customer' for synthesis labs] dampen access for malicious actors?</p>
+                      <p><strong>&#x1F4CA; KPIs:</strong> Design a dashboard prompt for biosecurity. What query tracks the 'number of models capable of designing toxins'? What query measures the 'detection rate' of screening software for harmful DNA sequences?</p>
+                      <p><strong>&#x1F3AF; Bounds:</strong> Formulate a prompt to define a catastrophic risk. What specific capabilities (e.g., designing a virus with >50% mortality) should be firewalled at the architectural level of AI models?</p>
+                  </div>
+              </div>
+            </div>
+        </section>
+
+        <section id="energy" class="domain-level">
+            <h2>LEVEL 3: Energy</h2>
+            
+            <div class="spread">
+                <h3>A. Destination</h3>
+                <div class="gamepad-layout">
+                    <div class="seed-prompt">
+                        <h4>&#x1F3AE; START</h4>
+                        <p>What projects show AI optimizing renewable grids at gigawatt scale?</p>
+                    </div>
+                    <div class="tetrad-prompt up" onclick="toggleDetails(this)">
+                        <div class="prompt-title">&#x2B06;&#xFE0F; Enhances</div>
+                        <div class="prompt-details">
+                            <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> How does AI load-balancing create/expand the variety of viable renewable sources in an R-loop where better management encourages more diverse supply?</p>
+                            <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What grid stability protocols (e.g., frequency response limits) constrain the system, absorbing the variety of fluctuations from renewables to maintain a steady state?</p>
+                        </div>
+                    </div>
+                    <div class="tetrad-prompt left" onclick="toggleDetails(this)">
+                        <div class="prompt-title">&#x2B05;&#xFE0F; Obsolesces</div>
+                        <div class="prompt-details">
+                            <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> As manual balancing obsolesces, what unregulated niches for consumer-level energy markets open up, increasing demand profile variety?</p>
+                            <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> Which fallbacks, like baseload power plants, are kept present (even if idle) to reduce deviation from stability during a catastrophic AI failure?</p>
+                        </div>
+                    </div>
+                    <div class="tetrad-prompt right" onclick="toggleDetails(this)">
+                        <div class="prompt-title">&#x27A1;&#xFE0F; Retrieves</div>
+                        <div class="prompt-details">
+                            <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> Which revived visions of industrial mega-grids resurface, now made feasible by AI, multiplying the variety of grid topologies being considered?</p>
+                            <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> How can we curate this retrieval to bound its fragility, ensuring that mega-grids are balanced with decentralized microgrids to prevent cascading failures?</p>
+                        </div>
+                    </div>
+                    <div class="tetrad-prompt down" onclick="toggleDetails(this)">
+                        <div class="prompt-title">&#x2B07;&#xFE0F; Reverses</div>
+                        <div class="prompt-details">
+                            <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> If over-optimized for efficiency, how does the grid flip into fragility, exploding the variety of potential failure points in an R-loop?</p>
+                            <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What counter-loops (mandated redundancy, 'black start' capabilities, islanding protocols) pull the system back from hyper-efficient fragility into a viable range of resilience?</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="foraging-prompts" onclick="toggleDetails(this)">
+                    <h4>&#x1F4A1; Foraging Prompts (Click to Expand)</h4>
+                    <div class="prompt-details">
+                        <p><strong>&#x1F442; Pathetic Dot:</strong> Map the four forces on AI grids: What Laws (FERC regulations) govern management? How does the Market (real-time pricing) drive optimization? What Norms (demand for 99.999% uptime) set expectations? How does the Code (optimization algorithm) dictate behavior?</p>
+                        <p><strong>&#x1F9F0; Levers:</strong> Propose a prompt for grid management. How could [incentives for smart appliances] amplify demand-side flexibility? How could [mandated cybersecurity standards] dampen vulnerabilities?</p>
+                        <p><strong>&#x1F4CA; KPIs:</strong> Design a dashboard prompt for a clean grid. What query measures the 'percentage of renewables successfully integrated'? What query tracks the 'grid's Variety Absorption Ratio' for shocks?</p>
+                        <p><strong>&#x1F3AF; Bounds:</strong> Formulate a prompt to define grid instability. What are the min/max frequency deviation bands that, if breached, trigger automated intervention?</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="spread">
+              <h3>B. Embarrassing Gap</h3>
+              <div class="gamepad-layout">
+                  <div class="seed-prompt">
+                      <h4>&#x1F3AE; START</h4>
+                      <p>How much 'clean power' for AI is new vs. diverted from households?</p>
+                  </div>
+                  <div class="tetrad-prompt up" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B06;&#xFE0F; Enhances</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> How does awareness of energy diversion create/expand the variety of corporate energy sourcing strategies in an R-loop of public accountability?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What 'additionality' rules in permitting regimes constrain the system, absorbing the variety of accounting tricks by requiring that new demand be met with new supply?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt left" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B05;&#xFE0F; Obsolesces</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> As illusions of 'net zero' obsolesce, what unregulated niches for community-owned energy projects open up, increasing the variety of siting options outside of corporate control?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> Which fallbacks, like priority grid access for residential users, are kept present in regulations to reduce deviation from the principle of serving citizens first?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt right" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x27A1;&#xFE0F; Retrieves</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> Which revived debates over energy rationing resurface as AI data centers compete with households for limited clean energy?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> How can transparent, real-time energy audits for large consumers be implemented to bound the diversion of power and ensure fair allocation?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt down" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B07;&#xFE0F; Reverses</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> If ignored, how does the AI boom steal from citizens, exploding the variety of negative social outcomes (e.g., energy poverty, rolling blackouts) in an R-loop of inequality?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What counter-loops (data center moratoriums, tiered pricing for industrial use) pull the system back from energy appropriation into a viable range of shared resources?</p>
+                      </div>
+                  </div>
+              </div>
+              <div class="foraging-prompts" onclick="toggleDetails(this)">
+                  <h4>&#x1F4A1; Foraging Prompts (Click to Expand)</h4>
+                  <div class="prompt-details">
+                      <p><strong>&#x1F442; Pathetic Dot:</strong> Map the forces causing energy diversion: How do Laws (lax permitting) allow data centers to claim existing clean power? How does the Market (desire for cheap power) incentivize this? What Norms (tech growth is good) provide cover? How does Code (power purchase agreements) obscure the source?</p>
+                      <p><strong>&#x1F9F0; Levers:</strong> Propose a prompt to ensure fair energy use. How could [data center moratoriums] dampen the immediate energy grab? How could [requiring new data centers to build their own renewables] amplify the clean energy supply?</p>
+                      <p><strong>&#x1F4CA; KPIs:</strong> Design a dashboard prompt for energy justice. What query tracks the 'ratio of industrial vs. residential energy price increases'? What query calculates the 'true additionality percentage' for new data center projects?</p>
+                      <p><strong>&#x1F3AF; Bounds:</strong> Formulate a prompt to define 'energy theft.' What is the maximum percentage of a community's renewable energy that can be allocated to a single industrial user before triggering a public benefit review?</p>
+                  </div>
+              </div>
+            </div>
+
+            <div class="spread">
+              <h3>C. Faustian Bargain</h3>
+              <div class="gamepad-layout">
+                  <div class="seed-prompt">
+                      <h4>&#x1F3AE; START</h4>
+                      <p>Will AI compute take priority over hospitals in grid stress?</p>
+                  </div>
+                  <div class="tetrad-prompt up" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B06;&#xFE0F; Enhances</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> How does prioritizing compute create/expand the variety of economic activities deemed 'critical', creating an R-loop where what makes money becomes what gets power?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What 'critical infrastructure' regulations constrain the system, absorbing the variety of market demands and legally prioritizing hospitals, water, etc.?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt left" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B05;&#xFE0F; Obsolesces</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> As civic priority protocols obsolesce, what unregulated niches for private 'energy lanes' (guaranteed power for a high price) open up, increasing the variety of energy access tiers?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> Which fallbacks, like legally mandated load-shedding hierarchies, are kept present to reduce deviation from public safety norms during emergencies?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt right" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x27A1;&#xFE0F; Retrieves</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> Which revived hierarchies from wartime rationing resurface, now applied to electrons, multiplying the variety of debates over who 'deserves' power most?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> How can we curate this retrieval of rationing to bound its application, ensuring it's governed by democratic and transparent principles, not just economic might?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt down" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B07;&#xFE0F; Reverses</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> If pushed too far, how does economic throughput flip into civic famine, exploding the variety of social failures (e.g., hospital blackouts, communication breakdowns) in an R-loop?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What counter-loops (requiring data centers to have their own backup power, citizen utility boards with veto power) pull the system back into a viable range of civic responsibility?</p>
+                      </div>
+                  </div>
+              </div>
+              <div class="foraging-prompts" onclick="toggleDetails(this)">
+                  <h4>&#x1F4A1; Foraging Prompts (Click to Expand)</h4>
+                  <div class="prompt-details">
+                      <p><strong>&#x1F442; Pathetic Dot:</strong> Map the forces of this energy bargain: What Laws (or lack thereof) define energy priority? How does the Market (ability of data centers to pay more) influence distribution? What Norms ('the economy must not stop') justify prioritization? How does Code (smart grid algorithms) execute these priorities?</p>
+                      <p><strong>&#x1F9F0; Levers:</strong> Propose a prompt to manage priorities. How could [citizen utility boards with veto power] dampen corporate influence? How could [requiring data centers to act as grid-stabilizing batteries] amplify their civic utility?</p>
+                      <p><strong>&#x1F4CA; KPIs:</strong> Design a dashboard prompt for civic energy. What query tracks the 'number of minutes critical services lose power' vs. industrial users? What query measures the 'financial penalty paid' for causing grid instability?</p>
+                      <p><strong>&#x1F3AF; Bounds:</strong> Formulate a prompt to define a state of emergency. What specific grid stress conditions must legally trigger the de-prioritization of all non-essential industrial loads?</p>
+                  </div>
+              </div>
+            </div>
+
+            <div class="spread">
+              <h3>D. Negative Externality</h3>
+              <div class="gamepad-layout">
+                  <div class="seed-prompt">
+                      <h4>&#x1F3AE; START</h4>
+                      <p>How do massive AI data centers degrade local environments (water, land use)?</p>
+                  </div>
+                  <div class="tetrad-prompt up" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B06;&#xFE0F; Enhances</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> How does the scale of data centers create/expand the variety of environmental impacts (water depletion, heat islands), creating an R-loop where each new center introduces a novel local problem?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What environmental impact review laws constrain the system, absorbing the variety of potential harms by forcing companies to account for and mitigate them pre-construction?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt left" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B05;&#xFE0F; Obsolesces</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> As sustainable local land use is erased, what unregulated niches for community resistance and environmental lawsuits open up, increasing the variety of opposition tactics?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> Which fallbacks, like agricultural water rights, are kept present in law to reduce deviation from the principle of prioritizing water for food and people?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt right" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x27A1;&#xFE0F; Retrieves</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> Which revived narratives of extractive megaprojects (like old mining towns) resurface, multiplying the variety of ways communities frame the arrival of a new data center?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> How can we curate this retrieval to bound its negative impacts, using Community Benefit Agreements to ensure the project shares wealth rather than just extracting resources?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt down" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B07;&#xFE0F; Reverses</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> If pushed too far, how do data centers cause ecosystem collapse, exploding the variety of cascading failures (aquifer depletion -> crop failure -> economic collapse) in an R-loop?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What counter-loops (closed-loop water cooling requirements, mandatory land remediation bonds) pull the system back into a viable range of environmental sustainability?</p>
+                      </div>
+                  </div>
+              </div>
+              <div class="foraging-prompts" onclick="toggleDetails(this)">
+                  <h4>&#x1F4A1; Foraging Prompts (Click to Expand)</h4>
+                  <div class="prompt-details">
+                      <p><strong>&#x1F442; Pathetic Dot:</strong> Map the forces of this externality: How do Laws (weak environmental regulations) allow it? How does the Market (need for cheap land and water) drive site selection? What Norms ('any jobs are good jobs') quiet opposition? How does Code (water-intensive cooling architectures) create the harm?</p>
+                      <p><strong>&#x1F9F0; Levers:</strong> Propose a prompt to mitigate harm. How could [requiring closed-loop water cooling] dampen water usage? How could [giving communities equity in data centers] amplify shared benefits?</p>
+                      <p><strong>&#x1F4CA; KPIs:</strong> Design a dashboard prompt for environmental impact. What query tracks the 'liters of water consumed per petaflop'? What query measures the 'change in local water table levels' after a data center opens?</p>
+                      <p><strong>&#x1F3AF; Bounds:</strong> Formulate a prompt to define 'ecological damage.' What level of aquifer depletion, if projected, must legally halt a data center's construction?</p>
+                  </div>
+              </div>
+            </div>
+
+            <div class="spread">
+              <h3>E. Black Swan</h3>
+              <div class="gamepad-layout">
+                  <div class="seed-prompt">
+                      <h4>&#x1F3AE; START</h4>
+                      <p>What if rare-earth mineral shortages stall AI infrastructure?</p>
+                  </div>
+                  <div class="tetrad-prompt up" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B06;&#xFE0F; Enhances</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> How does a mineral shock create/expand the variety of research into alternative materials and architectures (e.g., neuromorphic computing) in an R-loop of forced innovation?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What strategic mineral reserve policies constrain the system, absorbing the variety of a sudden supply shock and providing a buffer for critical industries?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt left" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B05;&#xFE0F; Obsolesces</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> As endless growth myths obsolesce, what unregulated niches for hardware recycling and circular economies open up, increasing the variety of material sources?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> Which fallbacks, like extending the life of existing hardware, are kept present to reduce deviation from current compute capacity during a shortage?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt right" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x27A1;&#xFE0F; Retrieves</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> Which revived anxieties from the 1970s oil shocks resurface, multiplying the variety of geopolitical conflicts and resource nationalism behaviors?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> How can we curate this retrieval of resource anxiety to bound its impact, fostering international cooperation on material science rather than a zero-sum resource war?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt down" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B07;&#xFE0F; Reverses</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> If the shortage is severe, how does it flip into geopolitical conflict, exploding the variety of conflicts over resource-rich territories in an R-loop of escalating tension?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What counter-loops (international treaties on critical minerals, massive R&D into common-element computing) pull the system back from the brink of resource conflict?</p>
+                      </div>
+                  </div>
+              </div>
+              <div class="foraging-prompts" onclick="toggleDetails(this)">
+                  <h4>&#x1F4A1; Foraging Prompts (Click to Expand)</h4>
+                  <div class="prompt-details">
+                      <p><strong>&#x1F442; Pathetic Dot:</strong> Map the forces of this resource dependency: How do Laws (lack of international mining treaties) create fragility? How does the Market (concentration of processing) create bottlenecks? What Norms (planned obsolescence) accelerate demand? How does Code (chip designs requiring rare earths) create the dependency?</p>
+                      <p><strong>&#x1F9F0; Levers:</strong> Propose a prompt to build resilience. How could [massive R&D into common-element computing] amplify our material options? How could [mandating hardware recycling standards] dampen demand for new minerals?</p>
+                      <p><strong>&#x1F4CA; KPIs:</strong> Design a dashboard prompt for resource security. What query tracks the 'HHI' for concentration in the rare-earth supply chain? What query measures the 'percentage of recycled materials' in new server hardware?</p>
+                      <p><strong>&#x1F3AF; Bounds:</strong> Formulate a prompt to define a critical shortage. What level of price increase in a key mineral should trigger the release of strategic reserves and emergency R&D funding?</p>
+                  </div>
+              </div>
+            </div>
+        </section>
+        
+        <section id="governance" class="domain-level">
+            <h2>LEVEL 4: Governance</h2>
+
+            <div class="spread">
+                <h3>A. Destination</h3>
+                <div class="gamepad-layout">
+                    <div class="seed-prompt">
+                        <h4>&#x1F3AE; START</h4>
+                        <p>What do early pilots of AI in policymaking (e.g., simulation, drafting) reveal about its potential?</p>
+                    </div>
+                    <div class="tetrad-prompt up" onclick="toggleDetails(this)">
+                        <div class="prompt-title">&#x2B06;&#xFE0F; Enhances</div>
+                        <div class="prompt-details">
+                            <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> How does AI simulation create/expand the variety of policy options considered by modeling previously unthinkable scenarios, in an R-loop where more data allows more complex simulations?</p>
+                            <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What ethical guardrails and human oversight committees constrain the system, absorbing the variety of potentially harmful or absurd AI-generated policies?</p>
+                        </div>
+                    </div>
+                    <div class="tetrad-prompt left" onclick="toggleDetails(this)">
+                        <div class="prompt-title">&#x2B05;&#xFE0F; Obsolesces</div>
+                        <div class="prompt-details">
+                            <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> As slow bureaucracy obsolesces, what unregulated niches for direct citizen-AI deliberation open up, increasing the variety of stakeholder voices and deliberation formats?</p>
+                            <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> Which fallbacks, like mandatory public comment periods, are kept present to reduce deviation from the principles of democratic accountability?</p>
+                        </div>
+                    </div>
+                    <div class="tetrad-prompt right" onclick="toggleDetails(this)">
+                        <div class="prompt-title">&#x27A1;&#xFE0F; Retrieves</div>
+                        <div class="prompt-details">
+                            <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> Which revived visions of technocracy (rule by experts) resurface, now with the AI as the expert, multiplying the variety of arguments against messy democratic processes?</p>
+                            <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> How can we curate this retrieval to bound its influence, ensuring AI is used as a tool for democratic input, not a replacement for it?</p>
+                        </div>
+                    </div>
+                    <div class="tetrad-prompt down" onclick="toggleDetails(this)">
+                        <div class="prompt-title">&#x2B07;&#xFE0F; Reverses</div>
+                        <div class="prompt-details">
+                            <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> If over-relied upon, how does AI governance flip into algorithmic authoritarianism, exploding the variety of automated, unappealable, and biased decisions (R-loop)?</p>
+                            <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What counter-loops (citizen audit boards, right to appeal an algorithmic decision to a human) pull the system back into a viable range of democratic control?</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="foraging-prompts" onclick="toggleDetails(this)">
+                    <h4>&#x1F4A1; Foraging Prompts (Click to Expand)</h4>
+                    <div class="prompt-details">
+                        <p><strong>&#x1F442; Pathetic Dot:</strong> Map the forces on AI governance: What Laws (Administrative Procedure Act) govern policymaking? How does the Market for gov-tech influence adoption? What Norms of democratic legitimacy must it satisfy? How does the Code (model's architecture) shape its outputs?</p>
+                        <p><strong>&#x1F9F0; Levers:</strong> Propose a prompt for democratic AI. How could [open-sourcing policy models] amplify public scrutiny? How could [mandating human-in-the-loop for all final decisions] dampen automation bias?</p>
+                        <p><strong>&#x1F4CA; KPIs:</strong> Design a dashboard prompt for algorithmic governance. What query measures the 'diversity score' of stakeholder data in a policy simulation? What query tracks the 'rate of successful appeals' against AI-made decisions?</p>
+                        <p><strong>&#x1F3AF; Bounds:</strong> Formulate a prompt to define authoritarianism. What categories of government decisions (e.g., those involving liberty) must be legally prohibited from being fully automated?</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="spread">
+              <h3>B. Embarrassing Gap</h3>
+              <div class="gamepad-layout">
+                  <div class="seed-prompt">
+                      <h4>&#x1F3AE; START</h4>
+                      <p>How are Global South nations being excluded from global AI governance debates and datasets?</p>
+                  </div>
+                  <div class="tetrad-prompt up" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B06;&#xFE0F; Enhances</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> How does highlighting exclusion create/expand the variety of jurisdictional models (e.g., regional AI blocs) in an R-loop of resistance to neo-colonialism?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What global governance bodies (e.g., at the UN) attempt to constrain this power imbalance, absorbing the variety of national interests into a baseline of universal rights?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt left" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B05;&#xFE0F; Obsolesces</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> As claims of universal AI values weaken, what unregulated niches for culturally specific AI ethics frameworks open up, increasing the variety of policy option sets?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> Which fallbacks, like principles of international human rights law, are kept present to reduce deviation from core ethical tenets, even with cultural variation?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt right" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x27A1;&#xFE0F; Retrieves</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> Which revived models of colonial governance (powerful nations setting standards for others) reappear in the guise of AI safety, multiplying the variety of geopolitical power dynamics?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> How can we curate this retrieval to bound its impact, using multi-stakeholder forums to ensure standards are co-designed, not imposed?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt down" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B07;&#xFE0F; Reverses</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> If ignored, how does the gap deepen the global divide, exploding the variety of incompatible, competing AI ecosystems in an R-loop of fragmentation?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What counter-loops (technical standard-setting bodies, open-source model sharing) pull the system back from total fragmentation toward a viable range of interoperability?</p>
+                      </div>
+                  </div>
+              </div>
+              <div class="foraging-prompts" onclick="toggleDetails(this)">
+                  <h4>&#x1F4A1; Foraging Prompts (Click to Expand)</h4>
+                  <div class="prompt-details">
+                      <p><strong>&#x1F442; Pathetic Dot:</strong> Map the forces of this global gap: What Laws (lack of treaties) allow it? How does the Market (concentration of AI labs in the North) drive it? What Norms (English as default) perpetuate it? How does Code (training data from North American/European internet) encode the bias?</p>
+                      <p><strong>&#x1F9F0; Levers:</strong> Propose a prompt to bridge the divide. How could [funding for regional AI research hubs in the Global South] amplify diverse voices? How could [requiring diverse representation in global standard-setting bodies] dampen Northern dominance?</p>
+                      <p><strong>&#x1F4CA; KPIs:</strong> Design a dashboard prompt for global AI equity. What query tracks the 'percentage of global AI governance roles held by individuals from the Global South'? What query measures the 'linguistic and geographic diversity' of benchmark training datasets?</p>
+                      <p><strong>&#x1F3AF; Bounds:</strong> Formulate a prompt to define 'digital colonialism.' What is the maximum percentage of a country's critical digital infrastructure that can be controlled by foreign entities before it triggers sovereignty reviews?</p>
+                  </div>
+              </div>
+            </div>
+
+            <div class="spread">
+              <h3>C. Faustian Bargain</h3>
+              <div class="gamepad-layout">
+                  <div class="seed-prompt">
+                      <h4>&#x1F3AE; START</h4>
+                      <p>What is lost when national sovereignty is outsourced to a global, privately-owned AI platform?</p>
+                  </div>
+                  <div class="tetrad-prompt up" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B06;&#xFE0F; Enhances</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> How does outsourcing create/expand the variety of efficiencies, creating an R-loop where smoother services lead to more public demand for further outsourcing?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What data localization and algorithmic transparency laws constrain the system, absorbing the power of the platform and giving nations some measure of control?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt left" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B05;&#xFE0F; Obsolesces</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> As messy public deliberation is erased, what unregulated niches for anti-AI populist movements open up, increasing the variety of political resistance?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> Which fallbacks, like parliamentary veto power over algorithmic policies, are kept present to reduce deviation from the principle of democratic sovereignty?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt right" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x27A1;&#xFE0F; Retrieves</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> Which revived models of cybernetic governance (rule by automated systems) from the 1960s resurface, multiplying the variety of justifications for removing humans from the loop?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> How can we curate this retrieval to bound its influence, ensuring that any automated system is subject to robust, independent, and human-led oversight?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt down" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B07;&#xFE0F; Reverses</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> If pushed too far, how does outsourcing flip into tyranny by hidden bias, exploding the variety of inscrutable, harmful policies dictated by a foreign commercial entity (R-loop)?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What counter-loops (a nation's right to 'fork' the model, international courts for algorithmic harm) pull the system back into a viable range of national self-determination?</p>
+                      </div>
+                  </div>
+              </div>
+              <div class="foraging-prompts" onclick="toggleDetails(this)">
+                  <h4>&#x1F4A1; Foraging Prompts (Click to Expand)</h4>
+                  <div class="prompt-details">
+                      <p><strong>&#x1F442; Pathetic Dot:</strong> Map the forces of this sovereignty bargain: What Laws (trade agreements) facilitate this? How does the Market (lack of local talent) make it seem necessary? What Norms ('global problems need global solutions') justify it? How does Code (a proprietary platform) lock a country in?</p>
+                      <p><strong>&#x1F9F0; Levers:</strong> Propose a prompt to retain sovereignty. How could [public investment in sovereign AI capabilities] amplify national independence? How could [mandating a 'human veto' on all AI policy] dampen the loss of democratic control?</p>
+                      <p><strong>&#x1F4CA; KPIs:</strong> Design a dashboard prompt for digital sovereignty. What query tracks the 'percentage of government services dependent on foreign AI platforms'? What query measures the 'lag time' for a country to audit a platform's decision?</p>
+                      <p><strong>&#x1F3AF; Bounds:</strong> Formulate a prompt to define the loss of sovereignty. At what point does the inability to explain, override, or replace a foreign AI system constitute a ceding of core government function?</p>
+                  </div>
+              </div>
+            </div>
+
+            <div class="spread">
+              <h3>D. Negative Externality</h3>
+              <div class="gamepad-layout">
+                  <div class="seed-prompt">
+                      <h4>&#x1F3AE; START</h4>
+                      <p>How will authoritarian states use AI to enhance surveillance and social control?</p>
+                  </div>
+                  <div class="tetrad-prompt up" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B06;&#xFE0F; Enhances</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> How does AI-powered surveillance create/expand the variety of detectable 'deviant' behaviors, in an R-loop where more data allows for ever-finer categories of control?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What encryption and privacy-enhancing technologies constrain the system, absorbing the state's surveillance capacity and creating safe zones for expression?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt left" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B05;&#xFE0F; Obsolesces</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> As privacy is erased, what unregulated niches for offline organizing and coded language open up, increasing the variety of dissident tactics?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> Which fallbacks, like constitutional rights (even if unenforced), are kept present as rallying points to reduce deviation from the ideals of freedom?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt right" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x27A1;&#xFE0F; Retrieves</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> Which revived models of the panopticon (the all-seeing prison) resurface, multiplying the variety of ways citizens internalize self-censorship?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> How can we curate the retrieval of this concept to bound its psychological impact, by creating and celebrating acts of 'sousveillance' (citizens watching the powerful)?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt down" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B07;&#xFE0F; Reverses</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> When pushed too far, how does surveillance flip into mass suppression, exploding the variety of preemptive arrests and social credit punishments in an R-loop of automated tyranny?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What counter-loops (international sanctions, tools for circumventing firewalls, leaks from inside the system) pull the system back from total control?</p>
+                      </div>
+                  </div>
+              </div>
+              <div class="foraging-prompts" onclick="toggleDetails(this)">
+                  <h4>&#x1F4A1; Foraging Prompts (Click to Expand)</h4>
+                  <div class="prompt-details">
+                      <p><strong>&#x1F442; Pathetic Dot:</strong> Map the forces of AI authoritarianism: What Laws (national security laws) provide the legal basis? How does the Market (tech companies selling surveillance tools) enable it? What Norms (appeals to safety) justify it? How does Code (facial recognition) provide the mechanism?</p>
+                      <p><strong>&#x1F9F0; Levers:</strong> Propose a prompt to support freedom. How could [decentralized social media] amplify dissident voices? How could [export controls on surveillance AI] dampen proliferation?</p>
+                      <p><strong>&#x1F4CA; KPIs:</strong> Design a dashboard prompt for digital freedom. What query tracks the 'number of citizens under automated surveillance'? What query measures the 'cost and difficulty' of accessing the uncensored internet?</p>
+                      <p><strong>&#x1F3AF; Bounds:</strong> Formulate a prompt to define a police state. At what point does the use of AI for preemptive detention based on predictive algorithms cross a fundamental line of human rights?</p>
+                  </div>
+              </div>
+            </div>
+
+            <div class="spread">
+              <h3>E. Black Swan</h3>
+              <div class="gamepad-layout">
+                  <div class="seed-prompt">
+                      <h4>&#x1F3AE; START</h4>
+                      <p>What happens if an AI's predictive models of social unrest become self-fulfilling prophecies?</p>
+                  </div>
+                  <div class="tetrad-prompt up" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B06;&#xFE0F; Enhances</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> How does preemptive policing based on AI prediction create/expand the variety of grievances in a community, in an R-loop where the intervention itself causes the predicted unrest?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What strict evidentiary standards constrain the system, absorbing the variety of mere correlations and preventing action based on non-causal predictions?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt left" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B05;&#xFE0F; Obsolesces</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> As uncertainty obsolesces, what unregulated niches for 'gaming the oracle' (feeding the AI false data) open up, increasing the variety of adversarial attacks?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> Which fallbacks, like community policing and human intelligence, are kept present to reduce deviation from a reality-based understanding of the situation?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt right" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x27A1;&#xFE0F; Retrieves</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> Which revived myths of inescapable prophecy (like Oedipus) resurface, multiplying the variety of ways leaders justify their actions as tragically necessary?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> How can we curate this retrieval of fatalism to bound its influence, promoting a view of AI predictions as possibilities to be averted, not destinies to be met?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt down" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B07;&#xFE0F; Reverses</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> If trusted implicitly, how do predictions flip into systemic collapse, exploding the variety of cascading errors as government and populace react to a flawed model of reality (R-loop)?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What counter-loops (mandatory 'red teams' to challenge AI predictions, public transparency about data inputs) pull the system back from this feedback loop?</p>
+                      </div>
+                  </div>
+              </div>
+              <div class="foraging-prompts" onclick="toggleDetails(this)">
+                  <h4>&#x1F4A1; Foraging Prompts (Click to Expand)</h4>
+                  <div class="prompt-details">
+                      <p><strong>&#x1F442; Pathetic Dot:</strong> Map the forces of this prophecy: What Laws (allowing preemptive action) enable it? How does the Market for predictive policing tools promote their certainty? What Norms (bias for action) make it hard to ignore a prediction? How does Code (feedback loop of arrests as training data) create the prophecy?</p>
+                      <p><strong>&#x1F9F0; Levers:</strong> Propose a prompt to break the loop. How could [banning police action as training data] amplify the model's connection to reality? How could [mandating predictions lead to social investment, not policing] dampen the prophecy effect?</p>
+                      <p><strong>&#x1F4CA; KPIs:</strong> Design a dashboard prompt for predictive justice. What query tracks the 'false positive rate' of protest predictions? What query measures the 'correlation between preemptive policing and subsequent increases' in unrest?</p>
+                      <p><strong>&#x1F3AF; Bounds:</strong> Formulate a prompt to define a 'prophecy machine.' At what point is the feedback loop between an AI's prediction and the official response so tight that the model is no longer observing reality, but creating it?</p>
+                  </div>
+              </div>
+            </div>
+        </section>
+
+        <section id="economy" class="domain-level">
+            <h2>LEVEL 5: Economy</h2>
+
+            <div class="spread">
+                <h3>A. Destination</h3>
+                <div class="gamepad-layout">
+                    <div class="seed-prompt">
+                        <h4>&#x1F3AE; START</h4>
+                        <p>What evidence shows generative AI creating productivity gains and net new jobs, not just displacement?</p>
+                    </div>
+                    <div class="tetrad-prompt up" onclick="toggleDetails(this)">
+                        <div class="prompt-title">&#x2B06;&#xFE0F; Enhances</div>
+                        <div class="prompt-details">
+                            <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> How does AI co-piloting create/expand the variety of tasks a single worker can perform, in an R-loop where enhanced capabilities lead to the creation of entirely new roles?</p>
+                            <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What reskilling and educational programs constrain the system, absorbing the variety of displaced workers and channeling them toward new, AI-augmented jobs?</p>
+                        </div>
+                    </div>
+                    <div class="tetrad-prompt left" onclick="toggleDetails(this)">
+                        <div class="prompt-title">&#x2B05;&#xFE0F; Obsolesces</div>
+                        <div class="prompt-details">
+                            <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> As traditional office work obsolesces, what unregulated niches for solopreneurs and AI-powered micro-multinationals open up, increasing the variety of firm types?</p>
+                            <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> Which fallbacks, like portable benefits and a social safety net, are kept present to reduce deviation from social stability during this transition?</p>
+                        </div>
+                    </div>
+                    <div class="tetrad-prompt right" onclick="toggleDetails(this)">
+                        <div class="prompt-title">&#x27A1;&#xFE0F; Retrieves</div>
+                        <div class="prompt-details">
+                            <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> Which revived dreams of post-scarcity and creative leisure resurface, multiplying the variety of ideas about what an economy is for, beyond just production?</p>
+                            <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> How can we curate this retrieval to bound its utopianism, focusing on pragmatic policies like UBI or a shorter work week to manage the transition?</p>
+                        </div>
+                    </div>
+                    <div class="tetrad-prompt down" onclick="toggleDetails(this)">
+                        <div class="prompt-title">&#x2B07;&#xFE0F; Reverses</div>
+                        <div class="prompt-details">
+                            <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> If gains are not shared, how does productivity flip into inequality collapse, exploding the variety of social unrest as a few AI-owning billionaires diverge from the immiserated majority (R-loop)?</p>
+                            <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What counter-loops (wealth taxes, data dividends, antitrust action against AI monopolies) pull the system back into a viable range of social cohesion?</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="foraging-prompts" onclick="toggleDetails(this)">
+                    <h4>&#x1F4A1; Foraging Prompts (Click to Expand)</h4>
+                    <div class="prompt-details">
+                        <p><strong>&#x1F442; Pathetic Dot:</strong> Map the forces on AI-driven productivity: How do Laws (tax codes favoring capital) distribute gains? How does the Market (competitive pressure) force adoption? What Norms ('hustle culture') shape its use? How does Code (platforms for gig work) structure the new labor market?</p>
+                        <p><strong>&#x1F9F0; Levers:</strong> Propose a prompt to share prosperity. How could [data dividends or citizen equity in AI platforms] amplify shared ownership? How could [taxing automated processes] dampen the incentive to replace humans?</p>
+                        <p><strong>&#x1F4CA; KPIs:</strong> Design a dashboard prompt for the new economy. What query tracks 'net job creation in AI-augmented fields'? What query measures the 'Gini coefficient of wealth' and its correlation with AI adoption?</p>
+                        <p><strong>&#x1F3AF; Bounds:</strong> Formulate a prompt to define economic failure. At what level of unemployment or wealth inequality must redistributive mechanisms like UBI be automatically triggered?</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="spread">
+              <h3>B. Embarrassing Gap</h3>
+              <div class="gamepad-layout">
+                  <div class="seed-prompt">
+                      <h4>&#x1F3AE; START</h4>
+                      <p>Why is enterprise adoption of AI still below 15% for many core processes, and what does this reveal?</p>
+                  </div>
+                  <div class="tetrad-prompt up" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B06;&#xFE0F; Enhances</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> How does highlighting the adoption gap create/expand the variety of specialized AI implementation consultancies, in an R-loop where the difficulty of adoption creates a new industry?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What government programs for digital transformation (especially for SMEs) constrain this gap, absorbing the variety of capabilities and providing a baseline of access?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt left" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B05;&#xFE0F; Obsolesces</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> As AI hype obsolesces, what unregulated niches for low-tech, human-centric businesses open up, increasing the variety of firm types that are resilient to the AI boom?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> Which fallbacks in non-digital workflows are kept present, reducing deviation from core business function when expensive AI projects fail?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt right" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x27A1;&#xFE0F; Retrieves</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> Which revived anxieties about the ‘digital divide’ resurface, now between AI-haves and have-nots, multiplying the variety of regional economic inequalities?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> How can we curate this retrieval to bound its impact, using public investment and knowledge-sharing to prevent the emergence of AI-powered mega-regions and left-behind rust belts?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt down" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B07;&#xFE0F; Reverses</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> If ignored, how does the gap entrench stagnation, exploding the variety of economic woes for non-adopting firms and regions (bankruptcy, brain drain) in an R-loop of divergence?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What counter-loops (open-source enterprise AI, public training programs, subsidies) pull the system back from a two-track economy into a viable range of shared growth?</p>
+                      </div>
+                  </div>
+              </div>
+              <div class="foraging-prompts" onclick="toggleDetails(this)">
+                  <h4>&#x1F4A1; Foraging Prompts (Click to Expand)</h4>
+                  <div class="prompt-details">
+                      <p><strong>&#x1F442; Pathetic Dot:</strong> Map the forces behind the adoption gap: What Laws (data residency, liability) make adoption risky? How does the Market (high cost of talent) create a barrier? What Norms (organizational inertia) prevent change? How does Code (difficulty of integration) stall implementation?</p>
+                      <p><strong>&#x1F9F0; Levers:</strong> Propose a prompt to close the gap. How could [subsidies for SME AI adoption] amplify participation? How could [promoting industry-specific open-source models] dampen the cost barrier?</p>
+                      <p><strong>&#x1F4CA; KPIs:</strong> Design a dashboard prompt for economic transition. What query tracks the 'AI adoption rate by firm size and region'? What query measures the 'productivity gap' between AI-adopting and non-adopting companies?</p>
+                      <p><strong>&#x1F3AF; Bounds:</strong> Formulate a prompt to define a 'stagnation crisis.' At what point does the productivity gap between the top 10% of firms and the rest become so large that it threatens overall economic stability?</p>
+                  </div>
+              </div>
+            </div>
+
+            <div class="spread">
+              <h3>C. Faustian Bargain</h3>
+              <div class="gamepad-layout">
+                  <div class="seed-prompt">
+                      <h4>&#x1F3AE; START</h4>
+                      <p>Will a national AI growth arms race sacrifice safety, oversight, and global stability?</p>
+                  </div>
+                  <div class="tetrad-prompt up" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B06;&#xFE0F; Enhances</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> How does an arms race create/expand the variety of national strategies (e.g., focus on chips vs. models), in an R-loop of escalating competition?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What international treaties and safety agreements (like for nuclear weapons) constrain the system, absorbing the variety of risky behaviors into a shared framework of caution?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt left" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B05;&#xFE0F; Obsolesces</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> As oversight weakens, what unregulated niches for reckless, high-risk AI experiments open up, increasing the variety of potential accidents?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> Which fallbacks, like the precautionary principle, are kept present in public discourse to reduce deviation from a baseline of responsible innovation?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt right" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x27A1;&#xFE0F; Retrieves</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> Which revived dynamics of the Cold War arms race resurface, multiplying the variety of proxy conflicts and spheres of influence, now centered on AI dominance?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> How can we curate this retrieval to bound its dangers, using diplomacy and scientific exchange to create off-ramps and prevent direct confrontation?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt down" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B07;&#xFE0F; Reverses</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> If pushed too far, how does competition flip into destabilized peace, exploding the variety of flashpoints (e.g., AI-driven cyberattacks, autonomous weapon miscalculations) in an R-loop?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What counter-loops (hotlines between AI labs, international incident-sharing agreements, bans on certain AI applications) pull the system back from the brink of conflict?</p>
+                      </div>
+                  </div>
+              </div>
+              <div class="foraging-prompts" onclick="toggleDetails(this)">
+                  <h4>&#x1F4A1; Foraging Prompts (Click to Expand)</h4>
+                  <div class="prompt-details">
+                      <p><strong>&#x1F442; Pathetic Dot:</strong> Map the forces of this arms race: How do Laws (subsidies, export controls) fuel it? How does the Market (quest for 'AI supremacy') drive it? What Norms (techno-nationalism) provide justification? How does Code (scaling laws of models) create the competitive dynamic?</p>
+                      <p><strong>&#x1F9F0; Levers:</strong> Propose a prompt to de-escalate. How could [international scientific collaboration on AI safety] amplify trust? How could [a global moratorium on certain high-risk AI research] dampen the race to the bottom?</p>
+                      <p><strong>&#x1F4CA; KPIs:</strong> Design a dashboard prompt for global stability. What query tracks 'global spending on AI safety' versus 'spending on AI capability'? What query measures the 'number of near-miss incidents' involving autonomous systems?</p>
+                      <p><strong>&#x1F3AF; Bounds:</strong> Formulate a prompt to define a red line. What specific action (e.g., deployment of a fully autonomous lethal weapon system) would constitute a dangerous escalation?</p>
+                  </div>
+              </div>
+            </div>
+
+            <div class="spread">
+              <h3>D. Negative Externality</h3>
+              <div class="gamepad-layout">
+                  <div class="seed-prompt">
+                      <h4>&#x1F3AE; START</h4>
+                      <p>Could hyper-efficient, AI-driven production lead to catastrophic hyper-deflation?</p>
+                  </div>
+                  <div class="tetrad-prompt up" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B06;&#xFE0F; Enhances</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> How does AI-driven efficiency create/expand the variety of products available at near-zero marginal cost, in an R-loop where cheap goods flood the market?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What monetary policies (e.g., central banks setting inflation targets) constrain the system, absorbing the variety of price drops to prevent a deflationary spiral?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt left" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B05;&#xFE0F; Obsolesces</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> As entire industries are erased by automation, what unregulated niches in the human-to-human service and craft economy open up, increasing the variety of labor tasks?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> Which fallbacks, like UBI or social wealth funds, are kept present to provide demand and reduce deviation from a stable level of consumption when wages collapse?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt right" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x27A1;&#xFE0F; Retrieves</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> Which revived anxieties from the Great Depression (e.g., paradox of thrift, debt deflation) resurface, multiplying the variety of panicked and often counter-productive responses?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> How can we curate this retrieval of economic fear to bound its impact, using Keynesian principles to stimulate demand and manage the price collapse?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt down" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B07;&#xFE0F; Reverses</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> If unchecked, how does efficiency flip into systemic collapse, exploding the variety of economic failures (bankruptcies, debt defaults) as prices fall below production costs (R-loop)?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What counter-loops (automatic stabilizers, debt jubilees, shifting taxation from labor to resource use) pull the system back from a deflationary spiral?</p>
+                      </div>
+                  </div>
+              </div>
+              <div class="foraging-prompts" onclick="toggleDetails(this)">
+                  <h4>&#x1F4A1; Foraging Prompts (Click to Expand)</h4>
+                  <div class="prompt-details">
+                      <p><strong>&#x1F442; Pathetic Dot:</strong> Map the forces of hyper-deflation: How could Laws (failure to implement UBI) cause it? How does the Market (relentless price competition) drive it? What Norms (consumers delaying purchases) would accelerate it? How does Code (automated production) create the condition?</p>
+                      <p><strong>&#x1F9F0; Levers:</strong> Propose a prompt to manage deflation. How could [a universal basic income] amplify consumer demand? How could [taxing resource consumption instead of labor] dampen the collapse of the wage-based tax system?</p>
+                      <p><strong>&#x1F4CA; KPIs:</strong> Design a dashboard prompt for price stability. What query tracks the 'rate of price change in a basket of AI-produced goods'? What query measures the 'debt-to-income ratio' for the average household?</p>
+                      <p><strong>&#x1F3AF; Bounds:</strong> Formulate a prompt to define a 'deflationary spiral.' At what point of sustained negative inflation must radical interventions like debt forgiveness be triggered?</p>
+                  </div>
+              </div>
+            </div>
+
+            <div class="spread">
+              <h3>E. Black Swan</h3>
+              <div class="gamepad-layout">
+                  <div class="seed-prompt">
+                      <h4>&#x1F3AE; START</h4>
+                      <p>Could interconnected, high-speed AI traders trigger a financial crash faster than humans can react?</p>
+                  </div>
+                  <div class="tetrad-prompt up" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B06;&#xFE0F; Enhances</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> How does the interconnectedness of AI traders create/expand the variety of cascading failures, in an R-loop where one algorithm's error triggers a chain reaction across the entire market?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What market circuit breakers constrain the system, absorbing the variety of a sudden crash by automatically halting trading?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt left" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B05;&#xFE0F; Obsolesces</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> As human traders obsolesce, what unregulated niches for adversarial AI traders (designed to trigger crashes for profit) open up, increasing the variety of systemic risks?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> Which fallbacks, like speed limits on trades (a 'financial friction'), are kept present to reduce deviation from stable market behavior?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt right" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x27A1;&#xFE0F; Retrieves</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> Which revived patterns of past 'flash crashes' resurface, now at a scale and speed that is unprecedented, multiplying the variety of ways the market can instantly evaporate?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> How can we curate the retrieval of these memories to bound the risk, by building systems that learn from past failures to prevent their recurrence?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt down" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B07;&#xFE0F; Reverses</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> If unchecked, how does efficiency flip into total meltdown, exploding the variety of correlated, wrong-way bets as all AIs react to the same signal, wiping out capital in seconds (R-loop)?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What counter-loops (mandating algorithmic diversity, AI 'kill switches' for investment firms) pull the system back from the brink?</p>
+                      </div>
+                  </div>
+              </div>
+              <div class="foraging-prompts" onclick="toggleDetails(this)">
+                  <h4>&#x1F4A1; Foraging Prompts (Click to Expand)</h4>
+                  <div class="prompt-details">
+                      <p><strong>&#x1F442; Pathetic Dot:</strong> Map the forces of an AI flash crash: How do Laws (lack of regulation on algorithmic diversity) permit it? How does the Market (race for microsecond advantages) incentivize it? What Norms ('let the market work') prevent intervention? How does Code (models trained on similar data) create correlated risk?</p>
+                      <p><strong>&#x1F9F0; Levers:</strong> Propose a prompt to prevent meltdown. How could [mandating algorithmic diversity for major funds] amplify market resilience? How could [market-wide circuit breakers] dampen the speed of a crash?</p>
+                      <p><strong>&#x1F4CA; KPIs:</strong> Design a dashboard prompt for market stability. What query measures the 'HHI of algorithmic strategies' in the market? What query tracks the 'volume of trades occurring in less than a millisecond'?</p>
+                      <p><strong>&#x1F3AF; Bounds:</strong> Formulate a prompt to define a 'flash crash.' What percentage drop in a major index over what period of time must trigger an automatic, system-wide trading halt?</p>
+                  </div>
+              </div>
+            </div>
+        </section>
+
+        <section id="creativity" class="domain-level">
+            <h2>LEVEL 6: Creativity</h2>
+            <div class="spread">
+                <h3>A. Destination</h3>
+                <div class="gamepad-layout">
+                    <div class="seed-prompt">
+                        <h4>&#x1F3AE; START</h4>
+                        <p>What new art forms and creative workflows are emerging from human-AI co-creation?</p>
+                    </div>
+                    <div class="tetrad-prompt up" onclick="toggleDetails(this)">
+                        <div class="prompt-title">&#x2B06;&#xFE0F; Enhances</div>
+                        <div class="prompt-details">
+                            <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> How do generative tools create/expand the variety of artistic styles by allowing for the rapid iteration and blending of aesthetics, in an R-loop where new art inspires new tools?</p>
+                            <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What curation platforms and critical discourse constrain the system, absorbing the variety of outputs to distinguish meaningful work from a flood of low-effort content?</p>
+                        </div>
+                    </div>
+                    <div class="tetrad-prompt left" onclick="toggleDetails(this)">
+                        <div class="prompt-title">&#x2B05;&#xFE0F; Obsolesces</div>
+                        <div class="prompt-details">
+                            <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> As traditional gatekeepers (galleries, publishers) obsolesce, what unregulated niches for new aesthetic movements and creator-led communities open up, increasing the variety of voices?</p>
+                            <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> Which fallbacks, like craft-based art forms, are kept present and gain new value, reducing deviation from the principle of human-made meaning?</p>
+                        </div>
+                    </div>
+                    <div class="tetrad-prompt right" onclick="toggleDetails(this)">
+                        <div class="prompt-title">&#x27A1;&#xFE0F; Retrieves</div>
+                        <div class="prompt-details">
+                            <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> Which revived practices of folk art and remix culture resurface, now supercharged by AI, multiplying the variety of ways culture is shared and transformed?</p>
+                            <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> How can we curate this retrieval of remix culture to bound its use, developing new norms around attribution and transformation to respect original creators?</p>
+                        </div>
+                    </div>
+                    <div class="tetrad-prompt down" onclick="toggleDetails(this)">
+                        <div class="prompt-title">&#x2B07;&#xFE0F; Reverses</div>
+                        <div class="prompt-details">
+                            <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> If overused, how does co-creation flip into homogenized culture, exploding the variety of outputs that all share the same latent-space aesthetic (the 'AI look'), in an R-loop of stylistic convergence?</p>
+                            <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What counter-loops (artists training their own models, using AI to generate deliberately imperfect results) pull the system back into a viable range of originality?</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="foraging-prompts" onclick="toggleDetails(this)">
+                    <h4>&#x1F4A1; Foraging Prompts (Click to Expand)</h4>
+                    <div class="prompt-details">
+                        <p><strong>&#x1F442; Pathetic Dot:</strong> Map the forces on AI art: How do Laws (copyright law) shape it? How does the Market (platforms rewarding generic styles) influence output? What Norms (debates about 'real' art) define its reception? How does Code (diffusion models) create the default aesthetic?</p>
+                        <p><strong>&#x1F9F0; Levers:</strong> Propose a prompt for creative vitality. How could [tools for artists to train their own models] amplify stylistic diversity? How could [new forms of art criticism] dampen the flood of generic content?</p>
+                        <p><strong>&#x1F4CA; KPIs:</strong> Design a dashboard prompt for cultural diversity. What query analyzes the 'stylistic entropy' of images on AI art platforms? What query tracks the 'emergence of new aesthetic tags'?</p>
+                        <p><strong>&#x1F3AF; Bounds:</strong> Formulate a prompt to define 'cultural homogenization.' At what point of stylistic clustering would we consider the system to be in a state of creative stagnation?</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="spread">
+              <h3>B. Embarrassing Gap</h3>
+              <div class="gamepad-layout">
+                  <div class="seed-prompt">
+                      <h4>&#x1F3AE; START</h4>
+                      <p>How do AI creative models trained on biased data create aesthetic and narrative echo chambers?</p>
+                  </div>
+                  <div class="tetrad-prompt up" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B06;&#xFE0F; Enhances</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> How does highlighting the echo chamber create/expand the variety of 'counter-data' projects and community-led archives, in an R-loop where bias discovery prompts archival activism?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What auditing tools and bias bounties constrain the system, absorbing the variety of harmful stereotypes by incentivizing their discovery and removal?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt left" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B05;&#xFE0F; Obsolesces</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> As claims of AI originality obsolesce, what unregulated niches for art that explicitly critiques or 'glitches' biased models open up, increasing the variety of critical styles?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> Which fallbacks, like human-led curation that actively promotes underrepresented artists, are kept present to reduce deviation from the goal of cultural diversity?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt right" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x27A1;&#xFE0F; Retrieves</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> Which revived forms of kitsch and mass-produced art reappear, now generated by AI, multiplying the variety of low-common-denominator, stereotyped content?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> How can we curate this retrieval of kitsch to bound its influence, using educational tools to build critical awareness of how models reproduce stereotypes?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt down" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B07;&#xFE0F; Reverses</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> If ignored, how does the gap cause a deep flattening, exploding the variety of micro-aggressions and erasures as biased models become the default tools for global visual culture (R-loop)?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What counter-loops (data sovereignty movements, open-source models trained on non-Western data) pull the system back from a state of cultural collapse into a viable range of pluralism?</p>
+                      </div>
+                  </div>
+              </div>
+              <div class="foraging-prompts" onclick="toggleDetails(this)">
+                  <h4>&#x1F4A1; Foraging Prompts (Click to Expand)</h4>
+                  <div class="prompt-details">
+                      <p><strong>&#x1F442; Pathetic Dot:</strong> Map the forces creating this echo chamber: How does Law (copyright fair use) permit it? How does the Market (demand for cheap content) reward it? What Norms (tech-centric views) fail to question it? How does Code (the training data) encode it?</p>
+                      <p><strong>&#x1F9F0; Levers:</strong> Propose a prompt to break the echo chamber. How could [data sovereignty movements] amplify cultural diversity? How could [mandating bias audits for commercial models] dampen the spread of stereotypes?</p>
+                      <p><strong>&#x1F4CA; KPIs:</strong> Design a dashboard prompt for representation. What query runs a 'demographic representation audit' on a model's output for prompts like 'a successful person'? What query tracks the 'percentage of training data from outside North America and Europe'?</p>
+                      <p><strong>&#x1F3AF; Bounds:</strong> Formulate a prompt to define 'deep flattening.' At what point does a model's inability to generate culturally specific, non-stereotypical imagery constitute a harmful act of systemic erasure?</p>
+                  </div>
+              </div>
+            </div>
+
+            <div class="spread">
+              <h3>C. Faustian Bargain</h3>
+              <div class="gamepad-layout">
+                  <div class="seed-prompt">
+                      <h4>&#x1F3AE; START</h4>
+                      <p>If authorship is outsourced to AI, what happens to human agency and the meaning of creativity?</p>
+                  </div>
+                  <div class="tetrad-prompt up" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B06;&#xFE0F; Enhances</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> How does outsourcing creative labor create/expand the variety of people who can produce high-quality content (the 'democratization of skill'), in an R-loop where access creates more creators?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What new licensing models and attribution standards constrain the system, absorbing the variety of human/AI configurations into a clear framework of authorship?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt left" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B05;&#xFE0F; Obsolesces</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> As human agency is de-emphasized, what unregulated niches for 'prompt artists' and 'AI whisperers' open up, increasing the variety of roles in the creative process?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> Which fallbacks, like awards and recognition specifically for human-only creations, are kept present to reduce deviation from valuing human effort?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt right" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x27A1;&#xFE0F; Retrieves</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> Which revived practices of ghostwriting and the studio system resurface, multiplying the variety of ways creative credit is assigned?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> How can we curate this retrieval to bound its exploitative potential, ensuring transparent attribution for everyone involved in the human-AI creative process?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt down" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B07;&#xFE0F; Reverses</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> If pushed too far, how does outsourcing lead to humans being erased, exploding the variety of fully automated content farms that devalue all creative work to zero (R-loop of devaluation)?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What counter-loops (a 'human-made' certification, unions for creative workers, reader preference for human authors) pull the system back into a viable range where human creativity is valued?</p>
+                      </div>
+                  </div>
+              </div>
+              <div class="foraging-prompts" onclick="toggleDetails(this)">
+                  <h4>&#x1F4A1; Foraging Prompts (Click to Expand)</h4>
+                  <div class="prompt-details">
+                      <p><strong>&#x1F442; Pathetic Dot:</strong> Map the forces of this authorship bargain: How do Laws (copyright office guidance) define agency? How does the Market (platforms paying less for AI work) value it? What Norms (audience desire for 'authentic' stories) shape it? How does Code (tools that obscure human contribution) de-emphasize it?</p>
+                      <p><strong>&#x1F9F0; Levers:</strong> Propose a prompt to preserve agency. How could [a 'human-made' certification mark] amplify the value of human creativity? How could [new attribution standards] dampen the erasure of the human author?</p>
+                      <p><strong>&#x1F4CA; KPIs:</strong> Design a dashboard prompt for creative agency. What query tracks the 'income gap' between human-only and AI-assisted creators? What query measures the 'percentage of new works registered' that declare AI contribution?</p>
+                      <p><strong>&#x1F3AF; Bounds:</strong> Formulate a prompt to define 'erasure.' At what point does the volume of automated content on a platform become so high that it makes human-created work economically unviable?</p>
+                  </div>
+              </div>
+            </div>
+
+            <div class="spread">
+              <h3>D. Negative Externality</h3>
+              <div class="gamepad-layout">
+                  <div class="seed-prompt">
+                      <h4>&#x1F3AE; START</h4>
+                      <p>Does the tendency of AI models to average their training data lead to inevitable cultural flattening?</p>
+                  </div>
+                  <div class="tetrad-prompt up" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B06;&#xFE0F; Enhances</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> How does the global reach of AI platforms create/expand the variety of massive, cross-cultural fandoms for a few mega-styles, in an R-loop of globalized monoculture?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What 'cultural preservation' algorithms (e.g., those that intentionally boost local or niche content) constrain the system, absorbing the tendency toward homogenization?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt left" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B05;&#xFE0F; Obsolesces</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> As local traditions are erased from datasets, what unregulated niches for 'data artisans' who create bespoke, culturally specific datasets open up, increasing the variety of model inputs?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> Which fallbacks, like government funding for traditional arts and media, are kept present to reduce deviation from a baseline of cultural diversity?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt right" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x27A1;&#xFE0F; Retrieves</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> Which revived models of colonial culture export resurface, as the aesthetic biases of a few tech hubs are exported globally, multiplying the variety of ways local cultures are displaced?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> How can we curate this retrieval to bound its impact, using platform design to create spaces for local cultures to thrive rather than compete with the global average?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt down" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B07;&#xFE0F; Reverses</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> If unchecked, how does market size flip into a loss of diversity, exploding the variety of dead languages, forgotten myths, and extinct aesthetics in a catastrophic R-loop of cultural extinction?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What counter-loops (digital heritage projects, AI tools for language revitalization, community-owned AI models) pull the system back into a viable range of cultural pluralism?</p>
+                      </div>
+                  </div>
+              </div>
+              <div class="foraging-prompts" onclick="toggleDetails(this)">
+                  <h4>&#x1F4A1; Foraging Prompts (Click to Expand)</h4>
+                  <div class="prompt-details">
+                      <p><strong>&#x1F442; Pathetic Dot:</strong> Map the forces of cultural flattening: How does Law (global IP regimes) favor dominant cultures? How does the Market (ad models rewarding scale) drive it? What Norms (appeal of global trends) make people choose it? How does Code (models that average data) perform it?</p>
+                      <p><strong>&#x1F9F0; Levers:</strong> Propose a prompt to fight flattening. How could [AI tools for language revitalization] amplify endangered cultures? How could [algorithmic boosts for local content] dampen the power of the global monoculture?</p>
+                      <p><strong>&#x1F4CA; KPIs:</strong> Design a dashboard prompt for cultural health. What query tracks the 'linguistic diversity' of content on a global platform? What query measures the 'discoverability' of art from outside the dominant cultural sphere?</p>
+                      <p><strong>&#x1F3AF; Bounds:</strong> Formulate a prompt to define 'cultural extinction.' At what point does the lack of representation of a culture in AI systems constitute a significant threat to its continuity?</p>
+                  </div>
+              </div>
+            </div>
+
+            <div class="spread">
+              <h3>E. Black Swan</h3>
+              <div class="gamepad-layout">
+                  <div class="seed-prompt">
+                      <h4>&#x1F3AE; START</h4>
+                      <p>What if a state-level actor uses generative AI to create undetectable propaganda disguised as grassroots art?</p>
+                  </div>
+                  <div class="tetrad-prompt up" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B06;&#xFE0F; Enhances</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> How does generative propaganda create/expand the variety of seemingly authentic 'grassroots' movements, in an R-loop where AI-generated art creates fake political consensus?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What media forensics and content provenance technologies constrain the system, absorbing the variety of fake content by making it detectable?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt left" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B05;&#xFE0F; Obsolesces</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> As trust in media collapses, what unregulated niches for high-trust, closed communities open up, increasing the variety of fragmented, insular realities?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> Which fallbacks, like trusted human journalists and curators, are kept present and gain new importance to reduce deviation from a shared, verifiable reality?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt right" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x27A1;&#xFE0F; Retrieves</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> Which revived forms of agitprop and political art resurface, now impossible to distinguish from genuine expression, multiplying the variety of ways culture is weaponized?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> How can we curate this retrieval to bound its impact, by teaching digital literacy that focuses on source verification over stylistic analysis?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt down" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B07;&#xFE0F; Reverses</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> When flipped, how does art become cultural warfare, exploding the variety of social divisions and political mistrust as citizens can no longer believe what they see (R-loop)?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What counter-loops (public media campaigns, international treaties against it, platform liability for false content) pull the system back from total epistemic chaos?</p>
+                      </div>
+                  </div>
+              </div>
+              <div class="foraging-prompts" onclick="toggleDetails(this)">
+                  <h4>&#x1F4A1; Foraging Prompts (Click to Expand)</h4>
+                  <div class="prompt-details">
+                      <p><strong>&#x1F442; Pathetic Dot:</strong> Map the forces of this propaganda vector: How do Laws (First Amendment) protect it? How does the Market (engagement-based algorithms) spread it? What Norms (confirmation bias) make us vulnerable? How does Code (generative models) create it?</p>
+                      <p><strong>&#x1F9F0; Levers:</strong> Propose a prompt for epistemic defense. How could [content provenance standards] amplify user awareness? How could [downranking all unverified content] dampen the spread of propaganda?</p>
+                      <p><strong>&#x1F4CA; KPIs:</strong> Design a dashboard prompt for information warfare. What query tracks the 'detection rate' for state-sponsored propaganda? What query measures 'public trust in visual media' over time?</p>
+                      <p><strong>&#x1F3AF; Bounds:</strong> Formulate a prompt to define 'cultural warfare.' At what point does AI-generated propaganda become so effective that it measurably impacts election results or public safety?</p>
+                  </div>
+              </div>
+            </div>
+        </section>
+
+        <section id="ethics" class="domain-level">
+            <h2>LEVEL 7: Ethics</h2>
+            
+            <div class="spread">
+                <h3>A. Destination</h3>
+                <div class="gamepad-layout">
+                    <div class="seed-prompt">
+                        <h4>&#x1F3AE; START</h4>
+                        <p>Could access to certain AI capabilities become a recognized human right?</p>
+                    </div>
+                    <div class="tetrad-prompt up" onclick="toggleDetails(this)">
+                        <div class="prompt-title">&#x2B06;&#xFE0F; Enhances</div>
+                        <div class="prompt-details">
+                            <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> How does framing AI as a right create/expand the variety of empowerment tools for individuals in an R-loop where utility drives further recognition of the right?</p>
+                            <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What public institutions (like libraries or public utilities) constrain the system, absorbing the variety of market-based access models to provide a universal baseline?</p>
+                        </div>
+                    </div>
+                    <div class="tetrad-prompt left" onclick="toggleDetails(this)">
+                        <div class="prompt-title">&#x2B05;&#xFE0F; Obsolesces</div>
+                        <div class="prompt-details">
+                            <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> As exclusivity obsolesces, what unregulated niches for novel applications of this universal right open up, increasing the variety of ways people use AI for personal and community empowerment?</p>
+                            <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> Which fallbacks, like human-delivered public services, are kept present to reduce deviation from the goal of universal access when the technology fails?</p>
+                        </div>
+                    </div>
+                    <div class="tetrad-prompt right" onclick="toggleDetails(this)">
+                        <div class="prompt-title">&#x27A1;&#xFE0F; Retrieves</div>
+                        <div class="prompt-details">
+                            <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> Which revived ideals from the Enlightenment (e.g., right to knowledge) resurface, now applied to AI, multiplying the variety of philosophical justifications for this right?</p>
+                            <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> How can we curate this retrieval of ideals to bound its application, defining the limits and responsibilities that come with the right to AI access?</p>
+                        </div>
+                    </div>
+                    <div class="tetrad-prompt down" onclick="toggleDetails(this)">
+                        <div class="prompt-title">&#x2B07;&#xFE0F; Reverses</div>
+                        <div class="prompt-details">
+                            <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> If this right is granted then revoked, how does it flip into a new form of control, exploding the variety of dependencies and vulnerabilities for a populace that now relies on it (R-loop)?</p>
+                            <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What counter-loops (constitutional amendments, decentralized architectures, international treaties) pull the system back from the brink of revoked rights by making them resilient?</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="foraging-prompts" onclick="toggleDetails(this)">
+                    <h4>&#x1F4A1; Foraging Prompts (Click to Expand)</h4>
+                    <div class="prompt-details">
+                        <p><strong>&#x1F442; Pathetic Dot:</strong> Map the forces on a 'right to AI': How could Laws (UN declaration) codify it? How would the Market (private firms) shape its delivery? What Norms must exist for this right to be legitimate? How must Code (open-source models) be designed to ensure the right cannot be revoked?</p>
+                        <p><strong>&#x1F9F0; Levers:</strong> Propose a prompt to realize this right. How could [public funding for open-source foundation models] amplify equitable access? How could [defining a 'minimum viable AI capability'] dampen a digital caste system?</p>
+                        <p><strong>&#x1F4CA; KPIs:</strong> Design a dashboard prompt for AI rights. What query tracks the 'percentage of the population with reliable access'? What query measures the 'cost of access as a percentage of income' for the poorest quintile?</p>
+                        <p><strong>&#x1F3AF; Bounds:</strong> Formulate a prompt to define 'revoked rights.' What actions (e.g., denying access based on political speech) would constitute a violation of this fundamental right?</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="spread">
+              <h3>B. Embarrassing Gap</h3>
+              <div class="gamepad-layout">
+                  <div class="seed-prompt">
+                      <h4>&#x1F3AE; START</h4>
+                      <p>Where are the failures in providing fair and equitable access to beneficial AI systems?</p>
+                  </div>
+                  <div class="tetrad-prompt up" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B06;&#xFE0F; Enhances</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> How does highlighting access failures create/expand the variety of community-led initiatives (e.g., mesh networks, public compute co-ops) in an R-loop of grassroots problem-solving?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What universal service regulations constrain the system, absorbing the variety of market failures to ensure a baseline of access?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt left" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B05;&#xFE0F; Obsolesces</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> As the 'universal' promise of AI fails, what unregulated niches for hyper-local, culturally specific AI applications open up, increasing the variety of useful tools?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> Which fallbacks, like human-staffed help desks and analog alternatives, are kept present to reduce deviation from the goal of serving everyone?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt right" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x27A1;&#xFE0F; Retrieves</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> Which revived struggles for civil rights and access resurface in the context of AI, multiplying the variety of activist frameworks being applied?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> How can we curate this retrieval of past fights to bound their application, building coalitions that learn from history to create effective strategies for digital equity?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt down" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B07;&#xFE0F; Reverses</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> If ignored, how does the gap entrench inequality, exploding the variety of harms for those left behind (unable to access jobs, healthcare, services) in an R-loop of marginalization?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What counter-loops (right-to-repair laws for AI, public funding for digital literacy, free public access points) pull the system back from creating a permanent digital underclass?</p>
+                      </div>
+                  </div>
+              </div>
+              <div class="foraging-prompts" onclick="toggleDetails(this)">
+                  <h4>&#x1F4A1; Foraging Prompts (Click to Expand)</h4>
+                  <div class="prompt-details">
+                      <p><strong>&#x1F442; Pathetic Dot:</strong> Map the forces creating this access gap: How do Laws (failure to update universal service obligations) permit it? How does the Market (focusing on profitable customers) drive it? What Norms (assuming everyone has a smartphone) make the gap invisible? How does Code (requiring high-end hardware) create the barrier?</p>
+                      <p><strong>&#x1F9F0; Levers:</strong> Propose a prompt to bridge the gap. How could [public compute co-ops] amplify access? How could [mandating government AI services work on low-spec hardware] dampen the digital divide?</p>
+                      <p><strong>&#x1F4CA; KPIs:</strong> Design a dashboard prompt for equitable access. What query tracks the 'success rate of AI-based government service applications, sorted by zip code'? What query measures the 'wait time for human support' when an AI system fails?</p>
+                      <p><strong>&#x1F3AF; Bounds:</strong> Formulate a prompt to define 'entrenched inequality.' At what point is the disparity in access to a critical AI service so great that it constitutes a de facto violation of equal opportunity laws?</p>
+                  </div>
+              </div>
+            </div>
+
+            <div class="spread">
+              <h3>C. Faustian Bargain</h3>
+              <div class="gamepad-layout">
+                  <div class="seed-prompt">
+                      <h4>&#x1F3AE; START</h4>
+                      <p>What safety rails are being watered down or removed in the name of speed and competition?</p>
+                  </div>
+                  <div class="tetrad-prompt up" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B06;&#xFE0F; Enhances</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> How does the race for speed create/expand the variety of 'move fast and break things' justifications, in an R-loop where each competitor's risky move pressures others to follow suit?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What independent, third-party auditing requirements constrain the system, absorbing the variety of internal safety claims by holding them to an external standard?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt left" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B05;&#xFE0F; Obsolesces</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> As careful, slow safety practices are obsolesced, what unregulated niches for high-risk, unaudited 'frontier models' open up, increasing the variety of potential catastrophic failures?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> Which fallbacks, like professional codes of ethics and whistleblower protections, are kept present to reduce deviation from a baseline of responsible engineering?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt right" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x27A1;&#xFE0F; Retrieves</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> Which revived tropes of techno-solutionism resurface, multiplying the variety of arguments against caution and oversight?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> How can we curate this retrieval of hubris to bound its impact, promoting 'red team' exercises and public bug bounties to institutionalize skepticism?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt down" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B07;&#xFE0F; Reverses</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> If pushed too far, how does speed flip into a collapse of trust, exploding the variety of public backlash and regulatory overreach after a major AI-caused disaster (R-loop)?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What counter-loops (staged deployment, corporate liability for AI harms, licensing regimes for high-risk models) pull the system back into a viable range of manageable risk?</p>
+                      </div>
+                  </div>
+              </div>
+              <div class="foraging-prompts" onclick="toggleDetails(this)">
+                  <h4>&#x1F4A1; Foraging Prompts (Click to Expand)</h4>
+                  <div class="prompt-details">
+                      <p><strong>&#x1F442; Pathetic Dot:</strong> Map the forces in this safety bargain: How do Laws (lack of a dedicated AI regulator) allow it? How does the Market (first-mover advantage) incentivize it? What Norms (glorification of reckless founders) celebrate it? How does Code (unpredictability of emergent capabilities) make risk assessment hard?</p>
+                      <p><strong>&#x1F9F0; Levers:</strong> Propose a prompt to manage the bargain. How could [a licensing regime for developers of frontier models] amplify accountability? How could [industry-wide safety standards] dampen the race to the bottom?</p>
+                      <p><strong>&#x1F4CA; KPIs:</strong> Design a dashboard prompt for AI safety. What query tracks the 'ratio of safety to capability researchers' at major labs? What query measures the 'number of public red-teaming exercises' before a model's release?</p>
+                      <p><strong>&#x1F3AF; Bounds:</strong> Formulate a prompt to define 'recklessness.' What level of known, unmitigated risk in an AI model makes its public release an act of criminal negligence?</p>
+                  </div>
+              </div>
+            </div>
+
+            <div class="spread">
+              <h3>D. Negative Externality</h3>
+              <div class="gamepad-layout">
+                  <div class="seed-prompt">
+                      <h4>&#x1F3AE; START</h4>
+                      <p>What happens when ethics become balkanized, with different AI ecosystems operating on incompatible moral codes?</p>
+                  </div>
+                  <div class="tetrad-prompt up" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B06;&#xFE0F; Enhances</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> How does balkanization create/expand the variety of regional power blocs, in an R-loop where divergent AI ethics reinforce geopolitical spheres of influence?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What international standards bodies and diplomatic forums constrain the system, absorbing the variety of ethical frameworks to find a minimal set of interoperable principles?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt left" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B05;&#xFE0F; Obsolesces</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> As global norms obsolesce, what unregulated niches for 'ethics arbitrage' (locating risky AI research in jurisdictions with lax rules) open up, increasing the variety of global risks?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> Which fallbacks, like the Universal Declaration of Human Rights, are kept present as a shared foundation to reduce deviation from core values?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt right" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x27A1;&#xFE0F; Retrieves</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> Which revived dynamics of Cold War spheres of influence resurface, now based on data governance and AI values, multiplying the variety of ways the world can be divided?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> How can we curate this retrieval to bound its dangers, using 'Track II diplomacy' between AI scientists to maintain communication channels?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt down" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B07;&#xFE0F; Reverses</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> If pushed too far, how does regional power flip into fractured governance, exploding the variety of cross-border conflicts over data, algorithms, and AI-driven actions (R-loop)?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What counter-loops (mutual recognition agreements, technical interoperability standards) pull the system back from total fragmentation into a viable range of pluralistic cooperation?</p>
+                      </div>
+                  </div>
+              </div>
+              <div class="foraging-prompts" onclick="toggleDetails(this)">
+                  <h4>&#x1F4A1; Foraging Prompts (Click to Expand)</h4>
+                  <div class="prompt-details">
+                      <p><strong>&#x1F442; Pathetic Dot:</strong> Map the forces of ethical balkanization: How do Laws (data sovereignty laws like GDPR) drive it? How does the Market (creation of regional tech giants) reinforce it? What Norms (differing cultural values) justify it? How does Code (geofencing and non-interoperable platforms) implement it?</p>
+                      <p><strong>&#x1F9F0; Levers:</strong> Propose a prompt to manage fragmentation. How could [shared AI safety incident databases] amplify global cooperation? How could [focusing on technical interoperability instead of value alignment] dampen political conflict?</p>
+                      <p><strong>&#x1F4CA; KPIs:</strong> Design a dashboard prompt for global AI governance. What query tracks the 'number of incompatible data privacy regimes'? What query measures the 'volume of cross-border data flows' between AI blocs?</p>
+                      <p><strong>&#x1F3AF; Bounds:</strong> Formulate a prompt to define 'fractured governance.' At what point do incompatibilities between AI blocs pose a significant threat to global trade, science, or peace?</p>
+                  </div>
+              </div>
+            </div>
+
+            <div class="spread">
+              <h3>E. Black Swan</h3>
+              <div class="gamepad-layout">
+                  <div class="seed-prompt">
+                      <h4>&#x1F3AE; START</h4>
+                      <p>What if access to open-source AI models is suddenly revoked or heavily restricted due to a safety panic?</p>
+                  </div>
+                  <div class="tetrad-prompt up" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B06;&#xFE0F; Enhances</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> How does a safety panic create/expand the variety of arguments for centralized control, in an R-loop where fear drives calls for powerful government and corporate gatekeepers?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What legal and institutional protections for open source constrain the system, absorbing the panic and defending the right to share code?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt left" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B05;&#xFE0F; Obsolesces</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> As open access is killed, what unregulated niches for black markets in leaked models and pirated weights open up, increasing the variety of unauditable, potentially dangerous AI systems?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> Which fallbacks, like smaller, less powerful but still open models, are kept present to reduce deviation from the principle of open inquiry and access?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt right" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x27A1;&#xFE0F; Retrieves</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> Which revived models of censorship and information control (e.g., treating code as a munition) resurface, multiplying the variety of ways access to knowledge can be restricted?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> How can we curate this retrieval of censorship to bound its impact, fighting for a clear distinction between sharing knowledge and building harmful applications?</p>
+                      </div>
+                  </div>
+                  <div class="tetrad-prompt down" onclick="toggleDetails(this)">
+                      <div class="prompt-title">&#x2B07;&#xFE0F; Reverses</div>
+                      <div class="prompt-details">
+                          <p><strong class="amp">&#x25B2; AMP (Variety&#x2191;):</strong> If pushed too far, how does safety invert abundance into scarcity, exploding the variety of harms from concentrating power in the hands of a few approved actors (monopoly, tyranny) in an R-loop?</p>
+                          <p><strong class="damp">&#x25BC; DAMP (Variety&#x2193;):</strong> What counter-loops (decentralized model-sharing platforms, strong cryptography, civil disobedience by researchers) pull the system back from total lockdown into a viable range of responsible openness?</p>
+                      </div>
+                  </div>
+              </div>
+              <div class="foraging-prompts" onclick="toggleDetails(this)">
+                  <h4>&#x1F4A1; Foraging Prompts (Click to Expand)</h4>
+                  <div class="prompt-details">
+                      <p><strong>&#x1F442; Pathetic Dot:</strong> Map the forces of this access revocation: What Laws (emergency national security orders) could enable it? How would the Market (large labs lobbying for it) drive it? What Norms (a post-disaster safety panic) would justify it? How would Code (built-in revocation keys) implement it?</p>
+                      <p><strong>&#x1F9F0; Levers:</strong> Propose a prompt to defend openness. How could [decentralized model-sharing platforms] amplify resistance? How could [a legal defense fund for open-source AI researchers] dampen the chilling effects?</p>
+                      <p><strong>&#x1F4CA; KPIs:</strong> Design a dashboard prompt for information freedom. What query tracks the 'number of open-source AI models removed' from public platforms? What query measures the 'compute cost to train a competitive model from scratch'?</p>
+                      <p><strong>&#x1F3AF; Bounds:</strong> Formulate a prompt to define 'abundant scarcity.' At what point have so few actors been given the right to develop powerful AI that it constitutes a cartel, undermining the innovative and equitable promise of the technology?</p>
+                  </div>
+              </div>
+            </div>
+        </section>
+    </main>
+    
+    <script>
+        function toggleDetails(element) {
+            element.classList.toggle('active');
+        }
+    </script>
+
+</body>
+</html>
