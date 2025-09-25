@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Luminous Engine: A Geertzian-Tetradic Analysis</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=UnifrakturMaguntia&family=Vollkorn:wght@400;700&display=swap');
+
+        :root {
+            --came-black: #1a1a1a;
+            --parchment-cream: #F5F5DC;
+            --effervescent-ruby: #9B111E;
+            --symbol-cobalt: #0047AB;
+            --ritual-emerald: #009B77;
+            --amethyst-reverse: #5d3f6a;
+            --aura-gold: #FFB81C;
+            --font-liturgy: 'UnifrakturMaguntia', cursive;
+            --font-commentary: 'Vollkorn', serif;
+        }
+
+        body {
+            font-family: var(--font-commentary);
+            background-color: var(--parchment-cream);
+            color: var(--came-black);
+            line-height: 1.7;
+            margin: 0;
+            padding: 2vw;
+            font-size: 18px;
+        }
+
+        header, main { max-width: 1400px; margin: 0 auto; }
+
+        header {
+            text-align: center;
+            padding: 20px;
+            border-bottom: 10px solid var(--came-black);
+            margin-bottom: 40px;
+        }
+
+        header h1 {
+            font-family: var(--font-liturgy);
+            font-size: clamp(2.5rem, 6vw, 4rem);
+            color: var(--effervescent-ruby);
+            margin: 0;
+        }
+        
+        header .incipit { font-size: 1.2em; font-style: italic; margin-top: 10px; color: #4a4a4a; }
+
+        .treatise-section {
+            border: 8px solid var(--came-black);
+            margin-bottom: 50px;
+            padding: 30px;
+            background: rgba(255, 250, 240, 0.7);
+            box-shadow: inset 0 0 25px rgba(0,0,0,0.3);
+        }
+        
+        .treatise-section h2, .treatise-section h3 {
+            font-family: var(--font-liturgy);
+            text-align: center;
+            margin: 0 0 15px 0;
+            padding-bottom: 15px;
+            border-bottom: 6px solid var(--came-black);
+        }
+        .treatise-section h2 { font-size: clamp(2rem, 5vw, 2.5rem); }
+        .treatise-section h3 { font-size: clamp(1.8rem, 4vw, 2.2rem); }
+
+
+        .media-chapter h2.chapter-title {
+            font-family: var(--font-liturgy);
+            font-size: clamp(2.2rem, 5vw, 3rem);
+            text-align: center;
+            background: var(--came-black);
+            color: var(--parchment-cream);
+            padding: 15px;
+            margin: 60px 0 30px 0;
+        }
+
+        .analysis-container {
+            display: flex;
+            flex-direction: column; /* Mobile first */
+            gap: 30px;
+        }
+        
+        table { width: 100%; border-collapse: collapse; font-size: 0.95em; }
+        th, td { border: 3px solid var(--came-black); padding: 15px; text-align: left; vertical-align: top; white-space: normal; }
+        th { background-color: var(--came-black); color: var(--parchment-cream); font-weight: 700; }
+        td { background-color: rgba(255, 255, 255, 0.6); }
+        td span { 
+            transition: all 0.4s ease-in-out; 
+            display: inline-block; 
+            padding: 2px 4px; 
+            border-radius: 3px; 
+            background-color: transparent;
+        }
+        
+        td span.illuminated-enhance { background-color: rgba(155, 17, 30, 0.4); box-shadow: 0 0 8px var(--effervescent-ruby); }
+        td span.illuminated-obsolesce { background-color: rgba(0, 71, 171, 0.4); box-shadow: 0 0 8px var(--symbol-cobalt); }
+        td span.illuminated-retrieve { background-color: rgba(0, 155, 119, 0.4); box-shadow: 0 0 8px var(--ritual-emerald); }
+        td span.illuminated-reverse { background-color: rgba(93, 63, 106, 0.4); box-shadow: 0 0 8px var(--amethyst-reverse); }
+
+        .controller-section { margin-top: 0; }
+
+        .gamepad-layout {
+            display: grid;
+            grid-template-columns: 1fr 1.5fr 1fr;
+            grid-template-rows: auto auto auto;
+            gap: 15px;
+            align-items: stretch;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        
+        .cultural-system-core {
+            grid-column: 2 / 3;
+            grid-row: 2 / 3;
+            border: 6px solid var(--came-black);
+            padding: 20px;
+            text-align: center;
+            background-color: rgba(255, 250, 205, 0.8);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            min-height: 200px;
+        }
+        .core-default .glyph { font-size: 4em; line-height: 1; }
+        .core-default h4 { margin: 10px 0; font-size: 1.3em; font-weight: 700; }
+
+        .tetrad-control {
+            border: 6px solid var(--came-black);
+            padding: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-align: center;
+            color: var(--parchment-cream);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .tetrad-control.active, .tetrad-control:hover {
+             transform: scale(1.05);
+             box-shadow: 0 0 25px var(--aura-gold);
+             z-index: 10;
+        }
+        
+        .control-title { font-weight: 700; font-size: 1.5em; text-shadow: 1px 1px 2px #000; }
+        
+        .core-detail {
+            display: none;
+            text-align: left;
+            font-size: 0.95em;
+        }
+        .core-detail h5 {
+            font-weight: 700;
+            font-size: 1.3em;
+            margin: 0 0 10px 0;
+            padding-bottom: 5px;
+            border-bottom: 2px solid var(--came-black);
+        }
+        .core-detail ul { padding-left: 20px; margin: 0; }
+
+        .enhance { grid-column: 2 / 3; grid-row: 1 / 2; background: var(--effervescent-ruby); }
+        .reverse { grid-column: 2 / 3; grid-row: 3 / 4; background: var(--amethyst-reverse); }
+        .obsolesce { grid-column: 1 / 2; grid-row: 2 / 3; background: var(--symbol-cobalt); }
+        .retrieve { grid-column: 3 / 4; grid-row: 2 / 3; background: var(--ritual-emerald); }
+
+        footer { text-align: center; margin-top: 50px; padding-top: 20px; border-top: 10px solid var(--came-black); font-style: italic; }
+
+        /* --- RESPONSIVE LAYOUTS --- */
+        @media (min-width: 961px) {
+            .analysis-container { flex-direction: row; align-items: stretch; }
+            .table-wrapper { flex: 3; }
+            .controller-section { flex: 2; display: flex; flex-direction: column; justify-content: center; }
+            .gamepad-layout { max-width: none; height: 100%; }
+        }
+        
+        @media (max-width: 960px) {
+            table, thead, tbody, th, td, tr { display: block; }
+            thead tr { position: absolute; top: -9999px; left: -9999px; }
+            tr { border: 3px solid var(--came-black); margin-bottom: 20px; background-color: rgba(255, 255, 255, 0.6); }
+            td { border: none; border-bottom: 2px dotted rgba(0,0,0,0.2); position: relative; padding-left: 40%; min-height: 30px; }
+            td:last-child { border-bottom: 0; }
+            td:before { 
+                position: absolute;
+                top: 50%;
+                left: 15px;
+                transform: translateY(-50%);
+                width: 35%; 
+                padding-right: 10px; 
+                white-space: normal;
+                font-weight: 700;
+                color: var(--came-black);
+            }
+
+            td:nth-of-type(1):before { content: "Component"; }
+            td:nth-of-type(2):before { content: "Entities (◻)"; }
+            td:nth-of-type(3):before { content: "Morphisms (→)"; }
+            td:nth-of-type(4):before { content: "Model-OF"; }
+            td:nth-of-type(5):before { content: "Model-FOR"; }
+
+            .gamepad-layout { grid-template-columns: 1fr; }
+            .cultural-system-core, .enhance, .reverse, .obsolesce, .retrieve { grid-column: 1 / 2; grid-row: auto; }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>The Luminous Engine</h1>
+        <p class="incipit">Every medium is a theology. Every technology, a prayer.<br/>This is a history of the sacred, refracted through its cultural systems.</p>
+    </header>
+
+    <main>
+        <!-- Chapter 1: Orality -->
+        <article class="media-chapter">
+            <h2 class="chapter-title">I. The Spoken Word</h2>
+            <section class="treatise-section">
+                <h3>System Identification: The Oral Covenant</h3>
+                <div class="analysis-container">
+                    <div class="table-wrapper">
+                        <table>
+                            <thead><tr><th>Component</th><th>Entities (◻)</th><th>Morphisms (→)</th><th>Model-OF</th><th>Model-FOR</th></tr></thead>
+                            <tbody>
+                                <tr><td><strong>1. Symbols</strong></td><td><span class="oral-entity-totem">◻ Totem Animal</span><br><span class="oral-entity-chant">◻ Ritual Chant</span></td><td><span class="oral-morphism-embodies">→ Embodies clan spirit</span><br><span class="oral-morphism-invokes">→ Invokes divine presence</span></td><td>“The ancestors are here”</td><td>“Perform the rites correctly”</td></tr>
+                                <tr><td><strong>2. Moods/Motivations</strong></td><td><span class="oral-entity-awe">◻ Collective Awe</span><br><span class="oral-entity-fear">◻ Fear of Ostracism</span></td><td><span class="oral-morphism-induces">→ Induces trance</span><br><span class="oral-morphism-enforces">→ Enforces conformity</span></td><td>“We are one body”</td><td>“Do not break the circle”</td></tr>
+                                <tr><td><strong>3. Order</strong></td><td><span class="oral-entity-time">◻ Cyclical Time</span><br><span class="oral-entity-ancestors">◻ Ancestor Worship</span></td><td><span class="oral-morphism-aligns">→ Aligns life with seasons</span><br><span class="oral-morphism-formulates">→ Formulates social duty</span></td><td>“The world repeats”</td><td>“Honor the dead”</td></tr>
+                                <tr><td><strong>4. Factuality</strong></td><td><span class="oral-entity-authority">◻ Elder's Authority</span><br><span class="oral-entity-success">◻ Successful Hunts</span></td><td><span class="oral-morphism-sacralizes">→ Sacralizes memory</span><br><span class="oral-morphism-validates">→ Validates ritual efficacy</span></td><td>“The stories are true”</td><td>“Trust the shaman”</td></tr>
+                                <tr><td><strong>5. Realistic</strong></td><td><span class="oral-entity-totality">◻ Tribal Totality</span></td><td><span class="oral-morphism-excludes">→ Excludes outsider narratives</span></td><td>“Our world is the world”</td><td>“There are no other gods”</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="controller-section">
+                        <h3>The Tetrad Controller</h3>
+                        <div class="gamepad-layout">
+                            <div class="cultural-system-core">
+                                <div class="core-default"><div class="glyph">🌬️</div><h4>Cultural System Core</h4><p>A high-context reality where the sacred is maintained through constant, collective performance.</p></div>
+                                <div class="core-detail enhance-detail"><h5>Enhances</h5><ul><li>Amplifies the **Collective Awe** felt in ritual and sacralizes the **Elder's Authority** by making their voice the sole medium of truth.</li></ul></div>
+                                <div class="core-detail obsolesce-detail"><h5>Obsolesces</h5><ul><li>Displaces the possibility of outside truths by reinforcing **Tribal Totality** and its power to **Exclude** all other narratives.</li></ul></div>
+                                <div class="core-detail retrieve-detail"><h5>Retrieves</h5><ul><li>Brings back the primal power of the **Ritual Chant** and a worldview of **Cyclical Time** aligned with nature.</li></ul></div>
+                                <div class="core-detail reverse-detail"><h5>Reverses</h5><ul><li>The absolute **Authority** of the elder flips into dogmatic fragility, and **Tribal Totality** reverses into violent exclusion.</li></ul></div>
+                            </div>
+                            <div class="tetrad-control enhance" data-targets="oral-entity-awe oral-morphism-induces oral-entity-authority oral-morphism-sacralizes" onclick="toggleControl(this)"><div class="control-title">Enhances</div></div>
+                            <div class="tetrad-control obsolesce" data-targets="oral-entity-totality oral-morphism-excludes" onclick="toggleControl(this)"><div class="control-title">Obsolesces</div></div>
+                            <div class="tetrad-control retrieve" data-targets="oral-entity-chant oral-entity-time oral-morphism-aligns" onclick="toggleControl(this)"><div class="control-title">Retrieves</div></div>
+                            <div class="tetrad-control reverse" data-targets="oral-entity-authority oral-entity-totality" onclick="toggleControl(this)"><div class="control-title">Reverses</div></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </article>
+        
+        <!-- Chapter 2: Iconography -->
+        <article class="media-chapter">
+            <h2 class="chapter-title">II. The Carved Image</h2>
+            <section class="treatise-section">
+                <h3>System Identification: The Iconic Gaze</h3>
+                 <div class="analysis-container">
+                    <div class="table-wrapper">
+                        <table>
+                            <thead><tr><th>Component</th><th>Entities (◻)</th><th>Morphisms (→)</th><th>Model-OF</th><th>Model-FOR</th></tr></thead>
+                            <tbody>
+                                <tr><td><strong>1. Symbols</strong></td><td><span class="icon-entity-icon">◻ Byzantine Icon</span><br><span class="icon-entity-statue">◻ Votive Statue</span></td><td><span class="icon-morphism-window">→ Acts as window to divine</span><br><span class="icon-morphism-embodies">→ Embodies sacred presence</span></td><td>“God can be seen”</td><td>“Venerate the image”</td></tr>
+                                <tr><td><strong>2. Moods/Motivations</strong></td><td><span class="icon-entity-reverence">◻ Reverence</span><br><span class="icon-entity-desire">◻ Desire for miracles</span></td><td><span class="icon-morphism-fosters">→ Fosters devotional intimacy</span><br><span class="icon-morphism-motivates">→ Motivates pilgrimage</span></td><td>“The saint is present here”</td><td>“Pray before this image”</td></tr>
+                                <tr><td><strong>3. Order</strong></td><td><span class="icon-entity-hierarchy">◻ Celestial Hierarchy</span><br><span class="icon-entity-hagiography">◻ Hagiography</span></td><td><span class="icon-morphism-maps">→ Visually maps the divine</span><br><span class="icon-morphism-narrates">→ Narrates saintly lives</span></td><td>“Heaven has an order”</td><td>“Emulate the saints”</td></tr>
+                                <tr><td><strong>4. Factuality</strong></td><td><span class="icon-entity-miracles">◻ Weeping Statues</span><br><span class="icon-entity-tradition">◻ Artistic Tradition</span></td><td><span class="icon-morphism-proves">→ "Proves" divine agency</span><br><span class="icon-morphism-legitimizes">→ Legitimizes the image</span></td><td>“Miracles happen here”</td><td>“Trust the approved image”</td></tr>
+                                <tr><td><strong>5. Realistic</strong></td><td><span class="icon-entity-visio">◻ The Visio Dei</span></td><td><span class="icon-morphism-devalues">→ Devalues unseen reality</span></td><td>“Seeing is believing”</td><td>“Seek a direct vision”</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="controller-section">
+                        <h3>The Tetrad Controller</h3>
+                        <div class="gamepad-layout">
+                            <div class="cultural-system-core">
+                                <div class="core-default"><div class="glyph">👁️</div><h4>Cultural System Core</h4><p>A visually-centric reality where faith is mediated through tangible, powerful, and often miraculous images.</p></div>
+                                <div class="core-detail enhance-detail"><h5>Enhances</h5><ul><li>Makes the **Byzantine Icon** a direct **window to the divine**, amplifying feelings of **Reverence**.</li></ul></div>
+                                <div class="core-detail obsolesce-detail"><h5>Obsolesces</h5><ul><li>Reduces need for textual **Hagiography**, as the icon itself becomes the primary doctrinal source for the illiterate.</li></ul></div>
+                                <div class="core-detail retrieve-detail"><h5>Retrieves</h5><ul><li>Brings back the pre-Christian power of the **Votive Statue** as a physical vessel for spiritual agency.</li></ul></div>
+                                <div class="core-detail reverse-detail"><h5>Reverses</h5><ul><li>Veneration of the **Icon** combined with the **Desire for miracles** flips into idolatry and commercial spectacle.</li></ul></div>
+                            </div>
+                            <div class="tetrad-control enhance" data-targets="icon-entity-icon icon-morphism-window icon-entity-reverence" onclick="toggleControl(this)"><div class="control-title">Enhances</div></div>
+                            <div class="tetrad-control obsolesce" data-targets="icon-entity-hagiography" onclick="toggleControl(this)"><div class="control-title">Obsolesces</div></div>
+                            <div class="tetrad-control retrieve" data-targets="icon-entity-statue" onclick="toggleControl(this)"><div class="control-title">Retrieves</div></div>
+                            <div class="tetrad-control reverse" data-targets="icon-entity-icon icon-entity-desire" onclick="toggleControl(this)"><div class="control-title">Reverses</div></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </article>
+
+        <!-- Chapter 3: Architecture -->
+        <article class="media-chapter">
+            <h2 class="chapter-title">III. The Stone Sermon</h2>
+            <section class="treatise-section">
+                <h3>System Identification: Architectural Theology</h3>
+                 <div class="analysis-container">
+                    <div class="table-wrapper">
+                        <table>
+                            <thead><tr><th>Component</th><th>Entities (◻)</th><th>Morphisms (→)</th><th>Model-OF</th><th>Model-FOR</th></tr></thead>
+                            <tbody>
+                                <tr><td><strong>1. Symbols</strong></td><td><span class="arch-entity-spire">◻ Spire/Dome</span><br><span class="arch-entity-altar">◻ Altar</span></td><td><span class="arch-morphism-points">→ Points to heaven</span><br><span class="arch-morphism-focuses">→ Focuses ritual action</span></td><td>“God has a house on Earth”</td><td>“Enter and be transformed”</td></tr>
+                                <tr><td><strong>2. Moods/Motivations</strong></td><td><span class="arch-entity-awe">◻ Overwhelming Awe</span><br><span class="arch-entity-humility">◻ Humility</span></td><td><span class="arch-morphism-induces">→ Induces submission</span><br><span class="arch-morphism-motivates">→ Motivates penance</span></td><td>“Man is small, God is great”</td><td>“Seek grace within these walls”</td></tr>
+                                <tr><td><strong>3. Order</strong></td><td><span class="arch-entity-cosmos">◻ Hierarchical Cosmos</span><br><span class="arch-entity-calendar">◻ Liturgical Calendar</span></td><td><span class="arch-morphism-maps">→ Maps spiritual journey</span><br><span class="arch-morphism-structures">→ Structures time</span></td><td>“Heaven is above, Earth below”</td><td>“Follow the ritual year”</td></tr>
+                                <tr><td><strong>4. Factuality</strong></td><td><span class="arch-entity-permanence">◻ Sheer Permanence</span><br><span class="arch-entity-shrines">◻ Miracles at Shrines</span></td><td><span class="arch-morphism-naturalizes">→ Naturalizes Church power</span><br><span class="arch-morphism-validates">→ Validates sanctity</span></td><td>“Our faith is eternal”</td><td>“Venerate the saints”</td></tr>
+                                <tr><td><strong>5. Realistic</strong></td><td><span class="arch-entity-christendom">◻ Christendom</span></td><td><span class="arch-morphism-invalidates">→ Invalidates pagan/heretic space</span></td><td>“This is the center of the world”</td><td>“There is no salvation outside”</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="controller-section">
+                        <h3>The Tetrad Controller</h3>
+                        <div class="gamepad-layout">
+                             <div class="cultural-system-core">
+                                 <div class="core-default"><div class="glyph">🏛️</div><h4>Cultural System Core</h4><p>A hierarchical reality where the sacred is housed in a permanent, awe-inspiring container that defines the cosmos.</p></div>
+                                 <div class="core-detail enhance-detail"><h5>Enhances</h5><ul><li>Amplifies **Overwhelming Awe** and uses **Sheer Permanence** to **Naturalize** the power of the institution that built it.</li></ul></div>
+                                 <div class="core-detail obsolesce-detail"><h5>Obsolesces</h5><ul><li>Makes vernacular, home-based worship spaces obsolete, reinforcing the singular reality of **Christendom**.</li></ul></div>
+                                 <div class="core-detail retrieve-detail"><h5>Retrieves</h5><ul><li>The **Spire** **Points to heaven**, retrieving the ancient archetype of the sacred mountain and a **Hierarchical Cosmos**.</li></ul></div>
+                                 <div class="core-detail reverse-detail"><h5>Reverses</h5><ul><li>**Permanence** flips into a dead museum, and the totalizing power of **Christendom** reverses into a tourist spectacle.</li></ul></div>
+                             </div>
+                            <div class="tetrad-control enhance" data-targets="arch-entity-awe arch-morphism-induces arch-entity-permanence arch-morphism-naturalizes" onclick="toggleControl(this)"><div class="control-title">Enhances</div></div>
+                            <div class="tetrad-control obsolesce" data-targets="arch-entity-christendom" onclick="toggleControl(this)"><div class="control-title">Obsolesces</div></div>
+                            <div class="tetrad-control retrieve" data-targets="arch-entity-spire arch-morphism-points arch-entity-cosmos" onclick="toggleControl(this)"><div class="control-title">Retrieves</div></div>
+                            <div class="tetrad-control reverse" data-targets="arch-entity-permanence arch-entity-christendom" onclick="toggleControl(this)"><div class="control-title">Reverses</div></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </article>
+        
+        <!-- Chapter 4: Music -->
+        <article class="media-chapter">
+            <h2 class="chapter-title">IV. The Sonic Prayer</h2>
+            <section class="treatise-section">
+                <h3>System Identification: The Ecstatic Choir</h3>
+                 <div class="analysis-container">
+                    <div class="table-wrapper">
+                        <table>
+                            <thead><tr><th>Component</th><th>Entities (◻)</th><th>Morphisms (→)</th><th>Model-OF</th><th>Model-FOR</th></tr></thead>
+                            <tbody>
+                                <tr><td><strong>1. Symbols</strong></td><td><span class="music-entity-chant">◻ Gregorian Chant</span><br><span class="music-entity-hymn">◻ Gospel Hymn</span></td><td><span class="music-morphism-unifies">→ Unifies breath</span><br><span class="music-morphism-expresses">→ Expresses collective emotion</span></td><td>“Our voices are one prayer”</td><td>“Sing with the community”</td></tr>
+                                <tr><td><strong>2. Moods/Motivations</strong></td><td><span class="music-entity-joy">◻ Ecstatic Joy</span><br><span class="music-entity-contemplation">◻ Solemn Contemplation</span></td><td><span class="music-morphism-amplifies">→ Amplifies emotional uplift</span><br><span class="music-morphism-induces-trance">→ Induces group trance state</span></td><td>“Feeling is believing”</td><td>“Let the spirit move you”</td></tr>
+                                <tr><td><strong>3. Order</strong></td><td><span class="music-entity-harmony">◻ Harmony/Counterpoint</span><br><span class="music-entity-cycle">◻ Liturgical Cycle</span></td><td><span class="music-morphism-models">→ Models divine order</span><br><span class="music-morphism-sets">→ Sets emotional tone</span></td><td>“God's creation is harmonious”</td><td>“Follow the song of the season”</td></tr>
+                                <tr><td><strong>4. Factuality</strong></td><td><span class="music-entity-vibrations">◻ Physical Vibrations</span><br><span class="music-entity-catharsis">◻ Emotional Catharsis</span></td><td><span class="music-morphism-makes-tangible">→ Makes presence tangible</span><br><span class="music-morphism-proves">→ "Proves" spiritual release</span></td><td>“I feel God in this music”</td><td>“Join the choir to feel closer”</td></tr>
+                                <tr><td><strong>5. Realistic</strong></td><td><span class="music-entity-immersion">◻ Sonic Immersion</span></td><td><span class="music-morphism-drowns">→ Drowns out individual doubt</span></td><td>“This feeling is the only reality”</td><td>“Lose yourself in the sound”</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="controller-section">
+                        <h3>The Tetrad Controller</h3>
+                        <div class="gamepad-layout">
+                            <div class="cultural-system-core">
+                                <div class="core-default"><div class="glyph">🎶</div><h4>Cultural System Core</h4><p>An affective, embodied reality where truth is experienced through emotional and sonic immersion.</p></div>
+                                <div class="core-detail enhance-detail"><h5>Enhances</h5><ul><li>Uses **Physical Vibrations** to amplify **Ecstatic Joy**, making the sacred a felt, undeniable experience.</li></ul></div>
+                                <div class="core-detail obsolesce-detail"><h5>Obsolesces</h5><ul><li>**Solemn Contemplation** and silent reading are pushed aside by the demand for communal sonic immersion.</li></ul></div>
+                                <div class="core-detail retrieve-detail"><h5>Retrieves</h5><ul><li>Reaches back to prehistoric shamanic drumming and trance-inducing **Chant** to unify the group consciousness.</li></ul></div>
+                                <div class="core-detail reverse-detail"><h5>Reverses</h5><ul><li>The pursuit of **Ecstatic Joy** and **Emotional Catharsis** flips into commercialized religious pop, reducing worship to entertainment.</li></ul></div>
+                            </div>
+                            <div class="tetrad-control enhance" data-targets="music-entity-joy music-morphism-amplifies music-entity-vibrations" onclick="toggleControl(this)"><div class="control-title">Enhances</div></div>
+                            <div class="tetrad-control obsolesce" data-targets="music-entity-contemplation" onclick="toggleControl(this)"><div class="control-title">Obsolesces</div></div>
+                            <div class="tetrad-control retrieve" data-targets="music-entity-chant music-morphism-induces-trance" onclick="toggleControl(this)"><div class="control-title">Retrieves</div></div>
+                            <div class="tetrad-control reverse" data-targets="music-entity-joy music-entity-catharsis" onclick="toggleControl(this)"><div class="control-title">Reverses</div></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </article>
+
+        <!-- Chapter 5: Print -->
+        <article class="media-chapter">
+            <h2 class="chapter-title">V. The Inscribed Word</h2>
+            <section class="treatise-section">
+                <h3>System Identification: Textual Authority</h3>
+                <div class="analysis-container">
+                    <div class="table-wrapper">
+                        <table>
+                            <thead><tr><th>Component</th><th>Entities (◻)</th><th>Morphisms (→)</th><th>Model-OF</th><th>Model-FOR</th></tr></thead>
+                            <tbody>
+                                <tr><td><strong>1. Symbols</strong></td><td><span class="print-entity-bible">◻ The Gutenberg Bible</span><br><span class="print-entity-pamphlet">◻ The Pamphlet</span></td><td><span class="print-morphism-standardizes">→ Standardizes the Word</span><br><span class="print-morphism-disseminates">→ Disseminates dissent</span></td><td>“The Truth is accessible to all”</td><td>“Read for yourself”</td></tr>
+                                <tr><td><strong>2. Moods/Motivations</strong></td><td><span class="print-entity-certainty">◻ Intellectual Certainty</span><br><span class="print-entity-anxiety">◻ Interpretive Anxiety</span></td><td><span class="print-morphism-empowers">→ Empowers individual conscience</span><br><span class="print-morphism-compels">→ Compels doctrinal study</span></td><td>“My faith is in the text”</td><td>“Debate and define your belief”</td></tr>
+                                <tr><td><strong>3. Order</strong></td><td><span class="print-entity-sola">◻ Sola Scriptura</span><br><span class="print-entity-nation">◻ The Nation-State</span></td><td><span class="print-morphism-formulates">→ Formulates textual authority</span><br><span class="print-morphism-creates">→ Creates linguistic identity</span></td><td>“Scripture is the only guide”</td><td>“Unite under one language”</td></tr>
+                                <tr><td><strong>4. Factuality</strong></td><td><span class="print-entity-uniformity">◻ Uniformity of Print</span><br><span class="print-entity-citations">◻ Footnotes/Citations</span></td><td><span class="print-morphism-naturalizes">→ Naturalizes a fixed text</span><br><span class="print-morphism-validates">→ Validates arguments</span></td><td>“This is the original Word”</td><td>“Prove your point with scripture”</td></tr>
+                                <tr><td><strong>5. Realistic</strong></td><td><span class="print-entity-priesthood">◻ Priesthood of All Believers</span></td><td><span class="print-morphism-invalidates">→ Invalidates priestly hierarchy</span></td><td>“Every man is his own priest”</td><td>“Form your own church”</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="controller-section">
+                        <h3>The Tetrad Controller</h3>
+                        <div class="gamepad-layout">
+                            <div class="cultural-system-core">
+                                <div class="core-default"><div class="glyph">📖</div><h4>Cultural System Core</h4><p>An individualized, text-centric reality where the sacred is a portable, personal, and endlessly debatable object.</p></div>
+                                <div class="core-detail enhance-detail"><h5>Enhances</h5><ul><li>**Uniformity of Print** enhances the **Factuality** of the text, while empowering the **Intellectual Certainty** of the individual reader.</li></ul></div>
+                                <div class="core-detail obsolesce-detail"><h5>Obsolesces</h5><ul><li>The **Priesthood of all Believers** invalidates the old institutional hierarchy, making the priest as sole interpreter obsolete.</li></ul></div>
+                                <div class="core-detail retrieve-detail"><h5>Retrieves</h5><ul><li>The ideal of direct, personal revelation (a **Mood**), previously limited to mystics, is democratized for anyone who can read.</li></ul></div>
+                                <div class="core-detail reverse-detail"><h5>Reverses</h5><ul><li>The order of **Sola Scriptura** flips into endless fragmentation, and the **Priesthood of all Believers** reverses into warring sects.</li></ul></div>
+                            </div>
+                            <div class="tetrad-control enhance" data-targets="print-entity-uniformity print-entity-certainty" onclick="toggleControl(this)"><div class="control-title">Enhances</div></div>
+                            <div class="tetrad-control obsolesce" data-targets="print-entity-priesthood" onclick="toggleControl(this)"><div class="control-title">Obsolesces</div></div>
+                            <div class="tetrad-control retrieve" data-targets="print-entity-anxiety" onclick="toggleControl(this)"><div class="control-title">Retrieves</div></div>
+                            <div class="tetrad-control reverse" data-targets="print-entity-sola print-entity-priesthood" onclick="toggleControl(this)"><div class="control-title">Reverses</div></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </article>
+
+        <!-- Chapter 6: Digital -->
+        <article class="media-chapter">
+            <h2 class="chapter-title">VI. The Algorithmic Spirit</h2>
+            <section class="treatise-section">
+                <h3>System Identification: The Networked Soul</h3>
+                <div class="analysis-container">
+                    <div class="table-wrapper">
+                        <table>
+                            <thead><tr><th>Component</th><th>Entities (◻)</th><th>Morphisms (→)</th><th>Model-OF</th><th>Model-FOR</th></tr></thead>
+                            <tbody>
+                                <tr><td><strong>1. Symbols</strong></td><td><span class="digital-entity-emoji">◻ 🙏 (emoji)</span><br><span class="digital-entity-livestream">◻ Livestream Icon</span></td><td><span class="digital-morphism-signals">→ Signals performative piety</span><br><span class="digital-morphism-indicates">→ Indicates imminent presence</span></td><td>“Devotion is shareable content”</td><td>“Be always online”</td></tr>
+                                <tr><td><strong>2. Moods/Motivations</strong></td><td><span class="digital-entity-fomo">◻ Connection FOMO</span><br><span class="digital-entity-grace">◻ Algorithmic Grace</span></td><td><span class="digital-morphism-induces">→ Induces compulsive checking</span><br><span class="digital-morphism-motivates">→ Motivates virality</span></td><td>“God is in the network”</td><td>“Optimize for engagement”</td></tr>
+                                <tr><td><strong>3. Order</strong></td><td><span class="digital-entity-feed">◻ The Feed</span><br><span class="digital-entity-influencer">◻ The Influencer</span></td><td><span class="digital-morphism-curates">→ Curates sacred reality</span><br><span class="digital-morphism-personifies">→ Personifies authority</span></td><td>“The algorithm is Providence”</td><td>“Follow the enlightened one”</td></tr>
+                                <tr><td><strong>4. Factuality</strong></td><td><span class="digital-entity-metrics">◻ Like/Share Counts</span><br><span class="digital-entity-immersion">◻ VR Immersion</span></td><td><span class="digital-morphism-sacralizes">→ Sacralizes popularity</span><br><span class="digital-morphism-simulates">→ Simulates presence</span></td><td>“Virality is truth”</td><td>“Believe what you can simulate”</td></tr>
+                                <tr><td><strong>5. Realistic</strong></td><td><span class="digital-entity-totality">◻ Platform Totality</span></td><td><span class="digital-morphism-invalidates">→ Invalidates offline authority</span></td><td>“If it's not online, it's not real”</td><td>“There is no escape from the network”</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="controller-section">
+                        <h3>The Tetrad Controller</h3>
+                        <div class="gamepad-layout">
+                            <div class="cultural-system-core">
+                                <div class="core-default"><div class="glyph">💻</div><h4>Cultural System Core</h4><p>A de-centralized, hyper-mediated reality where the sacred is algorithmic, performative, and perpetually accessible.</p></div>
+                                <div class="core-detail enhance-detail"><h5>Enhances</h5><ul><li>Amplifies **Connection FOMO** and uses **Like/Share Counts** to sacralize popularity as a measure of divine favor.</li></ul></div>
+                                <div class="core-detail obsolesce-detail"><h5>Obsolesces</h5><ul><li>The curated, hierarchical **Order** of the parish is replaced by the chaotic, personalized **Feed**.</li></ul></div>
+                                <div class="core-detail retrieve-detail"><h5>Retrieves</h5><ul><li>The early Christian epistolary network is retrieved as the **Emoji**-filled comment section, a new form of communal letter.</li></ul></div>
+                                <div class="core-detail reverse-detail"><h5>Reverses</h5><ul><li>The search for connection (**FOMO**) flips into performative piety, and **Platform Totality** reverses into inescapable echo chambers.</li></ul></div>
+                            </div>
+                            <div class="tetrad-control enhance" data-targets="digital-entity-fomo digital-entity-metrics digital-morphism-sacralizes" onclick="toggleControl(this)"><div class="control-title">Enhances</div></div>
+                            <div class="tetrad-control obsolesce" data-targets="digital-entity-feed" onclick="toggleControl(this)"><div class="control-title">Obsolesces</div></div>
+                            <div class="tetrad-control retrieve" data-targets="digital-entity-emoji" onclick="toggleControl(this)"><div class="control-title">Retrieves</div></div>
+                            <div class="tetrad-control reverse" data-targets="digital-entity-fomo digital-entity-totality" onclick="toggleControl(this)"><div class="control-title">Reverses</div></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </article>
+
+    </main>
+    
+    <footer>
+        <p>Illuminate the System. Bind the Collective. Refract the Spirit.</p>
+    </footer>
+
+    <script>
+        function toggleControl(element) {
+            const chapter = element.closest('.media-chapter');
+            if (!chapter) return;
+
+            const allSpans = chapter.querySelectorAll('tbody td span');
+            const targetClasses = element.dataset.targets.split(' ');
+            const allControls = chapter.querySelectorAll('.tetrad-control');
+            const controlType = Array.from(element.classList).find(c => ['enhance', 'obsolesce', 'retrieve', 'reverse'].includes(c));
+            
+            const core = chapter.querySelector('.cultural-system-core');
+            const defaultCore = core.querySelector('.core-default');
+            const allDetails = core.querySelectorAll('.core-detail');
+            const targetDetail = core.querySelector(`.${controlType}-detail`);
+
+            // Clear all current illuminations
+            allSpans.forEach(span => {
+                span.className = span.className.split(' ').filter(c => !c.startsWith('illuminated')).join(' ');
+            });
+            
+            // If the clicked element is already active, reset to default state.
+            if (element.classList.contains('active')) {
+                element.classList.remove('active');
+                allDetails.forEach(d => d.style.display = 'none');
+                defaultCore.style.display = 'flex';
+                defaultCore.style.flexDirection = 'column';
+                defaultCore.style.justifyContent = 'center';
+                return;
+            }
+
+            // Deactivate all other controls
+            allControls.forEach(control => control.classList.remove('active'));
+
+            // Activate the clicked element
+            element.classList.add('active');
+
+            // Hide default core and show the target detail
+            defaultCore.style.display = 'none';
+            allDetails.forEach(d => d.style.display = 'none');
+            if (targetDetail) {
+                targetDetail.style.display = 'block';
+            }
+
+            // Illuminate the target spans with the correct color
+            targetClasses.forEach(targetClass => {
+                const targetSpans = chapter.querySelectorAll(`span.${targetClass}`);
+                targetSpans.forEach(span => span.classList.add(`illuminated-${controlType}`));
+            });
+        }
+    </script>
+</body>
+</html>
