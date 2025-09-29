@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>TetradOS :: Latent Space Navigator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #1a1b1f; --fg: #f6f3ee; --muted: #9aa0a6; --accent: #00c4ff;
+    --card: #2a2c32; --border: #3a3c42; --screen: #1f2024;
+    --enhance-color: #66d9ff; --obsolesce-color: #63ffc7;
+    --retrieve-color: #ffd166; --reverse-color: #ff7aa2;
+    --font-ui: 'Inter', sans-serif; --font-mono: 'IBM Plex Mono', monospace;
+    --r: 12px; --pad: 12px; --gap: 12px;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; overflow: hidden; }
+  body {
+    background: var(--bg); color: var(--fg); font-family: var(--font-ui);
+    display: flex; align-items: center; justify-content: center; padding: var(--pad);
+  }
+  .controller {
+    background: var(--card); border: 2px solid var(--border); border-radius: 14px;
+    padding: var(--pad); display: grid; gap: var(--gap);
+    box-shadow: 0 8px 30px rgba(0,0,0,.35); max-width: 1200px;
+    width: 100%; height: 100%; max-height: 800px; overflow: hidden; user-select: none;
+    grid-template-columns: 200px 1fr 220px;
+  }
+
+  /* --- Left Panel: Telemetry & D-Pad --- */
+  .left-panel { display: flex; flex-direction: column; gap: var(--gap); }
+  .telemetry {
+    background: var(--screen); border: 1px solid var(--border); border-radius: var(--r);
+    padding: var(--pad); flex-grow: 1; font-family: var(--font-mono); font-size: 14px;
+  }
+  .telemetry h3 { margin: 0 0 10px; font-size: 12px; color: var(--muted); letter-spacing: 1px; }
+  .telemetry-item { display: flex; justify-content: space-between; margin-bottom: 5px; }
+  .telemetry-item span:first-child { color: var(--muted); }
+  .telemetry-item span:last-child { color: var(--fg); font-weight: 500; }
+
+  .dpad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; justify-items: center; }
+  .dpad-item { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .btn-arrow {
+    width: 100%; height: 50px; border-radius: 8px; background: var(--screen);
+    border: 1px solid var(--border); color: var(--fg); font-size: 20px; font-weight: 700;
+    cursor: pointer; transition: all 0.1s ease;
+  }
+  .btn-arrow:active { transform: translateY(1px); background: #333; }
+  .arrow-label { font-size: 11px; font-weight: 500; }
+  .arrow-label.enhance { color: var(--enhance-color); }
+  .arrow-label.obsolesce { color: var(--obsolesce-color); }
+  .arrow-label.retrieve { color: var(--retrieve-color); }
+  .arrow-label.reverse { color: var(--reverse-color); }
+
+  /* --- Center Screen: Latent Space Explorer --- */
+  .center-screen {
+    background: var(--screen); border: 1px solid var(--border); border-radius: var(--r);
+    padding: var(--pad); display: flex; gap: var(--gap); position: relative;
+    overflow: hidden;
+  }
+  #boot-screen {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background: var(--screen); z-index: 10; font-family: var(--font-mono);
+    display: flex; align-items: center; justify-content: center; font-size: 24px;
+    animation: boot-fade-out 2s forwards 1s;
+  }
+  @keyframes boot-fade-out { to { opacity: 0; pointer-events: none; } }
+  
+  .latent-space-grid {
+    flex-basis: 40%; flex-shrink: 0;
+    background-image: linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    background-size: 20px 20px;
+    position: relative; border-radius: 8px;
+  }
+  .axis-label {
+    position: absolute; color: var(--muted); font-family: var(--font-mono); font-size: 12px;
+    background: var(--screen); padding: 0 5px;
+  }
+  .axis-y { top: 50%; left: 5px; transform: translateY(-50%) rotate(-90deg); transform-origin: left center; }
+  .axis-x { bottom: 5px; left: 50%; transform: translateX(-50%); }
+  #probe {
+    position: absolute; width: 20px; height: 20px;
+    border-radius: 50%; background: var(--accent);
+    box-shadow: 0 0 15px var(--accent);
+    transform: translate(-50%, -50%);
+    transition: top 0.1s linear, left 0.1s linear;
+    border: 2px solid var(--bg);
+  }
+
+  .readout { flex-grow: 1; display: flex; flex-direction: column; }
+  #readout-title {
+    font-size: 24px; font-weight: 700; margin: 0 0 10px; padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  #readout-text {
+    flex-grow: 1; font-family: var(--font-mono); font-size: 16px; line-height: 1.6;
+    overflow-y: auto; color: #d0d8e8;
+  }
+
+  /* --- Right Panel: Actions --- */
+  .right-panel { display: flex; flex-direction: column; justify-content: center; gap: var(--gap); }
+  .action-btn {
+    width: 100%; height: 80px; border-radius: 12px;
+    border: 2px solid var(--border); font-size: 24px; font-weight: 700;
+    cursor: pointer; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; transition: all 0.1s ease;
+  }
+  .action-btn:active { transform: translateY(2px); }
+  .action-btn .btn-label { font-size: 12px; color: var(--muted); margin-top: 5px; }
+  #btnA { background: var(--accent); color: var(--bg); }
+  #btnB { background: var(--screen); color: var(--fg); }
+  #btnModules { background: var(--screen); color: var(--fg); }
+  .flash-overlay {
+    position: absolute; top:0; left: 0; width: 100%; height: 100%;
+    background: var(--fg); opacity: 0; pointer-events: none;
+  }
+  .flash-overlay.flash { animation: screen-flash 0.3s ease-out; }
+  @keyframes screen-flash { 0% { opacity: 0.5; } 100% { opacity: 0; } }
+
+  /* --- Modal Styles --- */
+  #modal-wrapper {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.7); backdrop-filter: blur(5px);
+    z-index: 1000; display: none; align-items: center; justify-content: center;
+    padding: 5%; animation: fade-in 0.3s;
+  }
+  @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+  .modal-content {
+    background: var(--card); border: 2px solid var(--border);
+    width: 100%; max-width: 600px; max-height: 80vh;
+    border-radius: 14px; padding: var(--pad); display: flex; flex-direction: column;
+  }
+  .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 10px; }
+  .modal-header h2 { margin: 0; font-size: 18px; }
+  .modal-close-btn { background: none; border: none; color: var(--muted); font-size: 24px; cursor: pointer; }
+  .modal-list {
+    flex-grow: 1; overflow-y: auto; padding: 10px;
+  }
+  .log-entry { margin-bottom: 15px; border-left: 3px solid var(--accent); padding-left: 10px; }
+  .log-entry strong { font-family: var(--font-mono); color: var(--accent); }
+  .cartridge-item {
+    padding: 15px; border-radius: 8px; cursor: pointer;
+    background: var(--screen); margin-bottom: 8px; transition: background-color 0.2s;
+  }
+  .cartridge-item:hover { background-color: var(--border); }
+
+  /* Responsive Adjustments */
+  @media (max-width: 900px) {
+    body { padding: 0; }
+    .controller {
+        grid-template-columns: 1fr;
+        grid-template-rows: 1fr auto;
+        border-radius: 0; height: 100vh; max-height: none;
+    }
+    .left-panel { grid-row: 2; flex-direction: row; align-items: center; }
+    .right-panel { display: none; } /* Hide for simplicity, functions can be added elsewhere */
+    .telemetry { flex-grow: 0; width: 200px; }
+    .dpad { flex-grow: 1; }
+    .center-screen { grid-row: 1; }
+  }
+</style>
+</head>
+<body>
+
+<div class="controller">
+  <div class="left-panel">
+    <div class="telemetry">
+        <h3>SYSTEM TELEMETRY</h3>
+        <div class="telemetry-item"><span>MODULE:</span> <span id="telemetry-module"></span></div>
+        <div class="telemetry-item"><span>PROBE X:</span> <span id="telemetry-x"></span></div>
+        <div class="telemetry-item"><span>PROBE Y:</span> <span id="telemetry-y"></span></div>
+        <div class="telemetry-item"><span>LOG COUNT:</span> <span id="telemetry-log"></span></div>
+    </div>
+    <div class="dpad">
+      <div></div>
+      <div class="dpad-item">
+        <button class="btn-arrow" data-op="enhance">▲</button>
+        <span class="arrow-label enhance">Enhance</span>
+      </div>
+      <div></div>
+      <div class="dpad-item">
+        <button class="btn-arrow" data-op="retrieve">◀</button>
+        <span class="arrow-label retrieve">Retrieve</span>
+      </div>
+      <div></div>
+      <div class="dpad-item">
+        <button class="btn-arrow" data-op="reverse">▶</button>
+        <span class="arrow-label reverse">Reverse</span>
+      </div>
+      <div></div>
+      <div class="dpad-item">
+        <button class="btn-arrow" data-op="obsolesce">▼</button>
+        <span class="arrow-label obsolesce">Obsolesce</span>
+      </div>
+      <div></div>
+    </div>
+  </div>
+
+  <div class="center-screen">
+      <div id="boot-screen">TETRAD OS // BOOTING...</div>
+      <div class="latent-space-grid">
+          <div class="axis-label axis-y">ENHANCE ⟷ OBSOLESCE</div>
+          <div class="axis-label axis-x">RETRIEVE ⟷ REVERSE</div>
+          <div id="probe"></div>
+      </div>
+      <div class="readout">
+          <h2 id="readout-title"></h2>
+          <p id="readout-text"></p>
+      </div>
+      <div class="flash-overlay" id="flash-overlay"></div>
+  </div>
+
+  <div class="right-panel">
+      <button class="action-btn" id="btnA">A<span class="btn-label">ANALYZE</span></button>
+      <button class="action-btn" id="btnB">B<span class="btn-label">VIEW LOG</span></button>
+      <button class="action-btn" id="btnModules">M<span class="btn-label">MODULES</span></button>
+  </div>
+</div>
+
+<div id="modal-wrapper">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 id="modal-title"></h2>
+            <button id="modal-close-btn" class="modal-close-btn">&times;</button>
+        </div>
+        <div id="log-display" class="modal-list"></div>
+        <div id="cartridge-list" class="modal-list" style="display:none;"></div>
+    </div>
+</div>
+
+<div id="data-store" style="display: none;">
+    <article data-title="Meritocracy">
+        <div data-vector="base">An ideology legitimizing hierarchy as a fair outcome of measured talent.</div>
+        <div data-vector="enhance">Competition intensifies; everything is quantified and ranked. Credentials become the sole measure of worth. A culture of relentless optimization emerges.</div>
+        <div data-vector="obsolesce">Uncredentialed wisdom and hands-on experience are devalued. Aristocratic privilege is replaced by a new credentialed elite. Apprenticeships fade.</div>
+        <div data-vector="retrieve">The Protestant Work Ethic returns, secularized as 'hustle culture'. The belief in a 'calling' is reframed as personal ambition and worldly success.</div>
+        <div data-vector="reverse">The ideal of 'fairness' inverts into a rigid caste system based on test scores, creating widespread anxiety and burnout. Those who fail are seen as morally undeserving.</div>
+    </article>
+    <article data-title="Corporate Culture">
+        <div data-vector="base">A shared mythology to maintain employee alignment and productivity.</div>
+        <div data-vector="enhance">Brand loyalty deepens. The company's mission is amplified, becoming a central part of employee identity. Productivity is celebrated as a moral victory.</div>
+        <div data-vector="obsolesce">The boundary between work and life erodes. The 9-to-5 workday is displaced by 24/7 availability. Personal time is seen as a lack of commitment.</div>
+        <div data-vector="retrieve">Pre-industrial ideals of craftsmanship and guild loyalty are reframed as 'passion' for the job. The worker's identity is retrieved from their craft and placed onto the corporation.</div>
+        <div data-vector="reverse">The 'we are a family' metaphor flips into a tool of emotional manipulation. Loyalty is weaponized to suppress dissent and justify exploitation, as leaving becomes a betrayal.</div>
+    </article>
+    <article data-title="Broken Windows">
+        <div data-vector="base">A theory that policing minor infractions prevents serious crime by signaling order.</div>
+        <div data-vector="enhance">Visible orderliness increases. Public spaces feel cleaner and more controlled. Property values in targeted areas may rise.</div>
+        <div data-vector="obsolesce">Community-based, informal social controls are displaced by formal, often aggressive, policing. Trust between police and residents deteriorates.</div>
+        <div data-vector="retrieve">The Puritanical concern for public morality returns in a secular form. The 'village stocks' are retrieved as public shaming through arrests for minor violations.</div>
+        <div data-vector="reverse">The focus on 'order' flips into a system of pervasive surveillance and harassment, disproportionately targeting marginalized communities, generating fear instead of safety.</div>
+    </article>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    // --- STATE ---
+    const state = {
+        systems: [],
+        currentSystemIndex: 0,
+        probePos: { x: 0, y: 0 }, // Range from -10 to 10
+        log: [],
+        audioCtx: null,
+    };
+
+    // --- DOM ELEMENTS ---
+    const dom = {
+        probe: document.getElementById('probe'),
+        readoutTitle: document.getElementById('readout-title'),
+        readoutText: document.getElementById('readout-text'),
+        telemetry: {
+            module: document.getElementById('telemetry-module'),
+            x: document.getElementById('telemetry-x'),
+            y: document.getElementById('telemetry-y'),
+            log: document.getElementById('telemetry-log'),
+        },
+        modal: {
+            wrapper: document.getElementById('modal-wrapper'),
+            title: document.getElementById('modal-title'),
+            logDisplay: document.getElementById('log-display'),
+            cartridgeList: document.getElementById('cartridge-list'),
+            closeBtn: document.getElementById('modal-close-btn'),
+        },
+        dpadButtons: document.querySelectorAll('.btn-arrow'),
+        flashOverlay: document.getElementById('flash-overlay'),
+    };
+
+    // --- AUDIO ---
+    function initAudio() {
+        if (!state.audioCtx) {
+            state.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+    }
+    function playSound(type) {
+        if (!state.audioCtx) return;
+        const o = state.audioCtx.createOscillator();
+        const g = state.audioCtx.createGain();
+        o.connect(g); g.connect(state.audioCtx.destination);
+        g.gain.setValueAtTime(0, state.audioCtx.currentTime);
+        g.gain.linearRampToValueAtTime(0.1, state.audioCtx.currentTime + 0.01);
+        
+        if (type === 'move') { o.type = 'sine'; o.frequency.setValueAtTime(150 + Math.abs(state.probePos.x * 5) + Math.abs(state.probePos.y * 5), state.audioCtx.currentTime); }
+        else if (type === 'analyze') { o.type = 'sawtooth'; o.frequency.setValueAtTime(440, state.audioCtx.currentTime); g.gain.linearRampToValueAtTime(0.2, state.audioCtx.currentTime + 0.01);}
+        else if (type === 'open') { o.type = 'square'; o.frequency.setValueAtTime(660, state.audioCtx.currentTime); }
+        
+        o.start(state.audioCtx.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.00001, state.audioCtx.currentTime + 0.2);
+        o.stop(state.audioCtx.currentTime + 0.2);
+    }
+
+    // --- DATA & INITIALIZATION ---
+    function parseData() {
+        const articles = document.getElementById('data-store').querySelectorAll('article');
+        articles.forEach(article => {
+            const title = article.dataset.title;
+            const vectors = {};
+            article.querySelectorAll('div[data-vector]').forEach(div => {
+                vectors[div.dataset.vector] = div.textContent;
+            });
+            state.systems.push({ title, vectors });
+            
+            const item = document.createElement('div');
+            item.className = 'cartridge-item';
+            item.textContent = title;
+            item.dataset.title = title;
+            dom.modal.cartridgeList.appendChild(item);
+        });
+    }
+
+    // --- CORE GAME LOGIC ---
+    function loadSystem(index) {
+        state.currentSystemIndex = index;
+        state.probePos = { x: 0, y: 0 };
+        state.log = [];
+        updateUI();
+        playSound('analyze');
+    }
+
+    function generateScenarioText() {
+        const system = state.systems[state.currentSystemIndex];
+        if (!system) return { title: "ERROR", text: "No Module Loaded." };
+        
+        let parts = [system.vectors.base];
+        const threshold = 2;
+
+        if (state.probePos.y > threshold) parts.push(system.vectors.enhance);
+        if (state.probePos.y < -threshold) parts.push(system.vectors.obsolesce);
+        if (state.probePos.x < -threshold) parts.push(system.vectors.retrieve);
+        if (state.probePos.x > threshold) parts.push(system.vectors.reverse);
+
+        return { title: system.title, text: parts.join(" // ") };
+    }
+
+    function moveProbe(dx, dy) {
+        state.probePos.x = Math.max(-10, Math.min(10, state.probePos.x + dx));
+        state.probePos.y = Math.max(-10, Math.min(10, state.probePos.y + dy));
+        updateUI();
+        playSound('move');
+    }
+
+    function analyzeScenario() {
+        const { text } = generateScenarioText();
+        const coords = `[X:${state.probePos.x}, Y:${state.probePos.y}]`;
+        state.log.unshift({ coords, text });
+        updateTelemetry();
+        playSound('analyze');
+        dom.flashOverlay.classList.add('flash');
+        setTimeout(() => dom.flashOverlay.classList.remove('flash'), 300);
+    }
+    
+    // --- UI UPDATES ---
+    function updateUI() {
+        updateProbePosition();
+        updateReadout();
+        updateTelemetry();
+    }
+
+    function updateProbePosition() {
+        const left = (state.probePos.x + 10) * 5; // Map {-10,10} to {0,100}
+        const top = (-state.probePos.y + 10) * 5;
+        dom.probe.style.left = `${left}%`;
+        dom.probe.style.top = `${top}%`;
+    }
+
+    function updateReadout() {
+        const { title, text } = generateScenarioText();
+        dom.readoutTitle.textContent = title;
+        dom.readoutText.textContent = text;
+    }
+
+    function updateTelemetry() {
+        const system = state.systems[state.currentSystemIndex];
+        dom.telemetry.module.textContent = system.title;
+        dom.telemetry.x.textContent = state.probePos.x;
+        dom.telemetry.y.textContent = state.probePos.y;
+        dom.telemetry.log.textContent = state.log.length;
+    }
+
+    function showLog() {
+        dom.modal.title.textContent = "SYSTEM LOG";
+        dom.modal.logDisplay.style.display = 'block';
+        dom.modal.cartridgeList.style.display = 'none';
+        dom.modal.logDisplay.innerHTML = state.log.map(entry =>
+            `<div class="log-entry"><strong>${entry.coords}</strong><p>${entry.text}</p></div>`
+        ).join('');
+        dom.modal.wrapper.style.display = 'flex';
+        playSound('open');
+    }
+
+    function showModules() {
+        dom.modal.title.textContent = "LOAD MODULE";
+        dom.modal.logDisplay.style.display = 'none';
+        dom.modal.cartridgeList.style.display = 'block';
+        dom.modal.wrapper.style.display = 'flex';
+        playSound('open');
+    }
+
+    // --- EVENT LISTENERS ---
+    function setupEventListeners() {
+        document.body.addEventListener('click', initAudio, { once: true });
+
+        dom.dpadButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const op = btn.dataset.op;
+                if (op === 'enhance') moveProbe(0, 1);
+                if (op === 'obsolesce') moveProbe(0, -1);
+                if (op === 'retrieve') moveProbe(-1, 0);
+                if (op === 'reverse') moveProbe(1, 0);
+            });
+        });
+
+        document.getElementById('btnA').addEventListener('click', analyzeScenario);
+        document.getElementById('btnB').addEventListener('click', showLog);
+        document.getElementById('btnModules').addEventListener('click', showModules);
+
+        dom.modal.closeBtn.addEventListener('click', () => dom.modal.wrapper.style.display = 'none');
+        dom.modal.wrapper.addEventListener('click', (e) => {
+            if (e.target === dom.modal.wrapper) dom.modal.wrapper.style.display = 'none';
+        });
+
+        dom.modal.cartridgeList.addEventListener('click', (e) => {
+            const item = e.target.closest('.cartridge-item');
+            if (item) {
+                const title = item.dataset.title;
+                const index = state.systems.findIndex(s => s.title === title);
+                loadSystem(index);
+                dom.modal.wrapper.style.display = 'none';
+            }
+        });
+    }
+
+    // --- INITIALIZE APP ---
+    parseData();
+    loadSystem(0);
+    setupEventListeners();
+});
+</script>
+</body>
+</html>

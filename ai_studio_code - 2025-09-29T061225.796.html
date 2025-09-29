@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>TetradOS :: Generative Explorer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #1a1b1f; --fg: #f6f3ee; --muted: #9aa0a6; --accent: #00c4ff;
+    --card: #2a2c32; --border: #3a3c42; --screen: #1f2024;
+    --enhance-color: #66d9ff; --obsolesce-color: #63ffc7;
+    --retrieve-color: #ffd166; --reverse-color: #ff7aa2; --warn: #ffb703;
+    --font-ui: 'Inter', sans-serif; --font-mono: 'IBM Plex Mono', monospace;
+    --r: 12px; --pad: 12px; --gap: 12px;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; overflow: hidden; }
+  body {
+    background: var(--bg); color: var(--fg); font-family: var(--font-ui);
+    display: flex; align-items: center; justify-content: center; padding: var(--pad);
+  }
+  .controller {
+    background: var(--card); border: 2px solid var(--border); border-radius: 14px;
+    padding: var(--pad); display: grid; gap: var(--gap);
+    box-shadow: 0 8px 30px rgba(0,0,0,.35); max-width: 1200px;
+    width: 100%; height: 100%; max-height: 800px; overflow: hidden; user-select: none;
+    grid-template-columns: 200px 1fr 220px;
+  }
+
+  /* --- Left Panel --- */
+  .left-panel { display: flex; flex-direction: column; gap: var(--gap); }
+  .telemetry {
+    background: var(--screen); border: 1px solid var(--border); border-radius: var(--r);
+    padding: var(--pad); flex-grow: 1; font-family: var(--font-mono); font-size: 14px;
+  }
+  .telemetry h3 { margin: 0 0 10px; font-size: 12px; color: var(--muted); letter-spacing: 1px; }
+  .telemetry-item { display: flex; justify-content: space-between; margin-bottom: 5px; }
+  .telemetry-item span:first-child { color: var(--muted); }
+  .dpad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; justify-items: center; }
+  .btn-arrow { width: 100%; height: 50px; border-radius: 8px; background: var(--screen); border: 1px solid var(--border); color: var(--fg); font-size: 20px; cursor: pointer; transition: all 0.1s ease; }
+  .btn-arrow:active { transform: translateY(1px); background: #333; }
+  .arrow-label { font-size: 11px; font-weight: 500; text-align: center; margin-top: 4px;}
+  .arrow-label.enhance { color: var(--enhance-color); } .arrow-label.obsolesce { color: var(--obsolesce-color); }
+  .arrow-label.retrieve { color: var(--retrieve-color); } .arrow-label.reverse { color: var(--reverse-color); }
+
+  /* --- Center Screen --- */
+  .center-screen {
+    background: var(--screen); border: 1px solid var(--border); border-radius: var(--r);
+    padding: var(--pad); display: flex; flex-direction: column; gap: var(--gap); position: relative;
+    overflow: hidden;
+  }
+  .lcdbar { display: flex; align-items: center; gap: var(--gap); flex-shrink: 0;}
+  .chips { display: flex; gap: 6px; flex-grow: 1; }
+  .chip { padding: 2px 8px; border-radius: 999px; font-size: 11px; font-family: var(--font-mono); background: #17181c; color: var(--muted); }
+  .chip.enhance { color: var(--enhance-color); } .chip.obsolesce { color: var(--obsolesce-color); }
+  .chip.retrieve { color: var(--retrieve-color); } .chip.reverse { color: var(--reverse-color); }
+  .lcd-right-cluster { display: flex; gap: 8px; align-items: center; }
+  .lcd-right-cluster .tiny { font-size: 12px; color: var(--muted); font-family: var(--font-mono); }
+  .action-icon-btn { background: none; border: 1px solid var(--border); color: var(--muted); width: 30px; height: 30px; border-radius: 50%; cursor: pointer; }
+  .action-icon-btn.active { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+  
+  .display-area { flex-grow: 1; position: relative; }
+  .display-mode { width: 100%; height: 100%; position: absolute; top: 0; left: 0; opacity: 0; pointer-events: none; transition: opacity 0.3s; }
+  .display-mode.active { opacity: 1; pointer-events: auto; }
+
+  /* Explore Mode Styles */
+  #explore-mode { display: flex; gap: var(--gap); }
+  .latent-space-grid { flex-basis: 40%; background-image: linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px); background-size: 20px 20px; position: relative; border-radius: 8px; }
+  .axis-label { position: absolute; color: var(--muted); font-family: var(--font-mono); font-size: 12px; background: var(--screen); padding: 0 5px; }
+  .axis-y { top: 50%; left: 5px; transform: translateY(-50%) rotate(-90deg); transform-origin: left center; }
+  .axis-x { bottom: 5px; left: 50%; transform: translateX(-50%); }
+  #probe { position: absolute; width: 20px; height: 20px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 15px var(--accent); transform: translate(-50%, -50%); transition: top 0.1s linear, left 0.1s linear; border: 2px solid var(--bg); }
+  .readout { flex-grow: 1; display: flex; flex-direction: column; }
+  #readout-title { font-size: 24px; font-weight: 700; margin: 0 0 10px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  #readout-text { flex-grow: 1; font-family: var(--font-mono); font-size: 16px; line-height: 1.6; overflow-y: auto; color: #d0d8e8; }
+  
+  /* Build Mode Styles */
+  #build-mode { display: flex; flex-direction: column; gap: var(--gap); }
+  .messages { flex-grow: 1; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; padding: var(--pad); }
+  .msg { margin: 8px 0; }
+  .msg .who { font-size: 11px; color: var(--muted); }
+  .bubble { margin-top: 4px; padding: 8px 12px; border-radius: 10px; background: #25303a; border: 1px solid var(--border); line-height: 1.5; }
+  .msg.user .bubble { background: #2b2831; }
+  .msg.system .bubble { background: #1f2430; color: #c9d4ff; }
+  .msg.assistant.force-warn .bubble { border-left: 4px solid var(--warn); color: var(--warn); }
+  textarea#input { width: 100%; height: 80px; resize: none; border-radius: 8px; background: transparent; border: 1px solid var(--border); color: var(--fg); padding: 10px; font: inherit; font-size: 14px; }
+  .option-buttons { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+  .option-button { background: #2b3a4a; border: 1px solid var(--border); border-radius: 8px; padding: 10px; color: var(--fg); cursor: pointer; flex: 1 1 45%; border-left: 4px solid var(--border); }
+  .option-button.option-enhance { border-left-color: var(--enhance-color); } .option-button.option-obsolesce { border-left-color: var(--obsolesce-color); }
+  .option-button.option-retrieve { border-left-color: var(--retrieve-color); } .option-button.option-reverse { border-left-color: var(--reverse-color); }
+  
+  /* --- Right Panel --- */
+  .right-panel { display: flex; flex-direction: column; justify-content: center; gap: var(--gap); }
+  .action-btn { width: 100%; height: 80px; border-radius: 12px; border: 2px solid var(--border); font-size: 24px; font-weight: 700; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: all 0.1s ease; }
+  .action-btn:active { transform: translateY(2px); }
+  .action-btn .btn-label { font-size: 12px; color: var(--muted); margin-top: 5px; }
+  #btnA { background: var(--accent); color: var(--bg); } #btnB, #btnModules { background: var(--screen); color: var(--fg); }
+  
+  /* --- Modals --- */
+  #modal-wrapper { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); backdrop-filter: blur(5px); z-index: 1000; display: none; align-items: center; justify-content: center; animation: fade-in 0.3s; }
+  @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+  .modal-content { background: var(--card); border: 2px solid var(--border); width: 100%; max-width: 600px; max-height: 80vh; border-radius: 14px; padding: var(--pad); display: flex; flex-direction: column; }
+  .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 10px; }
+  .modal-header h2 { margin: 0; font-size: 18px; }
+  .modal-close-btn { background: none; border: none; color: var(--muted); font-size: 24px; cursor: pointer; }
+  .modal-list { flex-grow: 1; overflow-y: auto; padding: 10px; }
+  .log-entry { margin-bottom: 15px; border-left: 3px solid var(--accent); padding-left: 10px; }
+  .log-entry strong { font-family: var(--font-mono); color: var(--accent); }
+  .cartridge-item { padding: 15px; border-radius: 8px; cursor: pointer; background: var(--screen); margin-bottom: 8px; transition: background-color 0.2s; }
+  .cartridge-item:hover { background-color: var(--border); }
+  .settings-item { margin-bottom: 15px; } .settings-item label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 5px; }
+  .settings-item input, .settings-item textarea { width: 100%; background: var(--screen); border: 1px solid var(--border); color: var(--fg); border-radius: 8px; padding: 8px; font-family: inherit; }
+
+  @media (max-width: 900px) {
+    .controller { grid-template-columns: 1fr; grid-template-rows: 1fr auto; }
+    .left-panel { grid-row: 2; flex-direction: row; align-items: center; }
+    .right-panel { display: none; } .telemetry { width: 200px; } .dpad { flex-grow: 1; }
+    .center-screen { grid-row: 1; }
+  }
+</style>
+</head>
+<body>
+
+<div class="controller">
+  <div class="left-panel">
+    <div class="telemetry">
+        <h3>SYSTEM TELEMETRY</h3>
+        <div class="telemetry-item"><span>MODULE:</span> <span id="telemetry-module"></span></div>
+        <div class="telemetry-item"><span>PROBE X:</span> <span id="telemetry-x"></span></div>
+        <div class="telemetry-item"><span>PROBE Y:</span> <span id="telemetry-y"></span></div>
+        <div class="telemetry-item"><span>LOG COUNT:</span> <span id="telemetry-log"></span></div>
+    </div>
+    <div class="dpad">
+      <div></div>
+      <div><button class="btn-arrow" data-op="enhance">▲</button><div class="arrow-label enhance">Enhance</div></div>
+      <div></div>
+      <div><button class="btn-arrow" data-op="retrieve">◀</button><div class="arrow-label retrieve">Retrieve</div></div>
+      <div></div>
+      <div><button class="btn-arrow" data-op="reverse">▶</button><div class="arrow-label reverse">Reverse</div></div>
+      <div></div>
+      <div><button class="btn-arrow" data-op="obsolesce">▼</button><div class="arrow-label obsolesce">Obsolesce</div></div>
+      <div></div>
+    </div>
+  </div>
+
+  <div class="center-screen">
+      <div class="lcdbar">
+        <div id="chips" class="chips"></div>
+        <div class="lcd-right-cluster">
+            <span id="mode-badge" class="tiny">EXPLORE MODE</span>
+            <div id="typing" class="tiny" style="display:none;">Thinking…</div>
+            <button id="build-mode-btn" class="action-icon-btn" title="Toggle Build Mode">🛠️</button>
+            <button id="settings-btn" class="action-icon-btn" title="Settings">⚙️</button>
+        </div>
+      </div>
+      <div class="display-area">
+          <div id="explore-mode" class="display-mode active">
+              <div class="latent-space-grid">
+                  <div class="axis-label axis-y">E ⟷ O</div>
+                  <div class="axis-label axis-x">Rt ⟷ Rv</div>
+                  <div id="probe"></div>
+              </div>
+              <div class="readout">
+                  <h2 id="readout-title"></h2>
+                  <p id="readout-text"></p>
+              </div>
+          </div>
+          <div id="build-mode" class="display-mode">
+              <div class="messages" id="messages"></div>
+              <textarea id="input" placeholder="Set D-pad and press A for options..."></textarea>
+          </div>
+      </div>
+  </div>
+
+  <div class="right-panel">
+      <button class="action-btn" id="btnA">A<span id="btnA-label" class="btn-label">ANALYZE</span></button>
+      <button class="action-btn" id="btnB">B<span class="btn-label">VIEW LOG</span></button>
+      <button class="action-btn" id="btnModules">M<span class="btn-label">MODULES</span></button>
+  </div>
+</div>
+
+<div id="modal-wrapper">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 id="modal-title"></h2>
+            <button id="modal-close-btn" class="modal-close-btn">&times;</button>
+        </div>
+        <div id="log-display" class="modal-list"></div>
+        <div id="cartridge-list" class="modal-list" style="display:none;"></div>
+        <div id="settings-display" class="modal-list" style="display:none;">
+            <div class="settings-item">
+                <label for="apiKey">OPENAI API KEY</label>
+                <input id="apiKey" type="password" placeholder="sk-...">
+            </div>
+            <div class="settings-item">
+                <label for="systemPrompt">MASTER SYSTEM PROMPT</label>
+                <textarea id="systemPrompt" rows="8"></textarea>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="data-store" style="display: none;">
+    <article data-title="Meritocracy">
+        <div data-vector="base">An ideology legitimizing hierarchy as a fair outcome of measured talent.</div>
+        <div data-vector="enhance">Competition intensifies; everything is quantified. Credentials become the sole measure of worth. A culture of relentless optimization emerges.</div>
+        <div data-vector="obsolesce">Uncredentialed wisdom and hands-on experience are devalued. Aristocratic privilege is replaced by a new credentialed elite.</div>
+        <div data-vector="retrieve">The Protestant Work Ethic returns, secularized as 'hustle culture'. The belief in a 'calling' is reframed as personal ambition.</div>
+        <div data-vector="reverse">The ideal of 'fairness' inverts into a rigid caste system based on test scores, creating widespread anxiety and burnout.</div>
+    </ticle>
+</div>
+
+<script>
+// --- MASTER PROMPT ---
+const MASTER_SYSTEM_PROMPT = `You are the **Directional Builder** copilot.
+CONTRACT:
+1. When user provides text in BUILD MODE, you ONLY output a complete single-file HTML document based on the text and active D-Pad directions.
+2. When user has NO text in BUILD MODE but has D-Pad directions set, you ONLY output exactly four creative options inspired by the last message and the directions.
+3. Your responses must be concise, creative, and strictly adhere to the requested format.
+
+DIRECTIONS:
+↑ Enhance: Amplify. → Reverse: Invert. ← Retrieve: Revive. ↓ Obsolesce: Displace.
+
+FORMATS:
+- OPTIONS:
+# Options (Forces: E/O/R/Rv)
+1. Title — pitch.
+   *Embodiment:* ...
+2. ...
+3. ...
+4. ...
+- BUILD:
+<!DOCTYPE html>... (A full, self-contained HTML file with a status ribbon).`;
+
+document.addEventListener('DOMContentLoaded', () => {
+    // --- STATE ---
+    const state = {
+        systems: [],
+        currentSystemIndex: 0,
+        probePos: { x: 0, y: 0 },
+        log: [],
+        audioCtx: null,
+        isBuildMode: false,
+        activeDirections: new Set(),
+        messages: [],
+        isLoading: false,
+        apiKey: '',
+        systemPrompt: MASTER_SYSTEM_PROMPT,
+    };
+
+    // --- DOM ELEMENTS ---
+    const dom = {
+        probe: document.getElementById('probe'),
+        readoutTitle: document.getElementById('readout-title'),
+        readoutText: document.getElementById('readout-text'),
+        telemetry: {
+            module: document.getElementById('telemetry-module'), x: document.getElementById('telemetry-x'),
+            y: document.getElementById('telemetry-y'), log: document.getElementById('telemetry-log'),
+        },
+        modal: {
+            wrapper: document.getElementById('modal-wrapper'), title: document.getElementById('modal-title'),
+            log: document.getElementById('log-display'), modules: document.getElementById('cartridge-list'),
+            settings: document.getElementById('settings-display'), closeBtn: document.getElementById('modal-close-btn'),
+        },
+        dpadButtons: document.querySelectorAll('.btn-arrow'),
+        chips: document.getElementById('chips'),
+        modeBadge: document.getElementById('mode-badge'),
+        buildModeBtn: document.getElementById('build-mode-btn'),
+        exploreModeDisplay: document.getElementById('explore-mode'),
+        buildModeDisplay: document.getElementById('build-mode'),
+        btnA: document.getElementById('btnA'),
+        btnALabel: document.getElementById('btnA-label'),
+        input: document.getElementById('input'),
+        messages: document.getElementById('messages'),
+        typing: document.getElementById('typing'),
+        apiKeyInput: document.getElementById('apiKey'),
+        systemPromptInput: document.getElementById('systemPrompt'),
+    };
+
+    // --- AUDIO ---
+    function initAudio() { if (!state.audioCtx) state.audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+    function playSound(type) {
+        if (!state.audioCtx) return;
+        const o = state.audioCtx.createOscillator(); const g = state.audioCtx.createGain();
+        o.connect(g); g.connect(state.audioCtx.destination);
+        g.gain.setValueAtTime(0, state.audioCtx.currentTime); g.gain.linearRampToValueAtTime(0.1, state.audioCtx.currentTime + 0.01);
+        if (type === 'move') { o.type = 'sine'; o.frequency.setValueAtTime(150 + Math.abs(state.probePos.x * 5) + Math.abs(state.probePos.y * 5), state.audioCtx.currentTime); }
+        else if (type === 'analyze') { o.type = 'sawtooth'; o.frequency.setValueAtTime(440, state.audioCtx.currentTime); }
+        else if (type === 'open') { o.type = 'square'; o.frequency.setValueAtTime(660, state.audioCtx.currentTime); }
+        else if (type === 'toggle') { o.type = 'triangle'; o.frequency.setValueAtTime(880, state.audioCtx.currentTime); }
+        o.start(state.audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.00001, state.audioCtx.currentTime + 0.2); o.stop(state.audioCtx.currentTime + 0.2);
+    }
+
+    // --- DATA ---
+    function parseData() {
+        const articles = document.getElementById('data-store').querySelectorAll('article');
+        articles.forEach(article => {
+            const title = article.dataset.title; const vectors = {};
+            article.querySelectorAll('div[data-vector]').forEach(div => { vectors[div.dataset.vector] = div.textContent; });
+            state.systems.push({ title, vectors });
+            const item = document.createElement('div');
+            item.className = 'cartridge-item'; item.textContent = title; item.dataset.title = title;
+            dom.modal.modules.appendChild(item);
+        });
+    }
+
+    // --- CORE LOGIC ---
+    function loadSystem(index) {
+        state.currentSystemIndex = index;
+        state.probePos = { x: 0, y: 0 }; state.log = [];
+        updateUI(); playSound('analyze');
+    }
+    function generateScenarioText() {
+        const system = state.systems[state.currentSystemIndex];
+        if (!system) return { title: "ERROR", text: "No Module Loaded." };
+        let parts = [system.vectors.base];
+        const threshold = 2;
+        if (state.probePos.y > threshold) parts.push(system.vectors.enhance);
+        if (state.probePos.y < -threshold) parts.push(system.vectors.obsolesce);
+        if (state.probePos.x < -threshold) parts.push(system.vectors.retrieve);
+        if (state.probePos.x > threshold) parts.push(system.vectors.reverse);
+        return { title: system.title, text: parts.join(" // ") };
+    }
+    function moveProbe(dx, dy) {
+        state.probePos.x = Math.max(-10, Math.min(10, state.probePos.x + dx));
+        state.probePos.y = Math.max(-10, Math.min(10, state.probePos.y + dy));
+        updateUI(); playSound('move');
+    }
+    function analyzeScenario() {
+        const { text } = generateScenarioText();
+        const coords = `[X:${state.probePos.x}, Y:${state.probePos.y}]`;
+        state.log.unshift({ coords, text });
+        updateTelemetry(); playSound('analyze');
+    }
+
+    // --- UI UPDATES ---
+    function updateUI() {
+        if (!state.isBuildMode) {
+            const { title, text } = generateScenarioText();
+            dom.readoutTitle.textContent = title; dom.readoutText.textContent = text;
+            const left = (state.probePos.x + 10) * 5; const top = (-state.probePos.y + 10) * 5;
+            dom.probe.style.left = `${left}%`; dom.probe.style.top = `${top}%`;
+        }
+        const system = state.systems[state.currentSystemIndex];
+        dom.telemetry.module.textContent = system.title;
+        dom.telemetry.x.textContent = state.probePos.x; dom.telemetry.y.textContent = state.probePos.y;
+        dom.telemetry.log.textContent = state.log.length;
+        
+        dom.chips.innerHTML = '';
+        state.activeDirections.forEach(dir => {
+            const chip = document.createElement('div');
+            chip.className = `chip ${dir}`; chip.textContent = dir.charAt(0).toUpperCase();
+            dom.chips.appendChild(chip);
+        });
+    }
+
+    function toggleMode() {
+        state.isBuildMode = !state.isBuildMode;
+        playSound('toggle');
+        dom.modeBadge.textContent = state.isBuildMode ? 'BUILD MODE' : 'EXPLORE MODE';
+        dom.buildModeBtn.classList.toggle('active', state.isBuildMode);
+        dom.buildModeDisplay.classList.toggle('active', state.isBuildMode);
+        dom.exploreModeDisplay.classList.toggle('active', !state.isBuildMode);
+        dom.btnALabel.textContent = state.isBuildMode ? "GENERATE" : "ANALYZE";
+    }
+
+    // --- MODALS ---
+    function showModal(type) {
+        dom.modal.log.style.display = type === 'log' ? 'block' : 'none';
+        dom.modal.modules.style.display = type === 'modules' ? 'block' : 'none';
+        dom.modal.settings.style.display = type === 'settings' ? 'block' : 'none';
+        dom.modal.title.textContent = type === 'log' ? "SYSTEM LOG" : type === 'modules' ? "LOAD MODULE" : "SETTINGS";
+        if (type === 'log') {
+            dom.modal.log.innerHTML = state.log.map(e => `<div class="log-entry"><strong>${e.coords}</strong><p>${e.text}</p></div>`).join('');
+        }
+        dom.modal.wrapper.style.display = 'flex';
+        playSound('open');
+    }
+
+    // --- LLM Logic ---
+    function addMessage(role, content) {
+        state.messages.push({ role, content });
+        const who = role === 'user' ? 'You' : 'System';
+        const bubble = document.createElement('div');
+        bubble.className = `msg ${role}`;
+        bubble.innerHTML = `<div class="who">${who}</div><div class="bubble">${content.replace(/\n/g, '<br>')}</div>`;
+        if (role === 'assistant') { // Handle options
+            const optionsMatch = content.match(/# Options(.|\n)*1\./);
+            if (optionsMatch) {
+                const options = content.split(/\n\d\./).slice(1);
+                bubble.innerHTML = `<div class="who">Assistant</div><div class="option-buttons">${options.map((opt, i) => {
+                    const dirs = ['enhance', 'obsolesce', 'retrieve', 'reverse'];
+                    return `<button class="option-button option-${dirs[i]}">${opt.trim()}</button>`;
+                }).join('')}</div>`;
+            }
+        }
+        dom.messages.appendChild(bubble);
+        dom.messages.scrollTop = dom.messages.scrollHeight;
+    }
+    async function callLLM() {
+        if (!state.apiKey) { addMessage('system', 'API key not set.'); return; }
+        state.isLoading = true; dom.typing.style.display = 'inline';
+        const userText = dom.input.value.trim();
+        const lastMessage = state.messages.length > 0 ? state.messages[state.messages.length - 1].content : "";
+        let prompt;
+
+        if (userText) {
+            addMessage('user', userText);
+            prompt = `Context: ${lastMessage}\nUser: ${userText}\nDirections: ${[...state.activeDirections].join(', ')}\nTask: Build a single-file HTML.`;
+        } else {
+            prompt = `Context: ${lastMessage}\nDirections: ${[...state.activeDirections].join(', ')}\nTask: Generate 4 creative options.`;
+        }
+        
+        try {
+            const res = await fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${state.apiKey}` },
+                body: JSON.stringify({
+                    model: 'gpt-4o-mini',
+                    messages: [{ role: 'system', content: state.systemPrompt }, { role: 'user', content: prompt }]
+                })
+            });
+            const data = await res.json();
+            const reply = data.choices[0].message.content;
+            addMessage('assistant', reply);
+        } catch (error) { addMessage('system', 'API Error: ' + error.message); }
+        state.isLoading = false; dom.typing.style.display = 'none'; dom.input.value = '';
+    }
+
+    // --- EVENT LISTENERS ---
+    function setupEventListeners() {
+        document.body.addEventListener('click', initAudio, { once: true });
+
+        dom.dpadButtons.forEach(btn => btn.addEventListener('click', () => {
+            const op = btn.dataset.op;
+            if (state.isBuildMode) {
+                state.activeDirections.has(op) ? state.activeDirections.delete(op) : state.activeDirections.add(op);
+                btn.style.background = state.activeDirections.has(op) ? `var(--${op}-color)` : '';
+                updateUI();
+            } else {
+                if (op === 'enhance') moveProbe(0, 1); if (op === 'obsolesce') moveProbe(0, -1);
+                if (op === 'retrieve') moveProbe(-1, 0); if (op === 'reverse') moveProbe(1, 0);
+            }
+        }));
+
+        dom.btnA.addEventListener('click', () => state.isBuildMode ? callLLM() : analyzeScenario());
+        document.getElementById('btnB').addEventListener('click', () => showModal('log'));
+        document.getElementById('btnModules').addEventListener('click', () => showModal('modules'));
+        dom.buildModeBtn.addEventListener('click', toggleMode);
+        document.getElementById('settings-btn').addEventListener('click', () => showModal('settings'));
+        dom.modal.closeBtn.addEventListener('click', () => dom.modal.wrapper.style.display = 'none');
+        dom.modal.wrapper.addEventListener('click', e => { if (e.target === dom.modal.wrapper) dom.modal.wrapper.style.display = 'none'; });
+        dom.modal.modules.addEventListener('click', e => {
+            const item = e.target.closest('.cartridge-item');
+            if (item) {
+                const index = state.systems.findIndex(s => s.title === item.dataset.title);
+                loadSystem(index);
+                dom.modal.wrapper.style.display = 'none';
+            }
+        });
+        dom.messages.addEventListener('click', e => {
+            if (e.target.classList.contains('option-button')) {
+                dom.input.value = e.target.textContent;
+                callLLM();
+            }
+        });
+        dom.apiKeyInput.addEventListener('change', e => state.apiKey = e.target.value);
+        dom.systemPromptInput.addEventListener('change', e => state.systemPrompt = e.target.value);
+    }
+
+    // --- INIT ---
+    parseData();
+    loadSystem(0);
+    setupEventListeners();
+    dom.systemPromptInput.value = state.systemPrompt;
+});
+</script>
+</body>
+</html>

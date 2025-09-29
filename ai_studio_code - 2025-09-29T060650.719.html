@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tetrad Gameboy Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #1a1b1f;
+    --fg: #f6f3ee;
+    --card: #2a2c32;
+    --border: #3a3c42;
+    --screen-frame: #1f2024;
+    --gb-screen-bg: #9bbc0f;
+    --gb-screen-text: #0f380f;
+    --enhance-color: #66d9ff;
+    --obsolesce-color: #63ffc7;
+    --retrieve-color: #ffd166;
+    --reverse-color: #ff7aa2;
+    --font-gameboy: 'VT323', monospace;
+    --r: 12px;
+    --pad: 8px;
+    --gap: 8px;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; overflow: hidden; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    display: flex;
+    flex-direction: column;
+  }
+  .wrap {
+    min-height: 100svh;
+    overflow: hidden;
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+  }
+  main {
+    height: 100%;
+    padding: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-grow: 1;
+  }
+  .controller {
+    background: var(--card);
+    border: 2px solid var(--border);
+    border-radius: 14px;
+    padding: var(--pad);
+    display: grid;
+    gap: var(--gap);
+    box-shadow: 0 4px 10px rgba(0,0,0,.35);
+    max-width: 1100px;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+  }
+  .controller-row {
+    display: grid;
+    gap: var(--gap);
+    grid-template-columns: 160px 1fr 180px;
+    align-items: stretch;
+    height: 100%;
+    overflow: hidden;
+  }
+  .leftStack { display: grid; gap: var(--gap); }
+  .field { background: var(--screen-frame); border: 1px solid var(--border); border-radius: 10px; position: relative; }
+  canvas#vector { width: 100%; height: 120px; display: block; border-radius: 10px; }
+  .dpad {
+    display: grid;
+    grid-template-columns: repeat(3, 44px);
+    grid-template-rows: repeat(3, auto);
+    gap: 5px;
+    justify-content: center;
+  }
+  .dpad-item { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .btn-arrow {
+    width: 44px; height: 44px; border-radius: 8px; background: var(--screen-frame);
+    border: 1px solid var(--border); color: var(--fg); font-weight: 700; cursor: pointer;
+    box-shadow: inset 0 -2px 0 rgba(255,255,255,.05); transition: background-color 0.08s ease-out;
+  }
+  .btn-arrow:active { transform: translateY(1px); }
+  .arrow-label { font-size: 11px; text-align: center; }
+  .arrow-label.enhance { color: var(--enhance-color); }
+  .arrow-label.obsolesce { color: var(--obsolesce-color); }
+  .arrow-label.retrieve { color: var(--retrieve-color); }
+  .arrow-label.reverse { color: var(--reverse-color); }
+
+  /* GAMEBOY SCREEN in the center */
+  .screen {
+    background: var(--gb-screen-bg);
+    border: 5px solid #333;
+    border-radius: 12px;
+    padding: var(--pad);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+    color: var(--gb-screen-text);
+    font-family: var(--font-gameboy);
+  }
+  .screen::after { /* Scanline effect */
+      content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      background: repeating-linear-gradient(0deg, rgba(15, 56, 15, 0.1) 0, rgba(15, 56, 15, 0.1) 1px, transparent 1px, transparent 3px);
+      pointer-events: none;
+  }
+  #boot-screen {
+      position: absolute; top:0; left:0; width:100%; height:100%; background: var(--gb-screen-bg);
+      display: flex; flex-direction:column; align-items: center; justify-content: center; z-index: 10;
+      animation: boot-fade-out 2.5s forwards 1s; font-size: 24px;
+  }
+  @keyframes boot-fade-out { to { opacity: 0; pointer-events: none; } }
+  .game-display {
+      display: flex;
+      height: 100%;
+  }
+  #latent-space-grid {
+      width: 150px; height: 150px;
+      background: #8bac0f;
+      border: 3px solid var(--gb-screen-text);
+      position: relative; float: left; margin: 10px;
+      flex-shrink: 0;
+  }
+  .axis-label { position: absolute; font-size: 16px; }
+  .axis-y { left: -20px; top: 75px; transform: rotate(-90deg); transform-origin: left center; }
+  .axis-x { bottom: -20px; left: 50%; transform: translateX(-50%); }
+  #probe {
+      position: absolute; width: 12px; height: 12px;
+      background: var(--gb-screen-text);
+      border: 2px solid var(--gb-screen-bg);
+      transform: translate(-50%, -50%);
+      transition: top 0.1s linear, left 0.1s linear;
+  }
+  #readout {
+      flex-grow: 1;
+      padding: 10px;
+      overflow-y: auto;
+      font-size: 20px;
+      line-height: 1.3;
+      scrollbar-width: none;
+  }
+  #readout::-webkit-scrollbar { display: none; }
+  #readout-title { font-size: 22px; margin: 0 0 10px 0; }
+  #readout-text { margin: 0; }
+  
+  .rightStack { display: flex; align-items: center; justify-content: center; }
+  .ab { display: flex; gap: 12px; }
+  .round-btn {
+    width: 60px; height: 60px; border-radius: 50%; background: var(--screen-frame);
+    border: 2px solid var(--border); font-size: 24px; cursor: pointer;
+    font-family: var(--font-gameboy); display: flex; align-items: center; justify-content: center;
+    box-shadow: inset 0 -2px 0 rgba(255,255,255,.06);
+  }
+  .round-btn:active { transform: translateY(1px); }
+  .round-btn#btnA { background: #9f1c33; color: #fff; border-color: #6d1424; }
+  .round-btn#btnB { background: #3d5a99; color: #fff; border-color: #2a3e6a; }
+  .btn-label { text-align: center; font-size: 11px; margin-top: 6px; }
+
+  /* Modal Styles */
+  #modal-wrapper {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.85); z-index: 1000;
+      display: none; align-items: center; justify-content: center;
+      padding: 5%; font-family: var(--font-gameboy);
+  }
+  .modal-content {
+      background: var(--gb-screen-bg); color: var(--gb-screen-text);
+      width: 100%; height: 100%; max-width: 600px; max-height: 80vh;
+      border: 5px solid var(--border); padding: 20px;
+      display: flex; flex-direction: column;
+  }
+  .modal-content h2 { margin: 0 0 15px 0; text-align: center; }
+  .modal-list {
+      flex-grow: 1; overflow-y: auto; border: 2px solid var(--gb-screen-text);
+      padding: 10px; background: #8bac0f;
+  }
+  .modal-list .log-entry { margin-bottom: 10px; border-bottom: 2px dotted var(--gb-screen-text); padding-bottom: 10px; }
+  .modal-list .cartridge-item { padding: 8px; cursor: pointer; font-size: 20px; }
+  .modal-list .cartridge-item:hover { background: var(--gb-screen-text); color: var(--gb-screen-bg); }
+
+  /* Utility button */
+  .utility-buttons { position: absolute; top: 15px; right: 15px; z-index: 20; }
+  .utility-btn {
+      background: var(--screen-frame); border: 1px solid var(--border); color: #fff;
+      padding: 5px 10px; border-radius: 8px; font-size: 12px; cursor: pointer;
+  }
+
+  /* Responsive Adjustments */
+  @media (max-width: 768px) {
+    .controller-row {
+      grid-template-columns: 1fr;
+      grid-template-rows: 1fr auto;
+    }
+    .leftStack {
+      grid-area: 2 / 1 / 3 / 2;
+      flex-direction: row;
+      justify-content: space-around;
+      align-items: center;
+    }
+    .rightStack { display: none; } /* Hide A/B for simplicity */
+    .screen { grid-area: 1 / 1 / 2 / 2; }
+    .dpad { transform: scale(0.9); }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <main>
+    <section class="controller" id="mainController">
+      <div class="controller-row">
+        <div class="leftStack">
+          <div class="field"><canvas id="vector" width="320" height="120"></canvas></div>
+          <div>
+            <div class="dpad" id="dpad">
+              <div></div>
+              <div class="dpad-item">
+                <button class="btn-arrow" data-op="enhance">↑</button>
+                <span class="arrow-label enhance">Enhance</span>
+              </div>
+              <div></div>
+              <div class="dpad-item">
+                <button class="btn-arrow" data-op="retrieve">←</button>
+                <span class="arrow-label retrieve">Retrieve</span>
+              </div>
+              <div></div>
+              <div class="dpad-item">
+                <button class="btn-arrow" data-op="obsolesce">→</button> <!-- SWAPPED OBSOLESCE AND REVERSE FOR INTUITIVE MAPPING -->
+                <span class="arrow-label obsolesce">Reverse</span>
+              </div>
+              <div></div>
+              <div class="dpad-item">
+                <button class="btn-arrow" data-op="reverse">↓</button>
+                <span class="arrow-label reverse">Obsolesce</span>
+              </div>
+              <div></div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="screen">
+            <div class="utility-buttons">
+                <button id="cartridge-btn" class="utility-btn">CARTRIDGE</button>
+            </div>
+            <div id="boot-screen">TETRAD<br>GAMEBOY</div>
+            <div class="game-display">
+                <div id="latent-space-grid">
+                    <div class="axis-label axis-y">E &harr; O</div>
+                    <div class="axis-label axis-x">Rt &harr; Rv</div>
+                    <div id="probe"></div>
+                </div>
+                <div id="readout">
+                    <h2 id="readout-title"></h2>
+                    <p id="readout-text"></p>
+                </div>
+            </div>
+        </div>
+
+        <div class="rightStack">
+          <div class="ab">
+            <div>
+              <button class="round-btn" id="btnA">A</button>
+              <div class="btn-label">ANALYZE</div>
+            </div>
+            <div>
+              <button class="round-btn" id="btnB">B</button>
+              <div class="btn-label">LOG</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div id="modal-wrapper">
+    <div class="modal-content">
+        <h2 id="modal-title">SYSTEM LOG</h2>
+        <div id="log-display" class="modal-list"></div>
+        <div id="cartridge-list" class="modal-list" style="display:none;"></div>
+    </div>
+</div>
+
+<div id="data-store" style="display: none;">
+    <article data-title="Meritocracy">
+        <div data-vector="base">An ideology legitimizing hierarchy as a fair outcome of measured talent.</div>
+        <div data-vector="enhance">Competition intensifies; everything is quantified and ranked. Credentials become the sole measure of worth. A culture of relentless optimization emerges.</div>
+        <div data-vector="obsolesce">Uncredentialed wisdom and hands-on experience are devalued. Aristocratic privilege is replaced by a new credentialed elite. Apprenticeships fade.</div>
+        <div data-vector="retrieve">The Protestant Work Ethic returns, secularized as 'hustle culture'. The belief in a 'calling' is reframed as personal ambition and worldly success.</div>
+        <div data-vector="reverse">The ideal of 'fairness' inverts into a rigid caste system based on test scores, creating widespread anxiety and burnout. Those who fail are seen as morally undeserving.</div>
+    </article>
+    <article data-title="Corporate Culture">
+        <div data-vector="base">A shared mythology to maintain employee alignment and productivity.</div>
+        <div data-vector="enhance">Brand loyalty deepens. The company's mission is amplified, becoming a central part of employee identity. Productivity is celebrated as a moral victory.</div>
+        <div data-vector="obsolesce">The boundary between work and life erodes. The 9-to-5 workday is displaced by 24/7 availability. Personal time is seen as a lack of commitment.</div>
+        <div data-vector="retrieve">Pre-industrial ideals of craftsmanship and guild loyalty are reframed as 'passion' for the job. The worker's identity is retrieved from their craft and placed onto the corporation.</div>
+        <div data-vector="reverse">The 'we are a family' metaphor flips into a tool of emotional manipulation. Loyalty is weaponized to suppress dissent and justify exploitation, as leaving becomes a betrayal.</div>
+    </article>
+    <article data-title="Broken Windows">
+        <div data-vector="base">A theory that policing minor infractions prevents serious crime by signaling order.</div>
+        <div data-vector="enhance">Visible orderliness increases. Public spaces feel cleaner and more controlled. Property values in targeted areas may rise.</div>
+        <div data-vector="obsolesce">Community-based, informal social controls are displaced by formal, often aggressive, policing. Trust between police and residents deteriorates.</div>
+        <div data-vector="retrieve">The Puritanical concern for public morality returns in a secular form. The 'village stocks' are retrieved as public shaming through arrests for minor violations.</div>
+        <div data-vector="reverse">The focus on 'order' flips into a system of pervasive surveillance and harassment, disproportionately targeting marginalized communities, generating fear instead of safety.</div>
+    </article>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    // --- STATE ---
+    let systemsData = [];
+    let currentCartridge = 0;
+    let probePos = { x: 0, y: 0 }; // Range from -5 to 5
+    let logEntries = [];
+    let audioCtx;
+
+    // --- DOM ELEMENTS ---
+    const probe = document.getElementById('probe');
+    const readoutTitle = document.getElementById('readout-title');
+    const readoutText = document.getElementById('readout-text');
+    const modalWrapper = document.getElementById('modal-wrapper');
+    const modalTitle = document.getElementById('modal-title');
+    const logDisplay = document.getElementById('log-display');
+    const cartList = document.getElementById('cartridge-list');
+    const dpadButtons = document.querySelectorAll('.btn-arrow');
+    const canvas = document.getElementById('vector');
+    const ctx = canvas.getContext('2d');
+
+    // --- AUDIO ---
+    function initAudio() {
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+    }
+    function playSound(type) {
+        if (!audioCtx) return;
+        const o = audioCtx.createOscillator();
+        const g = audioCtx.createGain();
+        o.connect(g);
+        g.connect(audioCtx.destination);
+        g.gain.setValueAtTime(0, audioCtx.currentTime);
+        g.gain.linearRampToValueAtTime(0.08, audioCtx.currentTime + 0.01);
+        if (type === 'move') { o.type = 'square'; o.frequency.setValueAtTime(300, audioCtx.currentTime); }
+        else if (type === 'analyze') { o.type = 'sine'; o.frequency.setValueAtTime(800, audioCtx.currentTime); }
+        else if (type === 'open') { o.type = 'sawtooth'; o.frequency.setValueAtTime(200, audioCtx.currentTime); }
+        o.start(audioCtx.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + 0.1);
+        o.stop(audioCtx.currentTime + 0.1);
+    }
+
+    // --- DATA PARSING ---
+    function parseData() {
+        const articles = document.getElementById('data-store').querySelectorAll('article');
+        articles.forEach(article => {
+            const title = article.dataset.title;
+            const vectors = {};
+            article.querySelectorAll('div[data-vector]').forEach(div => {
+                vectors[div.dataset.vector] = div.textContent;
+            });
+            systemsData.push({ title, vectors });
+            
+            const cartItem = document.createElement('div');
+            cartItem.className = 'cartridge-item';
+            cartItem.textContent = title;
+            cartItem.dataset.title = title;
+            cartList.appendChild(cartItem);
+        });
+    }
+
+    // --- CORE GAME LOGIC ---
+    function loadCartridge(title) {
+        const index = systemsData.findIndex(s => s.title === title);
+        if (index === -1) return;
+        currentCartridge = index;
+        probePos = { x: 0, y: 0 };
+        logEntries = [];
+        updateProbePosition();
+        updateReadout();
+        playSound('analyze');
+    }
+
+    function updateProbePosition() {
+        const left = (probePos.x + 5) * 10;
+        const top = (-probePos.y + 5) * 10;
+        probe.style.left = `${left}%`;
+        probe.style.top = `${top}%`;
+        updateReadout();
+        drawVectorField();
+    }
+
+    function generateScenarioText() {
+        const system = systemsData[currentCartridge];
+        if (!system) return { title: "ERROR", text: "No Cartridge Loaded." };
+
+        let text = system.vectors.base;
+        const x_abs = Math.abs(probePos.x);
+        const y_abs = Math.abs(probePos.y);
+
+        if (x_abs > 1 || y_abs > 1) text += " // SCENARIO DRIFT: ";
+
+        // Y-axis: Enhance (Up) / Obsolesce (Down)
+        if (probePos.y > 1) text += ` ${system.vectors.enhance}`;
+        if (probePos.y < -1) text += ` ${system.vectors.obsolesce}`;
+
+        // X-axis: Retrieve (Left) / Reverse (Right)
+        if (probePos.x < -1) text += ` ${system.vectors.retrieve}`;
+        if (probePos.x > 1) text += ` ${system.vectors.reverse}`;
+
+        return { title: system.title, text };
+    }
+    
+    function updateReadout() {
+        const { title, text } = generateScenarioText();
+        readoutTitle.textContent = title;
+        readoutText.textContent = text;
+    }
+
+    function moveProbe(dx, dy) {
+        probePos.x = Math.max(-5, Math.min(5, probePos.x + dx));
+        probePos.y = Math.max(-5, Math.min(5, probePos.y + dy));
+        updateProbePosition();
+        playSound('move');
+    }
+
+    function analyzeCurrentPosition() {
+        const { text } = generateScenarioText();
+        const coords = `[X:${probePos.x}, Y:${probePos.y}]`;
+        logEntries.unshift({ coords, text });
+        showLog();
+        playSound('analyze');
+    }
+    
+    // --- UI & MODALS ---
+    function showLog() {
+        modalTitle.textContent = "SYSTEM LOG";
+        logDisplay.style.display = 'block';
+        cartList.style.display = 'none';
+        logDisplay.innerHTML = logEntries.map(entry =>
+            `<div class="log-entry"><strong>${entry.coords}</strong><p>${entry.text}</p></div>`
+        ).join('');
+        modalWrapper.style.display = 'flex';
+    }
+    
+    function showCartridges() {
+        modalTitle.textContent = "SELECT CARTRIDGE";
+        logDisplay.style.display = 'none';
+        cartList.style.display = 'block';
+        modalWrapper.style.display = 'flex';
+        playSound('open');
+    }
+    
+    function drawVectorField() {
+        const w = canvas.width, h = canvas.height;
+        ctx.clearRect(0, 0, w, h);
+        const style = getComputedStyle(document.documentElement);
+        
+        const vectors = [
+            { op: 'enhance', active: probePos.y > 0, color: style.getPropertyValue('--enhance-color'), dx: 0, dy: -probePos.y },
+            { op: 'obsolesce', active: probePos.y < 0, color: style.getPropertyValue('--reverse-color'), dx: 0, dy: -probePos.y }, // Note: obsolesce is down
+            { op: 'retrieve', active: probePos.x < 0, color: style.getPropertyValue('--retrieve-color'), dx: -probePos.x, dy: 0 },
+            { op: 'reverse', active: probePos.x > 0, color: style.getPropertyValue('--obsolesce-color'), dx: -probePos.x, dy: 0 }, // Note: reverse is right
+        ];
+
+        let sx = w / 2, sy = h / 2;
+        vectors.filter(v => v.active).forEach(v => {
+            drawArrow(ctx, sx, sy, -v.dx * 8, v.dy * 8, v.color, 2);
+        });
+    }
+
+    function drawArrow(ctx, x, y, dx, dy, color, lw) {
+        const ex = x + dx, ey = y + dy;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = lw;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(ex, ey);
+        ctx.stroke();
+        const s = 6;
+        const angle = Math.atan2(dy, dx);
+        ctx.beginPath();
+        ctx.moveTo(ex, ey);
+        ctx.lineTo(ex - s * Math.cos(angle - Math.PI / 6), ey - s * Math.sin(angle - Math.PI / 6));
+        ctx.moveTo(ex, ey);
+        ctx.lineTo(ex - s * Math.cos(angle + Math.PI / 6), ey - s * Math.sin(angle + Math.PI / 6));
+        ctx.stroke();
+    }
+
+    // --- EVENT LISTENERS ---
+    function setupEventListeners() {
+        document.body.addEventListener('click', initAudio, { once: true });
+        
+        dpadButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const op = btn.dataset.op;
+                if (op === 'enhance') moveProbe(0, 1);
+                if (op === 'reverse') moveProbe(0, -1); // Down = Obsolesce
+                if (op === 'retrieve') moveProbe(-1, 0);
+                if (op === 'obsolesce') moveProbe(1, 0); // Right = Reverse
+            });
+        });
+
+        document.getElementById('btnA').addEventListener('click', analyzeCurrentPosition);
+        document.getElementById('btnB').addEventListener('click', showLog);
+        document.getElementById('cartridge-btn').addEventListener('click', showCartridges);
+        
+        modalWrapper.addEventListener('click', (e) => {
+            if (e.target.id === 'modal-wrapper') modalWrapper.style.display = 'none';
+        });
+        
+        cartList.addEventListener('click', (e) => {
+            if (e.target.dataset.title) {
+                loadCartridge(e.target.dataset.title);
+                modalWrapper.style.display = 'none';
+            }
+        });
+    }
+    
+    // --- INIT ---
+    parseData();
+    loadCartridge(systemsData[0].title);
+    setupEventListeners();
+});
+</script>
+</body>
+</html>

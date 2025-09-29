@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Tetrad GB</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --gb-body: #c4cfa1; --gb-dark: #3f4e3b; --gb-screen-bg: #9bbc0f;
+            --gb-screen-frame: #828a71; --gb-screen-text: #0f380f; --gb-red: #9f1c33;
+            --gb-dpad: #434447; --font-gameboy: 'VT323', monospace; --warn: #ffb703;
+        }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        html, body {
+            height: 100svh; width: 100vw; margin: 0; overflow: hidden;
+            background-color: #000; display: flex; align-items: center; justify-content: center;
+        }
+        body { font-family: var(--font-gameboy); }
+
+        .gameboy {
+            width: 100%; height: 100%; background: var(--gb-body);
+            border: 3px solid var(--gb-dark);
+            padding: 20px; display: flex; flex-direction: column; user-select: none;
+        }
+
+        .screen-area {
+            background: var(--gb-screen-frame); border-radius: 10px 10px 30px 10px;
+            padding: 10px; border: 2px solid #6b735c; box-shadow: inset 2px 2px 5px rgba(0,0,0,0.3);
+            flex-grow: 1; min-height: 0; position: relative;
+        }
+        .screen {
+            background: var(--gb-screen-bg); height: 100%; color: var(--gb-screen-text);
+            padding: 10px; position: relative; font-size: 18px; line-height: 1.2;
+            overflow: hidden; display: flex; flex-direction: column;
+        }
+        .screen::after { /* Scanline effect */
+            content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: repeating-linear-gradient(0deg, rgba(15, 56, 15, 0.1) 0, rgba(15, 56, 15, 0.1) 1px, transparent 1px, transparent 3px);
+            pointer-events: none;
+        }
+        
+        #latent-space-grid {
+            width: 90px; height: 90px; background: #8bac0f; border: 2px solid var(--gb-screen-text);
+            position: relative; float: left; margin: 0 10px 5px 0;
+        }
+        #probe { position: absolute; width: 8px; height: 8px; background: var(--gb-screen-text); transform: translate(-50%, -50%); transition: top 0.1s linear, left 0.1s linear; }
+        #readout { flex-grow: 1; overflow-y: auto; scrollbar-width: none; }
+        #readout::-webkit-scrollbar { display: none; }
+        #readout h2 { margin: 0 0 5px 0; font-size: 20px; } #readout p { margin: 0; }
+        
+        .controls-area {
+            flex-shrink: 0; padding-top: 20px; height: 200px;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .d-pad { position: relative; width: 120px; height: 120px; }
+        .d-pad .dir { position: absolute; background: var(--gb-dpad); width: 40px; height: 40px; cursor: pointer; box-shadow: inset 1px 1px 3px rgba(0,0,0,0.5); }
+        .d-pad .dir.active { background: var(--gb-red); }
+        #d-pad-up { top: 0; left: 40px; border-radius: 5px 5px 0 0; } #d-pad-down { bottom: 0; left: 40px; border-radius: 0 0 5px 5px; }
+        #d-pad-left { top: 40px; left: 0; border-radius: 5px 0 0 5px; } #d-pad-right { top: 40px; right: 0; border-radius: 0 5px 5px 0; }
+        
+        .action-buttons { text-align: right; }
+        .buttons { display: flex; gap: 20px; margin-bottom: 25px; }
+        .buttons button { width: 60px; height: 60px; border-radius: 50%; font-family: var(--font-gameboy); font-size: 28px; color: var(--gb-body); background: var(--gb-red); border: 2px solid var(--gb-dark); box-shadow: inset -3px -3px 5px rgba(0,0,0,0.5); cursor: pointer; }
+        .buttons button:active { box-shadow: inset 3px 3px 5px rgba(0,0,0,0.5); }
+        .system-buttons { display: flex; gap: 10px; justify-content: center; }
+        .system-buttons button { width: 70px; height: 25px; border-radius: 12.5px; background: var(--gb-dpad); border: 2px solid #333; cursor: pointer; color: #fff; font-size: 16px; font-family: var(--font-gameboy); }
+        
+        /* --- Build Mode Overlay --- */
+        #build-overlay {
+            position: absolute; bottom: 0; left: 0; width: 100%; height: 75%;
+            background: rgba(0,0,0,0.8); backdrop-filter: blur(2px);
+            border-top: 2px solid var(--gb-dark);
+            transform: translateY(100%); transition: transform 0.3s ease-in-out;
+            padding: 10px; display: flex; flex-direction: column;
+            color: #fff; z-index: 10;
+        }
+        #build-overlay.active { transform: translateY(0); }
+        .messages { flex-grow: 1; overflow-y: auto; margin-bottom: 10px; font-size: 16px; }
+        .msg .who { font-size: 14px; opacity: 0.7; }
+        .msg .bubble { background: rgba(255,255,255,0.1); padding: 5px; border-radius: 3px; margin-top: 2px; }
+        .msg.user .bubble { background: rgba(100,200,255,0.2); }
+        .option-button { background: rgba(100, 255, 150, 0.2); border: 1px solid rgba(100, 255, 150, 0.5); padding: 5px; margin-top: 5px; border-radius: 3px; }
+        #input { width: 100%; height: 50px; background: #000; color: #fff; border: 1px solid #555; border-radius: 3px; padding: 5px; font-family: var(--font-gameboy); font-size: 16px; resize: none; }
+        
+        /* Modals */
+        #modal-wrapper { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 1000; display: none; align-items: center; justify-content: center; padding: 5%; }
+        .modal-content { background: var(--gb-screen-bg); color: var(--gb-screen-text); width: 100%; height: 100%; max-height: 90vh; border: 5px solid var(--gb-dark); padding: 20px; display: flex; flex-direction: column; }
+        .modal-content h2 { margin: 0 0 15px 0; text-align: center; }
+        .modal-list { flex-grow: 1; overflow-y: auto; border: 2px solid var(--gb-screen-text); padding: 10px; background: #8bac0f; }
+        .log-entry { margin-bottom: 10px; border-bottom: 2px dotted var(--gb-screen-text); padding-bottom: 10px; }
+        .cartridge-item { padding: 8px; cursor: pointer; font-size: 20px; }
+        .cartridge-item:hover { background: var(--gb-screen-text); color: var(--gb-screen-bg); }
+        .settings-item label { display: block; }
+        .settings-item input, .settings-item textarea { width: 100%; background: #8bac0f; border: 2px solid var(--gb-screen-text); color: var(--gb-screen-text); font-family: var(--font-gameboy); font-size: 16px; }
+    </style>
+</head>
+<body>
+    <div class="gameboy">
+        <div class="screen-area">
+            <div class="screen">
+                <div id="explore-mode">
+                    <div id="latent-space-grid"><div id="probe"></div></div>
+                    <div id="readout">
+                        <h2 id="readout-title"></h2><p id="readout-text"></p>
+                    </div>
+                </div>
+                <div id="build-overlay">
+                    <div class="messages" id="messages"></div>
+                    <textarea id="input" placeholder="Type prompt..."></textarea>
+                </div>
+            </div>
+        </div>
+        <div class="controls-area">
+            <div class="d-pad">
+                <div class="dir" id="d-pad-up" data-op="enhance"></div>
+                <div class="dir" id="d-pad-down" data-op="obsolesce"></div>
+                <div class="dir" id="d-pad-left" data-op="retrieve"></div>
+                <div class="dir" id="d-pad-right" data-op="reverse"></div>
+            </div>
+            <div class="action-buttons">
+                <div class="buttons">
+                    <button id="b-btn">B</button>
+                    <button id="a-btn">A</button>
+                </div>
+                <div class="system-buttons">
+                    <button id="select-btn">BUILD</button>
+                    <button id="start-btn">START</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-wrapper">
+        <div class="modal-content">
+            <h2 id="modal-title"></h2>
+            <div id="log-display" class="modal-list"></div>
+            <div id="cartridge-list" class="modal-list" style="display:none;"></div>
+            <div id="settings-display" class="modal-list" style="display:none;">
+                <div class="settings-item"><label>API Key:</label><input type="password" id="apiKey"></div>
+                <div class="settings-item"><label>System Prompt:</label><textarea id="systemPrompt" rows="6"></textarea></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="data-store" style="display: none;">
+        <article data-title="Meritocracy">
+            <div data-vector="base">An ideology legitimizing hierarchy as a fair outcome of measured talent.</div>
+            <div data-vector="enhance">Competition intensifies; credentials become the sole measure of worth.</div>
+            <div data-vector="obsolesce">Uncredentialed wisdom is devalued. Apprenticeships fade.</div>
+            <div data-vector="retrieve">The Protestant Work Ethic returns as 'hustle culture'.</div>
+            <div data-vector="reverse">The 'fairness' ideal inverts into a rigid caste system, creating widespread anxiety.</div>
+        </article>
+    </div>
+
+<script>
+// --- MASTER PROMPT ---
+const MASTER_SYSTEM_PROMPT = `You are a creative copilot in a Gameboy interface.
+CONTRACT:
+1. When user provides text, you ONLY output a complete single-file HTML document based on the text and active D-Pad directions.
+2. When user has NO text but has D-Pad directions set, you ONLY output exactly four creative options.
+3. Your responses must be concise and strictly adhere to the requested format.
+DIRECTIONS:
+↑ Enhance: Amplify. ↓ Obsolesce: Displace. ← Retrieve: Revive. → Reverse: Invert.
+FORMATS:
+- OPTIONS:
+# Options (Forces: E/O/R/Rv)
+1. Title — pitch.
+2. ...
+- BUILD:
+<!DOCTYPE html>... (A full, self-contained HTML file).`;
+
+document.addEventListener('DOMContentLoaded', () => {
+    // --- STATE ---
+    const state = {
+        systems: [], currentSystemIndex: 0, probePos: { x: 0, y: 0 }, log: [],
+        audioCtx: null, isBuildMode: false, activeDirections: new Set(), messages: [],
+        isLoading: false, apiKey: '', systemPrompt: MASTER_SYSTEM_PROMPT,
+    };
+
+    // --- DOM ELEMENTS ---
+    const dom = {
+        probe: document.getElementById('probe'),
+        readoutTitle: document.getElementById('readout-title'), readoutText: document.getElementById('readout-text'),
+        modal: {
+            wrapper: document.getElementById('modal-wrapper'), title: document.getElementById('modal-title'),
+            log: document.getElementById('log-display'), modules: document.getElementById('cartridge-list'),
+            settings: document.getElementById('settings-display'),
+        },
+        dpadButtons: document.querySelectorAll('.d-pad .dir'),
+        buildOverlay: document.getElementById('build-overlay'),
+        input: document.getElementById('input'), messages: document.getElementById('messages'),
+        apiKeyInput: document.getElementById('apiKey'), systemPromptInput: document.getElementById('systemPrompt'),
+    };
+
+    // --- AUDIO ---
+    function initAudio() { if (!state.audioCtx) state.audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+    function playSound(type) {
+        if (!state.audioCtx) return;
+        const o = state.audioCtx.createOscillator(); const g = state.audioCtx.createGain();
+        o.connect(g); g.connect(state.audioCtx.destination);
+        g.gain.setValueAtTime(0, state.audioCtx.currentTime); g.gain.linearRampToValueAtTime(0.08, state.audioCtx.currentTime + 0.01);
+        if (type === 'move') { o.type = 'square'; o.frequency.setValueAtTime(300 + state.probePos.x * 10, state.audioCtx.currentTime); }
+        else if (type === 'action') { o.type = 'sine'; o.frequency.setValueAtTime(800, state.audioCtx.currentTime); }
+        else if (type === 'open') { o.type = 'sawtooth'; o.frequency.setValueAtTime(200, state.audioCtx.currentTime); }
+        else if (type === 'toggle') { o.type = 'triangle'; o.frequency.setValueAtTime(600, state.audioCtx.currentTime); }
+        o.start(state.audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.00001, state.audioCtx.currentTime + 0.1); o.stop(state.audioCtx.currentTime + 0.1);
+    }
+
+    // --- DATA & INIT ---
+    function init() {
+        loadState();
+        parseData();
+        loadSystem(0);
+        setupEventListeners();
+    }
+    
+    function parseData() {
+        const articles = document.getElementById('data-store').querySelectorAll('article');
+        articles.forEach(article => {
+            const title = article.dataset.title; const vectors = {};
+            article.querySelectorAll('div[data-vector]').forEach(div => { vectors[div.dataset.vector] = div.textContent; });
+            state.systems.push({ title, vectors });
+            const item = document.createElement('div');
+            item.className = 'cartridge-item'; item.textContent = title; item.dataset.title = title;
+            dom.modal.modules.appendChild(item);
+        });
+        const settingsBtn = document.createElement('div');
+        settingsBtn.textContent = "[ SETTINGS ]"; settingsBtn.className = 'cartridge-item';
+        settingsBtn.onclick = () => showModal('settings');
+        dom.modal.modules.appendChild(settingsBtn);
+    }
+
+    // --- CORE GAME LOGIC ---
+    function loadSystem(index) {
+        state.currentSystemIndex = index;
+        state.probePos = { x: 0, y: 0 }; state.log = [];
+        updateUI(); playSound('action');
+    }
+    function generateScenarioText() {
+        const system = state.systems[state.currentSystemIndex];
+        if (!system) return { title: "ERROR", text: "No Module." };
+        let parts = [system.vectors.base];
+        const threshold = 1;
+        if (state.probePos.y > threshold) parts.push(system.vectors.enhance);
+        if (state.probePos.y < -threshold) parts.push(system.vectors.obsolesce);
+        if (state.probePos.x < -threshold) parts.push(system.vectors.retrieve);
+        if (state.probePos.x > threshold) parts.push(system.vectors.reverse);
+        return { title: system.title, text: parts.join(" // ") };
+    }
+    function moveProbe(dx, dy) {
+        state.probePos.x = Math.max(-5, Math.min(5, state.probePos.x + dx));
+        state.probePos.y = Math.max(-5, Math.min(5, state.probePos.y + dy));
+        updateUI(); playSound('move');
+    }
+    function analyzeScenario() {
+        const { text } = generateScenarioText();
+        const coords = `[X:${state.probePos.x}, Y:${state.probePos.y}]`;
+        state.log.unshift({ coords, text });
+        showModal('log');
+    }
+
+    // --- UI & MODALS ---
+    function updateUI() {
+        const { title, text } = generateScenarioText();
+        dom.readoutTitle.textContent = title; dom.readoutText.textContent = text;
+        const left = (state.probePos.x + 5) * 10; const top = (-state.probePos.y + 5) * 10;
+        dom.probe.style.left = `${left}%`; dom.probe.style.top = `${top}%`;
+    }
+    function toggleBuildMode() {
+        state.isBuildMode = !state.isBuildMode;
+        playSound('toggle');
+        dom.buildOverlay.classList.toggle('active', state.isBuildMode);
+        if (state.isBuildMode && state.messages.length === 0) {
+            addMessage('system', 'BUILD MODE ACTIVE. D-Pad sets forces. Type prompt & press A to build, or leave blank & press A for options.');
+        }
+    }
+    function showModal(type) {
+        dom.modal.log.style.display = 'none'; dom.modal.modules.style.display = 'none'; dom.modal.settings.style.display = 'none';
+        dom.modal[type].style.display = 'block';
+        dom.modal.title.textContent = type === 'log' ? "SYSTEM LOG" : type === 'modules' ? "SELECT CARTRIDGE" : "SETTINGS";
+        if (type === 'log') {
+            dom.modal.log.innerHTML = state.log.map(e => `<div class="log-entry"><strong>${e.coords}</strong><p>${e.text}</p></div>`).join('');
+        }
+        dom.modal.wrapper.style.display = 'flex';
+        playSound('open');
+    }
+
+    // --- LLM LOGIC ---
+    function addMessage(role, content) {
+        state.messages.push({ role, content });
+        const bubble = document.createElement('div');
+        bubble.className = `msg ${role}`;
+        let htmlContent = content.replace(/\n/g, '<br>');
+
+        const optionsMatch = content.match(/# Options(.|\n)*1\./);
+        if (role === 'assistant' && optionsMatch) {
+            const options = content.split(/\n\d+\.\s*/).slice(1);
+            htmlContent = options.map(opt => `<button class="option-button" data-content="${opt.trim().replace(/"/g, '&quot;')}">${opt.trim()}</button>`).join('');
+        }
+        bubble.innerHTML = `<div class="who">${role.toUpperCase()}</div><div class="bubble">${htmlContent}</div>`;
+        dom.messages.appendChild(bubble);
+        dom.messages.scrollTop = dom.messages.scrollHeight;
+    }
+    async function callLLM() {
+        if (state.isLoading) return;
+        if (!state.apiKey) { addMessage('system', 'API key not set. Press START -> Settings.'); return; }
+        state.isLoading = true;
+        const userText = dom.input.value.trim();
+        let prompt;
+
+        if (userText) {
+            addMessage('user', userText);
+            prompt = `Context: ${state.messages.slice(-2,-1)[0]?.content || 'None'}\nUser: ${userText}\nDirections: ${[...state.activeDirections].join(', ')}\nTask: Build a single-file HTML.`;
+        } else if (state.activeDirections.size > 0) {
+            addMessage('system', `Requesting options with forces: ${[...state.activeDirections].join(', ')}`);
+            prompt = `Context: ${state.messages.slice(-1)[0]?.content || 'None'}\nDirections: ${[...state.activeDirections].join(', ')}\nTask: Generate 4 creative options.`;
+        } else {
+            addMessage('system', 'Set directions for options, or type a prompt to build.');
+            state.isLoading = false; return;
+        }
+        
+        try {
+            const res = await fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${state.apiKey}` },
+                body: JSON.stringify({
+                    model: 'gpt-4o-mini',
+                    messages: [{ role: 'system', content: state.systemPrompt }, { role: 'user', content: prompt }]
+                })
+            });
+            if (!res.ok) throw new Error(`API returned ${res.status}`);
+            const data = await res.json();
+            const reply = data.choices[0].message.content;
+            
+            if (reply.includes('<!DOCTYPE html>')) {
+                const blob = new Blob([reply], { type: 'text/html' });
+                window.open(URL.createObjectURL(blob), '_blank');
+                addMessage('system', 'Build complete. Opening in new tab.');
+            } else {
+                addMessage('assistant', reply);
+            }
+        } catch (error) { addMessage('system', 'API Error: ' + error.message); }
+        state.isLoading = false; dom.input.value = ''; state.activeDirections.clear();
+        dom.dpadButtons.forEach(b => b.classList.remove('active'));
+    }
+    
+    // --- PERSISTENCE ---
+    function saveState() {
+        localStorage.setItem('tetradGBState', JSON.stringify({
+            apiKey: state.apiKey, systemPrompt: state.systemPrompt
+        }));
+    }
+    function loadState() {
+        const saved = localStorage.getItem('tetradGBState');
+        if (saved) {
+            const parsed = JSON.parse(saved);
+            state.apiKey = parsed.apiKey || '';
+            state.systemPrompt = parsed.systemPrompt || MASTER_SYSTEM_PROMPT;
+            dom.apiKeyInput.value = state.apiKey;
+            dom.systemPromptInput.value = state.systemPrompt;
+        }
+    }
+
+    // --- EVENT LISTENERS ---
+    function setupEventListeners() {
+        document.body.addEventListener('click', initAudio, { once: true });
+        dom.dpadButtons.forEach(btn => btn.addEventListener('click', () => {
+            const op = btn.dataset.op;
+            if (state.isBuildMode) {
+                btn.classList.toggle('active');
+                state.activeDirections.has(op) ? state.activeDirections.delete(op) : state.activeDirections.add(op);
+            } else {
+                if (op === 'enhance') moveProbe(0, 1); if (op === 'obsolesce') moveProbe(0, -1);
+                if (op === 'retrieve') moveProbe(-1, 0); if (op === 'reverse') moveProbe(1, 0);
+            }
+        }));
+
+        document.getElementById('a-btn').addEventListener('click', () => {
+            playSound('action');
+            state.isBuildMode ? callLLM() : analyzeScenario();
+        });
+        document.getElementById('b-btn').addEventListener('click', () => showModal('log'));
+        document.getElementById('start-btn').addEventListener('click', () => showModal('modules'));
+        document.getElementById('select-btn').addEventListener('click', toggleBuildMode);
+        
+        dom.modal.wrapper.addEventListener('click', e => { if (e.target.id === 'log-and-modal-wrapper') dom.modal.wrapper.style.display = 'none'; });
+        dom.modal.modules.addEventListener('click', e => {
+            const item = e.target.closest('.cartridge-item');
+            if (item) {
+                const title = item.dataset.title;
+                const index = state.systems.findIndex(s => s.title === title);
+                if (index > -1) {
+                    loadSystem(index);
+                    dom.modal.wrapper.style.display = 'none';
+                }
+            }
+        });
+        dom.messages.addEventListener('click', e => {
+            const button = e.target.closest('.option-button');
+            if (button) {
+                dom.input.value = button.dataset.content;
+                callLLM();
+            }
+        });
+        dom.apiKeyInput.addEventListener('change', e => { state.apiKey = e.target.value; saveState(); });
+        dom.systemPromptInput.addEventListener('change', e => { state.systemPrompt = e.target.value; saveState(); });
+    }
+
+    init();
+});
+</script>
+</body>
+</html>

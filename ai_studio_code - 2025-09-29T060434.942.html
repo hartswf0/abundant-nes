@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GEO-TETRAD :: CULTURAL OS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --gb-body: #c4cfa1;
+            --gb-dark: #3f4e3b;
+            --gb-screen-bg: #9bbc0f;
+            --gb-screen-frame: #828a71;
+            --gb-screen-text: #0f380f;
+            --gb-red: #9f1c33;
+            --gb-blue: #3d5a99;
+            --gb-dpad: #434447;
+            --font-gameboy: 'VT323', monospace;
+        }
+        * { box-sizing: border-box; }
+        html, body {
+            height: 100%;
+            margin: 0;
+            overflow: hidden;
+            background-color: #222;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        body { font-family: var(--font-gameboy); }
+
+        .gameboy {
+            width: 380px;
+            height: 620px;
+            background: var(--gb-body);
+            border-radius: 15px 15px 60px 15px;
+            border: 3px solid var(--gb-dark);
+            box-shadow: inset 0 0 0 4px #d4ddb0, 5px 10px 20px #000;
+            padding: 25px;
+            display: flex;
+            flex-direction: column;
+            user-select: none;
+        }
+
+        /* --- Screen Area --- */
+        .screen-area {
+            background: var(--gb-screen-frame);
+            border-radius: 10px 10px 30px 10px;
+            padding: 15px;
+            border: 2px solid #6b735c;
+            box-shadow: inset 2px 2px 5px rgba(0,0,0,0.3);
+        }
+        .screen {
+            background: var(--gb-screen-bg);
+            height: 250px;
+            color: var(--gb-screen-text);
+            padding: 10px;
+            position: relative;
+            font-size: 20px;
+            line-height: 1.2;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        .screen::after { /* Scanline effect */
+            content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: repeating-linear-gradient(0deg, rgba(15, 56, 15, 0.1) 0, rgba(15, 56, 15, 0.1) 1px, transparent 1px, transparent 3px);
+            pointer-events: none;
+        }
+        
+        /* Screen Content */
+        #latent-space-grid {
+            width: 100px; height: 100px;
+            background: #8bac0f;
+            border: 2px solid var(--gb-screen-text);
+            position: relative; float: left; margin-right: 10px;
+        }
+        .axis-label { position: absolute; font-size: 14px; }
+        .axis-y { left: -15px; transform: rotate(-90deg); transform-origin: left top; }
+        .axis-x { bottom: -15px; }
+        #probe {
+            position: absolute; width: 10px; height: 10px;
+            background: var(--gb-screen-text);
+            transform: translate(-50%, -50%);
+            transition: top 0.1s linear, left 0.1s linear;
+        }
+        #readout {
+            flex-grow: 1;
+            overflow-y: auto;
+            scrollbar-width: none; /* Hide scrollbar */
+        }
+        #readout::-webkit-scrollbar { display: none; }
+        #readout h2 { margin: 0 0 5px 0; font-size: 22px; }
+        #readout p { margin: 0; }
+        #boot-screen {
+            position: absolute; top:0; left:0; width:100%; height:100%; background: var(--gb-screen-bg);
+            display: flex; align-items: center; justify-content: center; z-index: 10;
+            animation: boot-fade-out 2s forwards 1s;
+        }
+        @keyframes boot-fade-out { to { opacity: 0; pointer-events: none; } }
+
+        /* --- Controls Area --- */
+        .controls-area {
+            flex-grow: 1;
+            padding-top: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .d-pad { position: relative; width: 90px; height: 90px; }
+        .d-pad .dir {
+            position: absolute; background: var(--gb-dpad);
+            width: 30px; height: 30px; cursor: pointer;
+            box-shadow: inset 1px 1px 3px rgba(0,0,0,0.5);
+        }
+        .d-pad .dir:active { background: #222; }
+        #d-pad-up { top: 0; left: 30px; border-radius: 5px 5px 0 0; }
+        #d-pad-down { bottom: 0; left: 30px; border-radius: 0 0 5px 5px; }
+        #d-pad-left { top: 30px; left: 0; border-radius: 5px 0 0 5px; }
+        #d-pad-right { top: 30px; right: 0; border-radius: 0 5px 5px 0; }
+        .action-buttons { text-align: right; }
+        .buttons { display: flex; gap: 15px; margin-bottom: 20px; }
+        .buttons button {
+            width: 50px; height: 50px; border-radius: 50%;
+            font-family: var(--font-gameboy); font-size: 24px; color: var(--gb-body);
+            background: var(--gb-red); border: 2px solid var(--gb-dark);
+            box-shadow: inset -2px -2px 5px rgba(0,0,0,0.5);
+            cursor: pointer;
+        }
+        .buttons button:active { box-shadow: inset 2px 2px 5px rgba(0,0,0,0.5); }
+        .system-buttons { display: flex; gap: 10px; justify-content: flex-end; }
+        .system-buttons button {
+            width: 60px; height: 20px; border-radius: 10px; background: var(--gb-dpad);
+            border: 2px solid #333; cursor: pointer;
+        }
+
+        /* --- Log & Cartridge Modal --- */
+        #log-and-modal-wrapper {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85); z-index: 1000;
+            display: none; align-items: center; justify-content: center;
+            padding: 5%;
+        }
+        .modal-content {
+            background: var(--gb-screen-bg); color: var(--gb-screen-text);
+            width: 100%; height: 100%; max-width: 600px; max-height: 80vh;
+            border: 5px solid var(--gb-dark); padding: 20px;
+            display: flex; flex-direction: column;
+        }
+        .modal-content h2 { margin: 0 0 15px 0; text-align: center; }
+        #log-display, #cartridge-list {
+            flex-grow: 1; overflow-y: auto; border: 2px solid var(--gb-screen-text);
+            padding: 10px; background: #8bac0f;
+        }
+        #log-display .log-entry { margin-bottom: 10px; border-bottom: 2px dotted var(--gb-screen-text); padding-bottom: 10px; }
+        #cartridge-list div { padding: 8px; cursor: pointer; }
+        #cartridge-list div:hover { background: var(--gb-screen-text); color: var(--gb-screen-bg); }
+
+        /* Power LED */
+        .power-led { width: 10px; height: 10px; background: var(--gb-red); border-radius: 50%; border: 2px solid #555; position: absolute; top: 125px; left: 20px; box-shadow: 0 0 5px var(--gb-red); }
+
+    </style>
+</head>
+<body>
+    <div class="gameboy">
+        <div class="screen-area">
+            <div class="power-led"></div>
+            <div class="screen">
+                <div id="boot-screen">GEO-TETRAD<br>CULTURAL OS</div>
+                <div id="latent-space-grid">
+                    <div class="axis-label axis-y">ENHANCE &harr; OBSOLESCE</div>
+                    <div class="axis-label axis-x">RETRIEVE &harr; REVERSE</div>
+                    <div id="probe"></div>
+                </div>
+                <div id="readout">
+                    <h2 id="readout-title"></h2>
+                    <p id="readout-text"></p>
+                </div>
+            </div>
+        </div>
+
+        <div class="controls-area">
+            <div class="d-pad">
+                <div class="dir" id="d-pad-up"></div>
+                <div class="dir" id="d-pad-down"></div>
+                <div class="dir" id="d-pad-left"></div>
+                <div class="dir" id="d-pad-right"></div>
+            </div>
+            <div class="action-buttons">
+                <div class="buttons">
+                    <button id="b-btn">B</button>
+                    <button id="a-btn">A</button>
+                </div>
+                <div class="system-buttons">
+                    <button id="select-btn"></button>
+                    <button id="start-btn"></button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="log-and-modal-wrapper">
+        <div class="modal-content">
+            <h2 id="modal-title">SYSTEM LOG</h2>
+            <div id="log-display"></div>
+            <div id="cartridge-list" style="display:none;"></div>
+        </div>
+    </div>
+
+    <div id="data-store" style="display: none;">
+        <article data-title="Meritocracy">
+            <div data-vector="base">An ideology that legitimizes social hierarchy as a fair outcome of measured talent and effort.</div>
+            <div data-vector="enhance">Competition intensifies; everything is quantified and ranked. Credentials become the sole measure of worth. A culture of relentless optimization emerges.</div>
+            <div data-vector="obsolesce">Uncredentialed wisdom and hands-on experience are devalued. Aristocratic privilege by birth is replaced by a new credentialed elite. Apprenticeships fade.</div>
+            <div data-vector="retrieve">The Protestant Work Ethic returns, secularized as 'hustle culture'. The belief in a 'calling' is reframed as personal ambition and worldly success.</div>
+            <div data-vector="reverse">The ideal of 'fairness' inverts into a rigid caste system based on test scores and elite schooling, creating widespread anxiety, impostor syndrome, and burnout. Those who fail are seen as morally undeserving.</div>
+        </article>
+        <article data-title="Corporate Culture">
+            <div data-vector="base">A shared mythology to maintain employee alignment and productivity within a company.</div>
+            <div data-vector="enhance">Brand loyalty deepens. The company's mission is amplified, becoming a central part of employee identity. Productivity metrics are celebrated as moral victories.</div>
+            <div data-vector="obsolesce">The boundary between work and life erodes completely. The 9-to-5 workday is displaced by 24/7 availability. Personal time is seen as a lack of commitment.</div>
+            <div data-vector="retrieve">Pre-industrial ideals of craftsmanship and guild loyalty are reframed as 'passion' for the job. The worker's identity is fully retrieved from the craft and placed onto the corporation.</div>
+            <div data-vector="reverse">The positive 'we are a family' metaphor flips into a tool of emotional manipulation. Loyalty is weaponized to suppress dissent and justify exploitation, as leaving the 'family' becomes a betrayal.</div>
+        </article>
+        <article data-title="Broken Windows">
+            <div data-vector="base">A common-sense theory that policing minor infractions prevents more serious crime by signaling order.</div>
+            <div data-vector="enhance">Visible orderliness increases. Public spaces feel cleaner and more controlled. Property values in targeted areas may rise.</div>
+            <div data-vector="obsolesce">Community-based, informal social controls are displaced by formal, often aggressive, policing. Trust between police and residents in heavily policed areas deteriorates.</div>
+            <div data-vector="retrieve">The Puritanical concern for public morality and order returns in a secular form. The 'village stocks' are retrieved as public shaming through arrests for minor violations.</div>
+            <div data-vector="reverse">The focus on 'order' flips into a system of pervasive surveillance and harassment, disproportionately targeting marginalized communities. The policy designed to create safety instead generates fear and resentment.</div>
+        </article>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // --- STATE ---
+        let systemsData = [];
+        let currentCartridge = 0;
+        let probePos = { x: 0, y: 0 }; // Range from -5 to 5
+        let logEntries = [];
+        let audioCtx;
+
+        // --- DOM ELEMENTS ---
+        const probe = document.getElementById('probe');
+        const readoutTitle = document.getElementById('readout-title');
+        const readoutText = document.getElementById('readout-text');
+        const modalWrapper = document.getElementById('log-and-modal-wrapper');
+        const modalTitle = document.getElementById('modal-title');
+        const logDisplay = document.getElementById('log-display');
+        const cartList = document.getElementById('cartridge-list');
+
+        // --- AUDIO ---
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+        function playSound(type) {
+            if (!audioCtx) return;
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+            gainNode.gain.linearRampToValueAtTime(0.1, audioCtx.currentTime + 0.01);
+            if (type === 'move') {
+                oscillator.type = 'square';
+                oscillator.frequency.setValueAtTime(300, audioCtx.currentTime);
+            } else if (type === 'analyze') {
+                oscillator.type = 'sine';
+                oscillator.frequency.setValueAtTime(800, audioCtx.currentTime);
+            } else if (type === 'open') {
+                oscillator.type = 'sawtooth';
+                oscillator.frequency.setValueAtTime(200, audioCtx.currentTime);
+            }
+            oscillator.start(audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + 0.1);
+            oscillator.stop(audioCtx.currentTime + 0.1);
+        }
+
+        // --- DATA PARSING ---
+        function parseData() {
+            const articles = document.getElementById('data-store').querySelectorAll('article');
+            articles.forEach(article => {
+                const title = article.dataset.title;
+                const vectors = {};
+                article.querySelectorAll('div[data-vector]').forEach(div => {
+                    vectors[div.dataset.vector] = div.textContent;
+                });
+                systemsData.push({ title, vectors });
+                
+                const cartItem = document.createElement('div');
+                cartItem.textContent = title;
+                cartItem.dataset.title = title;
+                cartList.appendChild(cartItem);
+            });
+        }
+
+        // --- CORE GAME LOGIC ---
+        function loadCartridge(title) {
+            const index = systemsData.findIndex(s => s.title === title);
+            if (index === -1) return;
+            currentCartridge = index;
+            probePos = { x: 0, y: 0 };
+            logEntries = [];
+            updateProbePosition();
+            updateReadout();
+            playSound('analyze');
+        }
+
+        function updateProbePosition() {
+            // Map {-5 to 5} to {0% to 100%}
+            const left = (probePos.x + 5) * 10;
+            const top = (-probePos.y + 5) * 10;
+            probe.style.left = `${left}%`;
+            probe.style.top = `${top}%`;
+            updateReadout();
+        }
+
+        function generateScenarioText() {
+            const system = systemsData[currentCartridge];
+            if (!system) return { title: "ERROR", text: "No Cartridge Loaded." };
+
+            let text = system.vectors.base;
+            const x_abs = Math.abs(probePos.x);
+            const y_abs = Math.abs(probePos.y);
+
+            if (x_abs > 1 || y_abs > 1) text += " // SCENARIO DRIFT: ";
+
+            // Blend Y-axis (Enhance/Obsolesce)
+            if (probePos.y > 1) text += ` ${system.vectors.enhance}`;
+            if (probePos.y < -1) text += ` ${system.vectors.obsolesce}`;
+
+            // Blend X-axis (Retrieve/Reverse)
+            if (probePos.x < -1) text += ` ${system.vectors.retrieve}`;
+            if (probePos.x > 1) text += ` ${system.vectors.reverse}`;
+
+            return { title: system.title, text };
+        }
+        
+        function updateReadout() {
+            const { title, text } = generateScenarioText();
+            readoutTitle.textContent = title;
+            readoutText.textContent = text;
+        }
+
+        function moveProbe(dx, dy) {
+            probePos.x = Math.max(-5, Math.min(5, probePos.x + dx));
+            probePos.y = Math.max(-5, Math.min(5, probePos.y + dy));
+            updateProbePosition();
+            playSound('move');
+        }
+
+        function analyzeCurrentPosition() {
+            const { text } = generateScenarioText();
+            const coords = `[X:${probePos.x}, Y:${probePos.y}]`;
+            logEntries.unshift({ coords, text });
+            showLog();
+            playSound('analyze');
+        }
+        
+        // --- MODAL & UI ---
+        function showLog() {
+            modalTitle.textContent = "SYSTEM LOG";
+            logDisplay.style.display = 'block';
+            cartList.style.display = 'none';
+            logDisplay.innerHTML = logEntries.map(entry =>
+                `<div class="log-entry"><strong>${entry.coords}</strong><p>${entry.text}</p></div>`
+            ).join('');
+            modalWrapper.style.display = 'flex';
+        }
+        
+        function showCartridges() {
+            modalTitle.textContent = "SELECT CARTRIDGE";
+            logDisplay.style.display = 'none';
+            cartList.style.display = 'block';
+            modalWrapper.style.display = 'flex';
+            playSound('open');
+        }
+        
+        // --- EVENT LISTENERS ---
+        function setupEventListeners() {
+            document.body.addEventListener('click', initAudio, { once: true });
+            
+            document.getElementById('d-pad-up').addEventListener('click', () => moveProbe(0, 1));
+            document.getElementById('d-pad-down').addEventListener('click', () => moveProbe(0, -1));
+            document.getElementById('d-pad-left').addEventListener('click', () => moveProbe(-1, 0));
+            document.getElementById('d-pad-right').addEventListener('click', () => moveProbe(1, 0));
+            
+            document.getElementById('a-btn').addEventListener('click', analyzeCurrentPosition);
+            document.getElementById('b-btn').addEventListener('click', () => { modalWrapper.style.display = 'none'; });
+            document.getElementById('select-btn').addEventListener('click', showLog);
+            document.getElementById('start-btn').addEventListener('click', showCartridges);
+            
+            modalWrapper.addEventListener('click', (e) => {
+                if (e.target.id === 'log-and-modal-wrapper') modalWrapper.style.display = 'none';
+            });
+            
+            cartList.addEventListener('click', (e) => {
+                if (e.target.dataset.title) {
+                    loadCartridge(e.target.dataset.title);
+                    modalWrapper.style.display = 'none';
+                }
+            });
+        }
+        
+        // --- INIT ---
+        parseData();
+        loadCartridge(systemsData[0].title);
+        setupEventListeners();
+    });
+    </script>
+</body>
+</html>

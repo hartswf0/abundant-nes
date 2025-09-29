@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>GEO‑TETRAD :: CULTURAL OS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --gb-body: #c4cfa1;
+      --gb-dark: #3f4e3b;
+      --gb-screen-bg: #9bbc0f;
+      --gb-screen-frame: #828a71;
+      --gb-screen-text: #0f380f;
+      --gb-red: #9f1c33;
+      --gb-blue: #3d5a99;
+      --gb-dpad: #434447;
+      --font-gameboy: 'VT323', monospace;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+    html, body {
+      height: 100%;
+      margin: 0;
+      background: #111;
+      color: #111;
+      overscroll-behavior: none;
+    }
+
+    body { font-family: var(--font-gameboy); }
+
+    /* Fill the whole screen on mobile */
+    .app {
+      width: 100vw;
+      height: 100svh; /* safe viewport height on mobile */
+      padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      touch-action: none; /* prevent scroll while using controls */
+    }
+
+    /* Responsive scaler: keep handheld aspect and scale up/down */
+    .gameboy-wrap {
+      width: min(96vw, 540px);
+      aspect-ratio: 38 / 62; /* from 380x620 */
+      display: grid;
+      place-items: center;
+    }
+
+    .gameboy {
+      width: 100%;
+      height: 100%;
+      background: var(--gb-body);
+      border-radius: 15px 15px 60px 15px;
+      border: 3px solid var(--gb-dark);
+      box-shadow: inset 0 0 0 4px #d4ddb0, 5px 10px 30px rgba(0,0,0,.8);
+      padding: clamp(14px, 3.5vmin, 25px);
+      display: flex;
+      flex-direction: column;
+      user-select: none;
+      position: relative;
+    }
+
+    /* --- Top bar: title + fullscreen btn on mobile --- */
+    .topbar {
+      position: absolute;
+      top: 6px; left: 8px; right: 8px;
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: clamp(12px, 2.4vmin, 16px);
+      opacity: .85;
+      pointer-events: none; /* text non-interactive */
+    }
+    .title { letter-spacing: 1px; color: #2a3424; }
+    .fs-btn {
+      pointer-events: auto; /* enable button */
+      font-family: var(--font-gameboy);
+      font-size: 18px;
+      line-height: 1;
+      padding: 6px 10px;
+      border-radius: 8px;
+      border: 2px solid #2e392b;
+      background: #6f7a64;
+      color: #e4efc8;
+      cursor: pointer;
+    }
+
+    /* --- Screen Area --- */
+    .screen-area {
+      background: var(--gb-screen-frame);
+      border-radius: 10px 10px 30px 10px;
+      padding: clamp(8px, 1.8vmin, 15px);
+      border: 2px solid #6b735c;
+      box-shadow: inset 2px 2px 5px rgba(0,0,0,0.3);
+    }
+    .screen {
+      background: var(--gb-screen-bg);
+      height: min(34vh, 280px);
+      color: var(--gb-screen-text);
+      padding: 10px;
+      position: relative;
+      font-size: clamp(16px, 2.6vmin, 20px);
+      line-height: 1.25;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .screen::after {
+      content: '';
+      position: absolute; inset: 0;
+      background: repeating-linear-gradient(0deg, rgba(15,56,15,.13) 0, rgba(15,56,15,.13) 1px, transparent 1px, transparent 3px);
+      pointer-events: none;
+    }
+
+    /* Screen Content */
+    #latent-space-grid {
+      width: 38%;
+      min-width: 90px;
+      aspect-ratio: 1/1;
+      background: #8bac0f;
+      border: 2px solid var(--gb-screen-text);
+      position: relative; float: left; margin-right: 10px;
+    }
+    .axis-label { position: absolute; font-size: clamp(12px, 2.2vmin, 14px); }
+    .axis-y { left: -15px; transform: rotate(-90deg); transform-origin: left top; }
+    .axis-x { bottom: -15px; }
+    #probe { position: absolute; width: 10px; height: 10px; background: var(--gb-screen-text); transform: translate(-50%, -50%); transition: top .08s linear, left .08s linear; border-radius: 2px; }
+
+    #readout { flex-grow: 1; overflow-y: auto; scrollbar-width: none; }
+    #readout::-webkit-scrollbar { display: none; }
+    #readout h2 { margin: 0 0 4px 0; font-size: clamp(18px, 3vmin, 22px); }
+    #readout p { margin: 0; }
+
+    #boot-screen {
+      position: absolute; inset: 0; background: var(--gb-screen-bg);
+      display: grid; place-items: center; z-index: 10;
+      animation: boot-fade-out 1.8s forwards .8s;
+      text-align: center;
+    }
+    @keyframes boot-fade-out { to { opacity: 0; pointer-events: none; } }
+
+    /* --- Controls Area --- */
+    .controls-area {
+      flex-grow: 1;
+      padding-top: clamp(10px, 2.4vmin, 20px);
+      display: flex; justify-content: space-between; align-items: center;
+      gap: 16px;
+    }
+
+    .d-pad { position: relative; width: clamp(90px, 22vmin, 120px); height: clamp(90px, 22vmin, 120px); }
+    .d-pad .dir { position: absolute; background: var(--gb-dpad); width: 33%; height: 33%; cursor: pointer; box-shadow: inset 1px 1px 3px rgba(0,0,0,0.5); border-radius: 6px; display: grid; place-items: center; }
+    .d-pad .dir:active { filter: brightness(.8); }
+    #d-pad-up { top: 0; left: 33%; border-radius: 6px 6px 0 0; }
+    #d-pad-down { bottom: 0; left: 33%; border-radius: 0 0 6px 6px; }
+    #d-pad-left { top: 33%; left: 0; border-radius: 6px 0 0 6px; }
+    #d-pad-right { top: 33%; right: 0; border-radius: 0 6px 6px 0; }
+
+    .action-buttons { text-align: right; }
+    .buttons { display: flex; gap: clamp(10px, 2.4vmin, 15px); margin-bottom: clamp(10px, 2vmin, 20px); justify-content: flex-end; }
+    .buttons button {
+      width: clamp(48px, 12vmin, 62px); height: clamp(48px, 12vmin, 62px); border-radius: 50%;
+      font-family: var(--font-gameboy); font-size: clamp(18px, 4vmin, 24px); color: var(--gb-body);
+      background: var(--gb-red); border: 2px solid var(--gb-dark);
+      box-shadow: inset -2px -2px 5px rgba(0,0,0,0.5);
+      cursor: pointer;
+      display: grid; place-items: center;
+    }
+    .buttons button:active { box-shadow: inset 2px 2px 5px rgba(0,0,0,0.5); }
+    .system-buttons { display: flex; gap: 10px; justify-content: flex-end; }
+    .system-buttons button {
+      width: clamp(56px, 14vmin, 80px); height: clamp(18px, 4.6vmin, 24px); border-radius: 10px; background: var(--gb-dpad);
+      border: 2px solid #333; cursor: pointer; position: relative;
+    }
+    .system-buttons button::after { position: absolute; inset: 0; display: grid; place-items: center; color: #e0e0e0; font-size: clamp(10px, 2.2vmin, 12px); }
+    #select-btn::after { content: 'SELECT'; }
+    #start-btn::after { content: 'START'; }
+    #fullscreen-btn::after { content: 'FULL'; }
+
+    /* --- Log & Cartridge Modal --- */
+    #log-and-modal-wrapper {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 1000; display: none; align-items: center; justify-content: center; padding: 5%;
+    }
+    .modal-content {
+      background: var(--gb-screen-bg); color: var(--gb-screen-text);
+      width: 100%; height: 100%; max-width: 620px; max-height: 84vh; border: 5px solid var(--gb-dark); padding: 20px; display: flex; flex-direction: column;
+    }
+    .modal-content h2 { margin: 0 0 15px 0; text-align: center; }
+    #log-display, #cartridge-list { flex-grow: 1; overflow-y: auto; border: 2px solid var(--gb-screen-text); padding: 10px; background: #8bac0f; }
+    #log-display .log-entry { margin-bottom: 10px; border-bottom: 2px dotted var(--gb-screen-text); padding-bottom: 10px; }
+    #cartridge-list div { padding: 8px; cursor: pointer; }
+    #cartridge-list div:hover { background: var(--gb-screen-text); color: var(--gb-screen-bg); }
+
+    /* Power LED */
+    .power-led { width: 10px; height: 10px; background: var(--gb-red); border-radius: 50%; border: 2px solid #555; position: absolute; top: 20%; left: 14px; box-shadow: 0 0 5px var(--gb-red); }
+
+    /* Helper hint (iOS fullscreen limitation) */
+    .ios-hint { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); color: #9bbc0f; background: rgba(0,0,0,.6); padding: 6px 10px; border: 1px solid #556; border-radius: 8px; font-size: 12px; display: none; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="gameboy-wrap">
+      <div class="gameboy">
+        <div class="topbar">
+          <div class="title">GEO‑TETRAD · CULTURAL OS</div>
+          <button id="fullscreen-btn" class="fs-btn" aria-label="Enter Fullscreen">⛶</button>
+        </div>
+
+        <div class="screen-area">
+          <div class="power-led" aria-hidden="true"></div>
+          <div class="screen" role="region" aria-label="CRT Screen">
+            <div id="boot-screen">GEO‑TETRAD<br/>CULTURAL OS</div>
+            <div id="latent-space-grid" aria-label="Latent Space Grid">
+              <div class="axis-label axis-y">ENHANCE ↔ OBSOLESCE</div>
+              <div class="axis-label axis-x">RETRIEVE ↔ REVERSE</div>
+              <div id="probe"></div>
+            </div>
+            <div id="readout">
+              <h2 id="readout-title"></h2>
+              <p id="readout-text"></p>
+            </div>
+          </div>
+        </div>
+
+        <div class="controls-area">
+          <div class="d-pad" aria-label="Direction Pad">
+            <div class="dir" id="d-pad-up" aria-label="Up">▲</div>
+            <div class="dir" id="d-pad-down" aria-label="Down">▼</div>
+            <div class="dir" id="d-pad-left" aria-label="Left">◀</div>
+            <div class="dir" id="d-pad-right" aria-label="Right">▶</div>
+          </div>
+          <div class="action-buttons">
+            <div class="buttons">
+              <button id="b-btn" aria-label="B Button">B</button>
+              <button id="a-btn" aria-label="A Button">A</button>
+            </div>
+            <div class="system-buttons">
+              <button id="select-btn" aria-label="Select"></button>
+              <button id="start-btn" aria-label="Start"></button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="log-and-modal-wrapper" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-content">
+      <h2 id="modal-title">SYSTEM LOG</h2>
+      <div id="log-display"></div>
+      <div id="cartridge-list" style="display:none;"></div>
+    </div>
+  </div>
+
+  <div id="data-store" style="display:none;">
+    <article data-title="Meritocracy">
+      <div data-vector="base">An ideology that legitimizes social hierarchy as a fair outcome of measured talent and effort.</div>
+      <div data-vector="enhance">Competition intensifies; everything is quantified and ranked. Credentials become the sole measure of worth. A culture of relentless optimization emerges.</div>
+      <div data-vector="obsolesce">Uncredentialed wisdom and hands-on experience are devalued. Aristocratic privilege by birth is replaced by a new credentialed elite. Apprenticeships fade.</div>
+      <div data-vector="retrieve">The Protestant Work Ethic returns, secularized as 'hustle culture'. The belief in a 'calling' is reframed as personal ambition and worldly success.</div>
+      <div data-vector="reverse">The ideal of 'fairness' inverts into a rigid caste system based on test scores and elite schooling, creating widespread anxiety, impostor syndrome, and burnout. Those who fail are seen as morally undeserving.</div>
+    </article>
+    <article data-title="Corporate Culture">
+      <div data-vector="base">A shared mythology to maintain employee alignment and productivity within a company.</div>
+      <div data-vector="enhance">Brand loyalty deepens. The company's mission is amplified, becoming a central part of employee identity. Productivity metrics are celebrated as moral victories.</div>
+      <div data-vector="obsolesce">The boundary between work and life erodes completely. The 9-to-5 workday is displaced by 24/7 availability. Personal time is seen as a lack of commitment.</div>
+      <div data-vector="retrieve">Pre-industrial ideals of craftsmanship and guild loyalty are reframed as 'passion' for the job. The worker's identity is fully retrieved from the craft and placed onto the corporation.</div>
+      <div data-vector="reverse">The positive 'we are a family' metaphor flips into a tool of emotional manipulation. Loyalty is weaponized to suppress dissent and justify exploitation, as leaving the 'family' becomes a betrayal.</div>
+    </article>
+    <article data-title="Broken Windows">
+      <div data-vector="base">A common-sense theory that policing minor infractions prevents more serious crime by signaling order.</div>
+      <div data-vector="enhance">Visible orderliness increases. Public spaces feel cleaner and more controlled. Property values in targeted areas may rise.</div>
+      <div data-vector="obsolesce">Community-based, informal social controls are displaced by formal, often aggressive, policing. Trust between police and residents in heavily policed areas deteriorates.</div>
+      <div data-vector="retrieve">The Puritanical concern for public morality and order returns in a secular form. The 'village stocks' are retrieved as public shaming through arrests for minor violations.</div>
+      <div data-vector="reverse">The focus on 'order' flips into a system of pervasive surveillance and harassment, disproportionately targeting marginalized communities. The policy designed to create safety instead generates fear and resentment.</div>
+    </article>
+  </div>
+
+  <div class="ios-hint" id="ios-hint">Tip: On iOS, add to Home Screen for true fullscreen & wake‑lock.</div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      // --- STATE ---
+      let systemsData = [];
+      let currentCartridge = 0;
+      let probePos = { x: 0, y: 0 }; // Range -5..5
+      let logEntries = [];
+      let audioCtx, masterGain;
+      let wakeLock = null;
+
+      // --- DOM ELEMENTS ---
+      const probe = document.getElementById('probe');
+      const readoutTitle = document.getElementById('readout-title');
+      const readoutText = document.getElementById('readout-text');
+      const modalWrapper = document.getElementById('log-and-modal-wrapper');
+      const modalTitle = document.getElementById('modal-title');
+      const logDisplay = document.getElementById('log-display');
+      const cartList = document.getElementById('cartridge-list');
+      const fsBtn = document.getElementById('fullscreen-btn');
+      const iosHint = document.getElementById('ios-hint');
+
+      // --- AUDIO (mobile friendly) ---
+      function initAudio() {
+        if (!audioCtx) {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+          masterGain = audioCtx.createGain();
+          masterGain.gain.value = 0.12;
+          masterGain.connect(audioCtx.destination);
+        }
+        // iOS unlock one-shot silent buffer
+        try {
+          const b = audioCtx.createBuffer(1, 1, 22050);
+          const src = audioCtx.createBufferSource();
+          src.buffer = b; src.connect(masterGain); src.start(0);
+        } catch (e) {}
+      }
+
+      function beep({ type='move', dur=0.12 }) {
+        if (!audioCtx) return;
+        const o = audioCtx.createOscillator();
+        const g = audioCtx.createGain();
+        o.connect(g); g.connect(masterGain);
+        g.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.18, audioCtx.currentTime + 0.01);
+        switch (type) {
+          case 'move': o.type='square'; o.frequency.setValueAtTime(320, audioCtx.currentTime); break;
+          case 'analyze': o.type='sine'; o.frequency.setValueAtTime(820, audioCtx.currentTime); break;
+          case 'open': o.type='sawtooth'; o.frequency.setValueAtTime(220, audioCtx.currentTime); break;
+          case 'confirm': o.type='triangle'; o.frequency.setValueAtTime(480, audioCtx.currentTime); break;
+        }
+        o.start();
+        g.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + dur);
+        o.stop(audioCtx.currentTime + dur);
+      }
+
+      // --- DATA PARSING ---
+      function parseData() {
+        const articles = document.getElementById('data-store').querySelectorAll('article');
+        articles.forEach(article => {
+          const title = article.dataset.title;
+          const vectors = {};
+          article.querySelectorAll('div[data-vector]').forEach(div => {
+            vectors[div.dataset.vector] = div.textContent;
+          });
+          systemsData.push({ title, vectors });
+          const cartItem = document.createElement('div');
+          cartItem.textContent = title; cartItem.dataset.title = title; cartList.appendChild(cartItem);
+        });
+      }
+
+      // --- CORE LOGIC ---
+      function loadCartridge(title) {
+        const index = systemsData.findIndex(s => s.title === title);
+        if (index === -1) return;
+        currentCartridge = index;
+        probePos = { x: 0, y: 0 };
+        logEntries = [];
+        updateProbePosition();
+        updateReadout();
+        beep({ type: 'confirm' });
+      }
+
+      function updateProbePosition() {
+        const left = (probePos.x + 5) * 10;
+        const top = (-probePos.y + 5) * 10;
+        probe.style.left = `${left}%`;
+        probe.style.top = `${top}%`;
+        updateReadout();
+      }
+
+      function generateScenarioText() {
+        const system = systemsData[currentCartridge];
+        if (!system) return { title: 'ERROR', text: 'No Cartridge Loaded.' };
+        let text = system.vectors.base;
+        const x_abs = Math.abs(probePos.x);
+        const y_abs = Math.abs(probePos.y);
+        if (x_abs > 1 || y_abs > 1) text += ' // SCENARIO DRIFT: ';
+        if (probePos.y > 1) text += ` ${system.vectors.enhance}`;
+        if (probePos.y < -1) text += ` ${system.vectors.obsolesce}`;
+        if (probePos.x < -1) text += ` ${system.vectors.retrieve}`;
+        if (probePos.x > 1) text += ` ${system.vectors.reverse}`;
+        return { title: system.title, text };
+      }
+
+      function updateReadout() {
+        const { title, text } = generateScenarioText();
+        readoutTitle.textContent = title;
+        readoutText.textContent = text;
+      }
+
+      function moveProbe(dx, dy) {
+        probePos.x = Math.max(-5, Math.min(5, probePos.x + dx));
+        probePos.y = Math.max(-5, Math.min(5, probePos.y + dy));
+        updateProbePosition();
+        beep({ type: 'move' });
+      }
+
+      function analyzeCurrentPosition() {
+        const { text } = generateScenarioText();
+        const coords = `[X:${probePos.x}, Y:${probePos.y}]`;
+        logEntries.unshift({ coords, text });
+        showLog();
+        beep({ type: 'analyze' });
+      }
+
+      // --- MODAL & UI ---
+      function showLog() {
+        modalTitle.textContent = 'SYSTEM LOG';
+        logDisplay.style.display = 'block';
+        cartList.style.display = 'none';
+        logDisplay.innerHTML = logEntries.map(entry => `<div class="log-entry"><strong>${entry.coords}</strong><p>${entry.text}</p></div>`).join('');
+        modalWrapper.style.display = 'flex';
+      }
+      function showCartridges() {
+        modalTitle.textContent = 'SELECT CARTRIDGE';
+        logDisplay.style.display = 'none';
+        cartList.style.display = 'block';
+        modalWrapper.style.display = 'flex';
+        beep({ type: 'open' });
+      }
+
+      // --- Fullscreen + Wake Lock ---
+      async function toggleFullscreen() {
+        const doc = document;
+        const el = doc.documentElement;
+        try {
+          if (!doc.fullscreenElement) {
+            if (el.requestFullscreen) await el.requestFullscreen({ navigationUI: 'hide' });
+          } else {
+            await doc.exitFullscreen();
+          }
+        } catch (e) {}
+        // Wake lock (where supported)
+        try {
+          if (!wakeLock && 'wakeLock' in navigator) {
+            wakeLock = await navigator.wakeLock.request('screen');
+            wakeLock.addEventListener('release', () => { wakeLock = null; });
+          }
+        } catch (e) {}
+      }
+
+      function maybeShowIOSHint() {
+        const isIOS = /iP(hone|od|ad)/.test(navigator.platform) || (navigator.userAgent.includes('Mac') && 'ontouchend' in document);
+        if (isIOS) iosHint.style.display = 'block';
+      }
+
+      // --- EVENT LISTENERS ---
+      function onPress(el, handler) {
+        const opts = { passive: false };
+        el.addEventListener('pointerdown', (e) => { e.preventDefault(); handler(); initAudio(); });
+        el.addEventListener('click', (e) => { e.preventDefault(); handler(); initAudio(); });
+        el.addEventListener('touchstart', (e) => { e.preventDefault(); handler(); initAudio(); }, opts);
+      }
+
+      function setupEventListeners() {
+        ['touchstart','touchend','pointerdown'].forEach(evt => document.body.addEventListener(evt, initAudio, { once: true, passive: true }));
+
+        onPress(document.getElementById('d-pad-up'), () => moveProbe(0, 1));
+        onPress(document.getElementById('d-pad-down'), () => moveProbe(0, -1));
+        onPress(document.getElementById('d-pad-left'), () => moveProbe(-1, 0));
+        onPress(document.getElementById('d-pad-right'), () => moveProbe(1, 0));
+
+        onPress(document.getElementById('a-btn'), analyzeCurrentPosition);
+        onPress(document.getElementById('b-btn'), () => { modalWrapper.style.display = 'none'; });
+        onPress(document.getElementById('select-btn'), showLog);
+        onPress(document.getElementById('start-btn'), showCartridges);
+        onPress(fsBtn, toggleFullscreen);
+
+        modalWrapper.addEventListener('click', (e) => { if (e.target.id === 'log-and-modal-wrapper') modalWrapper.style.display = 'none'; });
+        cartList.addEventListener('click', (e) => { if (e.target.dataset.title) { loadCartridge(e.target.dataset.title); modalWrapper.style.display = 'none'; } });
+
+        window.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && wakeLock) { try { navigator.wakeLock.request('screen'); } catch(e){} } });
+        window.addEventListener('resize', () => { /* nothing critical; CSS handles */ });
+      }
+
+      // --- INIT ---
+      parseData();
+      loadCartridge(systemsData[0].title);
+      setupEventListeners();
+      maybeShowIOSHint();
+    });
+  </script>
+</body>
+</html>

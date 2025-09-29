@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TETRAD CONTROLLER :: Geertzian Systems</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --nes-bg: #D0D0D0;
+            --nes-dark-gray: #7C7C7C;
+            --nes-black: #000000;
+            --nes-white: #FCFCFC;
+            --nes-red: #B53120;
+            --nes-blue: #005AD9;
+            --font-pixel: 'Press Start 2P', cursive;
+        }
+
+        html, body {
+            height: 100%;
+            margin: 0;
+            overflow: hidden;
+            background-color: #222;
+        }
+
+        body {
+            font-family: var(--font-pixel);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 10px;
+        }
+
+        .nes-layout {
+            width: 100%;
+            height: 100%;
+            max-width: 1400px;
+            display: flex;
+            flex-direction: column;
+            border: 4px solid var(--nes-black);
+            background: #444;
+            box-shadow: inset 0 0 0 5px #333;
+        }
+
+        /* --- TV Screen --- */
+        .tv-screen-wrapper {
+            flex-grow: 1;
+            background: var(--nes-black);
+            padding: 20px;
+            position: relative;
+            overflow-y: auto;
+            border-bottom: 4px solid var(--nes-black);
+            scrollbar-color: var(--nes-dark-gray) var(--nes-black);
+        }
+        .tv-screen-wrapper::after {
+            content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;
+            background: repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.05) 0, rgba(255, 255, 255, 0.05) 1px, transparent 1px, transparent 3px);
+            z-index: 100;
+        }
+
+        #tv-content {
+            font-family: 'Verdana', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: var(--nes-bg);
+            padding: 20px 30px;
+            min-height: 100%;
+            border: 4px solid var(--nes-dark-gray);
+            transition: opacity 0.1s linear;
+        }
+
+        #tv-content.loading {
+            opacity: 0.2;
+            animation: flicker 0.2s infinite alternate;
+        }
+        @keyframes flicker { 0% { opacity: 0.2; } 100% { opacity: 0.4; } }
+
+        /* --- Console Deck --- */
+        .console-deck {
+            height: 250px;
+            background: var(--nes-bg);
+            flex-shrink: 0;
+            border-top: 4px solid #555;
+            padding: 20px;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        /* --- NES Console --- */
+        .console {
+            width: 350px;
+            height: 150px;
+            background: var(--nes-dark-gray);
+            border: 4px solid var(--nes-black);
+            padding: 15px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        .console-buttons { display: flex; flex-direction: column; gap: 10px; }
+        .console-buttons button {
+            width: 70px; height: 30px; background: var(--nes-red); color: var(--nes-white);
+            border: 2px solid var(--nes-black); box-shadow: 2px 2px var(--nes-black); font-family: var(--font-pixel);
+            font-size: 10px; cursor: pointer;
+        }
+        .console-buttons button:active { transform: translate(1px, 1px); box-shadow: 1px 1px var(--nes-black); }
+        .cartridge-slot {
+            flex-grow: 1; height: 100%; background: var(--nes-black);
+            border: 4px solid #555; box-shadow: inset 2px 2px 5px #333;
+            display: flex; align-items: center; justify-content: center;
+            color: var(--nes-dark-gray); text-align: center; font-size: 10px; padding: 10px;
+        }
+
+        /* --- NES Controller --- */
+        .controller {
+            width: 300px; height: 130px; background: var(--nes-dark-gray); border: 4px solid var(--nes-black);
+            border-radius: 8px; display: flex; align-items: center; justify-content: space-between;
+            padding: 15px 25px;
+        }
+        .d-pad { position: relative; width: 80px; height: 80px; }
+        .d-pad .direction {
+            position: absolute; background: var(--nes-black); width: 26px; height: 26px;
+            cursor: pointer; transition: background-color 0.1s;
+        }
+        .d-pad .direction:hover { background: #333; }
+        .d-pad .direction.active { background: var(--nes-red); }
+        #d-pad-up { top: 0; left: 27px; }
+        #d-pad-down { bottom: 0; left: 27px; }
+        #d-pad-left { top: 27px; left: 0; }
+        #d-pad-right { top: 27px; right: 0; }
+        .center-buttons { display: flex; gap: 8px; }
+        .center-buttons button {
+            width: 50px; height: 20px; border-radius: 10px; background: var(--nes-black);
+            border: 2px solid #555; color: var(--nes-red); font-size: 8px; padding-top: 2px;
+            font-family: var(--font-pixel); cursor: pointer;
+        }
+        .action-buttons { display: flex; gap: 10px; }
+        .action-buttons .button-label { font-size: 10px; color: var(--nes-red); text-align: center; }
+        .action-buttons button {
+            width: 40px; height: 40px; border-radius: 50%; background: var(--nes-red);
+            border: 4px solid var(--nes-black); font-family: var(--font-pixel);
+            font-size: 14px; color: var(--nes-black); cursor: not-allowed;
+        }
+
+        /* --- Cartridge Modal --- */
+        #cartridge-modal {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8); z-index: 1000;
+            padding: 5%;
+        }
+        #cartridge-modal-content {
+            background: var(--nes-dark-gray); border: 4px solid var(--nes-black);
+            padding: 20px; height: 100%; display: flex; flex-direction: column;
+        }
+        #cartridge-modal-content h2 { color: var(--nes-white); text-shadow: 2px 2px var(--nes-red); margin-top: 0; text-align: center; }
+        #cartridge-grid {
+            flex-grow: 1; overflow-y: auto; display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 20px; padding: 10px;
+        }
+        .modal-cartridge {
+            background: #999; border: 4px solid var(--nes-black); padding: 10px;
+            font-size: 10px; color: var(--nes-black); text-align: center; cursor: pointer;
+            height: 100px; display: flex; align-items: center; justify-content: center;
+        }
+        .modal-cartridge:hover { background: var(--nes-bg); }
+
+        /* --- Content Specific Styles --- */
+        #tv-content h2 { font-size: 20px; color: var(--nes-red); text-shadow: 2px 2px #000; margin-top: 0; }
+        #tv-content h3 { font-size: 16px; color: var(--nes-blue); margin-top: 25px; border-bottom: 2px solid var(--nes-dark-gray); padding-bottom: 5px; }
+        #tv-content blockquote { border-left: 4px solid var(--nes-blue); background: #e0e0e0; padding: 10px; margin: 15px 0; font-style: italic; }
+        #tv-content table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 14px; background: var(--nes-white); }
+        #tv-content th, #tv-content td { border: 2px solid var(--nes-dark-gray); padding: 8px; text-align: left; }
+        #tv-content th { background-color: var(--nes-dark-gray); color: var(--nes-white); }
+        #tv-content .mermaid { background: #fff; padding: 10px; border: 2px solid var(--nes-dark-gray); }
+
+        @media (max-width: 768px) {
+            body { padding: 5px; height: auto; overflow: visible; }
+            .console-deck { height: auto; flex-direction: column; }
+            .controller { width: 100%; max-width: 300px; }
+            #cartridge-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="nes-layout">
+        <div class="tv-screen-wrapper">
+            <div id="tv-content"></div>
+        </div>
+
+        <div class="console-deck">
+            <div class="console">
+                <div class="console-buttons">
+                    <button id="eject-btn">EJECT</button>
+                    <button>RESET</button>
+                </div>
+                <div class="cartridge-slot" id="cartridge-slot-display">NO CARTRIDGE</div>
+            </div>
+
+            <div class="controller">
+                <div class="d-pad" id="d-pad">
+                    <div class="direction" id="d-pad-up" data-vector="enhance"></div>
+                    <div class="direction" id="d-pad-down" data-vector="obsolesce"></div>
+                    <div class="direction" id="d-pad-left" data-vector="retrieve"></div>
+                    <div class="direction" id="d-pad-right" data-vector="reverse"></div>
+                </div>
+                <div class="center-buttons">
+                    <button id="select-btn">SELECT</button>
+                    <button id="start-btn">START</button>
+                </div>
+                <div class="action-buttons">
+                    <div>
+                        <button disabled>B</button>
+                        <div class="button-label">B</div>
+                    </div>
+                    <div>
+                        <button disabled>A</button>
+                        <div class="button-label">A</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="cartridge-modal">
+        <div id="cartridge-modal-content">
+            <h2>SELECT CARTRIDGE</h2>
+            <div id="cartridge-grid"></div>
+        </div>
+    </div>
+    
+    <div id="data-store" style="display: none;">
+        <!-- All 50+ <article> tags from the original prompt would be placed here -->
+        <!-- Example subset: -->
+        <article data-title="Corporate Culture">
+            <h2>Corporate Brand Culture</h2>
+            <h3>System Identification</h3><p><strong>System Name:</strong> "Acme Corp Culture"</p><p><strong>Core Purpose:</strong> Maintain employee alignment through shared mythology.</p>
+            <blockquote>(1) symbols (logos/mottos) which act to (2) establish moods (belonging) and motivations (overwork) by (3) formulating conceptions of corporate destiny and (4) clothing these with stock price validation that (5) makes company loyalty seem uniquely realistic.</blockquote>
+            <table><thead><tr><th>Vector</th><th>Entities</th><th>Morphisms</th><th>Model-OF</th><th>Model-FOR</th></tr></thead><tbody>
+                <tr><td>Enhance</td><td>◻ Logo ◻ Values posters</td><td>→ signify → decorate</td><td>"We're a family"</td><td>"Wear branded merch"</td></tr>
+                <tr><td>Obsolesce</td><td>◻ Work/life balance</td><td>→ blur boundaries</td><td>"All-in commitment"</td><td>"Be available 24/7"</td></tr>
+                <tr><td>Retrieve</td><td>◻ Craftsmanship ideal</td><td>→ frame as 'passion'</td><td>"Pre-industrial dedication"</td><td>"Love your work"</td></tr>
+                <tr><td>Reverse</td><td>◻ "Family" metaphor</td><td>→ weaponize loyalty</td><td>"Family can't be quit"</td><td>"Guilt trip dissenters"</td></tr>
+            </tbody></table>
+        </article>
+        <article data-title="Vatican II">
+            <h2>Vatican II (1962–65)</h2>
+            <h3>System Identification</h3><p><strong>System Name:</strong> “Vatican II—Aggiornamento Machine”</p><p><strong>Core Purpose:</strong> Re-orient global Catholic ritual/authority toward modernity.</p>
+            <table><thead><tr><th>Vector</th><th>Entities (◻)</th><th>Morphisms (→)</th><th>Model-OF</th><th>Model-FOR</th></tr></thead><tbody>
+                <tr><td>Enhance</td><td>◻ Lay participation ◻ Vernacular</td><td>→ include → empower</td><td>Church as 'People of God'</td><td>Participate, discern</td></tr>
+                <tr><td>Obsolesce</td><td>◻ Latin Mass exclusivity ◻ Clericalism</td><td>→ de-center → reduce</td><td>Hierarchical pyramid</td><td>Obey reformed practice</td></tr>
+                <tr><td>Retrieve</td><td>◻ Early Church (Patristics)</td><td>→ ressourcement</td><td>Apostolic community</td><td>Collegial governance</td></tr>
+                <tr><td>Reverse</td><td>◻ Openness to world</td><td>→ polarization, schism</td><td>Unity via uniformity</td><td>"Spirit of Vatican II" debates</td></tr>
+            </tbody></table>
+        </article>
+        <article data-title="Meritocracy">
+            <h2>Meritocracy Ideology</h2>
+            <h3>System Identification</h3><p><strong>System Name:</strong> “Meritocracy”</p><p><strong>Core Purpose:</strong> Legitimize hierarchy as the fair outcome of measured talent.</p>
+            <table><thead><tr><th>Vector</th><th>Entities (◻)</th><th>Morphisms (→)</th><th>Model-OF</th><th>Model-FOR</th></tr></thead><tbody>
+                <tr><td>Enhance</td><td>◻ Competition ◻ Standardized tests</td><td>→ quantify → rank</td><td>Talent is measurable</td><td>Optimize CV</td></tr>
+                <tr><td>Obsolesce</td><td>◻ Lineage/aristocracy ◻ Uncredentialed wisdom</td><td>→ delegitimize</td><td>Inherited status</td><td>"Get the degree"</td></tr>
+                <tr><td>Retrieve</td><td>◻ Protestant work ethic</td><td>→ secularize as 'hustle'</td><td>Calling as worldly success</td><td>"Rise and grind"</td></tr>
+                <tr><td>Reverse</td><td>◻ Fairness ideal</td><td>→ credential-based caste system, anxiety</td><td>Equal opportunity</td><td>"Suffer from impostor syndrome"</td></tr>
+            </tbody></table>
+        </article>
+    </div>
+
+    <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- STATE ---
+            let systemsData = [];
+            let currentCartridgeIndex = null;
+
+            // --- DOM ELEMENTS ---
+            const dataStore = document.getElementById('data-store');
+            const tvContent = document.getElementById('tv-content');
+            const dPad = document.getElementById('d-pad');
+            const selectBtn = document.getElementById('select-btn');
+            const startBtn = document.getElementById('start-btn');
+            const ejectBtn = document.getElementById('eject-btn');
+            const cartSlotDisplay = document.getElementById('cartridge-slot-display');
+            const modal = document.getElementById('cartridge-modal');
+            const cartGrid = document.getElementById('cartridge-grid');
+
+            // --- INITIALIZATION ---
+            const init = () => {
+                mermaid.initialize({ startOnLoad: false, theme: 'neutral', fontFamily: 'Verdana' });
+                parseDataAndBuildModal();
+                setupEventListeners();
+                loadCartridge(0); // Load first cartridge by default
+            };
+
+            // --- DATA & MODAL SETUP ---
+            const parseDataAndBuildModal = () => {
+                const articles = dataStore.querySelectorAll('article');
+                articles.forEach((article, index) => {
+                    const title = article.dataset.title;
+                    systemsData.push({ title, html: article.innerHTML });
+                    
+                    const cartItem = document.createElement('div');
+                    cartItem.className = 'modal-cartridge';
+                    cartItem.dataset.index = index;
+                    cartItem.textContent = title;
+                    cartGrid.appendChild(cartItem);
+                });
+            };
+
+            // --- CORE FUNCTIONS ---
+            const loadCartridge = (index) => {
+                if (index === null || index >= systemsData.length) return;
+                currentCartridgeIndex = index;
+                cartSlotDisplay.textContent = systemsData[index].title;
+                renderContent('all');
+                modal.style.display = 'none';
+                resetController();
+            };
+
+            const renderContent = (vector) => {
+                if (currentCartridgeIndex === null) return;
+                
+                tvContent.classList.add('loading');
+                
+                setTimeout(async () => {
+                    const fullHtml = systemsData[currentCartridgeIndex].html;
+                    
+                    if (vector === 'all') {
+                        tvContent.innerHTML = fullHtml;
+                    } else {
+                        const tempDiv = document.createElement('div');
+                        tempDiv.innerHTML = fullHtml;
+                        const table = tempDiv.querySelector('table');
+                        const header = tempDiv.querySelector('h2');
+                        let contentHtml = header ? header.outerHTML : '';
+                        
+                        if (table) {
+                            const vectorMap = { enhance: 0, obsolesce: 1, retrieve: 2, reverse: 3 };
+                            const rowIndex = vectorMap[vector];
+                            const rows = table.querySelectorAll('tbody tr');
+                            if (rows && rows[rowIndex]) {
+                                contentHtml += `
+                                    <h3>TETRAD VECTOR: ${vector.toUpperCase()}</h3>
+                                    <table>
+                                        <thead>${table.querySelector('thead').innerHTML}</thead>
+                                        <tbody>${rows[rowIndex].outerHTML}</tbody>
+                                    </table>`;
+                            }
+                        } else {
+                             contentHtml += "<p>No detailed vectors available for this system.</p>";
+                        }
+                        tvContent.innerHTML = contentHtml;
+                    }
+                    
+                    try {
+                        await mermaid.run({ nodes: tvContent.querySelectorAll('.mermaid') });
+                    } catch (e) { console.error("Mermaid error:", e); }
+                    
+                    tvContent.classList.remove('loading');
+                    tvContent.parentElement.scrollTop = 0;
+                }, 300);
+            };
+
+            const resetController = () => {
+                dPad.querySelectorAll('.direction').forEach(d => d.classList.remove('active'));
+            };
+
+            // --- EVENT LISTENERS ---
+            const setupEventListeners = () => {
+                dPad.addEventListener('click', (e) => {
+                    if (e.target.classList.contains('direction')) {
+                        resetController();
+                        e.target.classList.add('active');
+                        renderContent(e.target.dataset.vector);
+                    }
+                });
+                
+                selectBtn.addEventListener('click', () => {
+                    resetController();
+                    renderContent('all');
+                });
+
+                startBtn.addEventListener('click', () => {
+                     resetController();
+                     renderContent('all');
+                });
+
+                ejectBtn.addEventListener('click', () => {
+                    modal.style.display = 'flex';
+                });
+                
+                modal.addEventListener('click', (e) => {
+                    if (e.target.classList.contains('modal-cartridge')) {
+                        loadCartridge(parseInt(e.target.dataset.index));
+                    } else if (e.target.id === 'cartridge-modal') { // Click outside content to close
+                        modal.style.display = 'none';
+                    }
+                });
+            };
+
+            init();
+        });
+    </script>
+</body>
+</html>

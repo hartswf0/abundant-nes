@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Geertzian Cultural Systems Analysis</title>
+    <style>
+        :root {
+            --bg-color: #f4f4f9;
+            --card-bg: #ffffff;
+            --text-color: #333;
+            --header-color: #2c3e50;
+            --accent-color: #3498db;
+            --shadow-color: rgba(0, 0, 0, 0.1);
+            --border-color: #e0e0e0;
+            --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+        }
+
+        body {
+            font-family: var(--font-family);
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        h1 {
+            color: var(--header-color);
+            font-size: 2.5em;
+            margin-bottom: 0.5em;
+        }
+
+        header p {
+            max-width: 800px;
+            margin: 0 auto;
+            color: #555;
+        }
+
+        #card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 25px;
+            max-width: 1800px;
+            margin: 0 auto;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            box-shadow: 0 4px 15px var(--shadow-color);
+            padding: 25px;
+            cursor: pointer;
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+        }
+        
+        .card.template-card {
+            background-color: #e8f4fd;
+            border-left: 5px solid var(--accent-color);
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+        }
+
+        .card h2 {
+            font-size: 1.5em;
+            color: var(--header-color);
+            margin-top: 0;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .card h3 {
+            font-size: 1.1em;
+            color: var(--accent-color);
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+
+        .card-category {
+            display: inline-block;
+            background-color: #e0e0e0;
+            color: #555;
+            padding: 4px 10px;
+            border-radius: 15px;
+            font-size: 0.8em;
+            margin-bottom: 15px;
+            font-weight: 500;
+        }
+        
+        .card-category.universal { background-color: #cce5ff; color: #004085; }
+        .card-category.ideology { background-color: #f8d7da; color: #721c24; }
+        .card-category.common-sense { background-color: #fff3cd; color: #856404; }
+        .card-category.os { background-color: #d1ecf1; color: #0c5460; }
+        .card-category.art { background-color: #d4edda; color: #155724; }
+        .card-category.religion { background-color: #e2d9f3; color: #3c2f5d; }
+
+
+        blockquote {
+            font-style: italic;
+            border-left: 3px solid var(--accent-color);
+            padding-left: 15px;
+            margin: 15px 0;
+            background-color: #fafafa;
+            border-radius: 0 5px 5px 0;
+            padding: 10px 15px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+            font-size: 0.9em;
+        }
+
+        th, td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f2f2f2;
+            font-weight: 600;
+        }
+
+        tbody tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+
+        .mermaid {
+            width: 100%;
+            text-align: center;
+            margin-top: 20px;
+        }
+        
+        pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        /* Modal Styles */
+        #modal-container {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0, 0, 0, 0.7);
+        }
+
+        #modal-content {
+            background-color: var(--card-bg);
+            margin: 5% auto;
+            padding: 30px;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 900px;
+            position: relative;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .close-button {
+            color: #aaa;
+            position: absolute;
+            top: 15px;
+            right: 25px;
+            font-size: 35px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .close-button:hover,
+        .close-button:focus {
+            color: #333;
+        }
+
+        @media (max-width: 480px) {
+            body { padding: 10px; }
+            #card-grid { grid-template-columns: 1fr; }
+            h1 { font-size: 2em; }
+            #modal-content {
+                width: 95%;
+                margin: 10% auto;
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Geertzian Cultural Systems Analysis</h1>
+        <p>A collection of analyses applying Clifford Geertz's frameworks to various cultural systems. Click on any card to view it in full screen.</p>
+    </header>
+
+    <main id="card-grid">
+
+        <!-- Universal Prompt Template -->
+        <article class="card template-card" data-category="universal">
+            <span class="card-category universal">Universal Prompt</span>
+            <h2>Geertzian Cultural System Analyzer: Universal Prompt</h2>
+            <div class="card-content">
+                <h3>System Identification</h3>
+                <p><strong>System Name:</strong> [e.g., "AI Slop Ecosystem"]</p>
+                <p><strong>Core Purpose:</strong> [1-sentence description of system's function]</p>
+                <h3>Geertzian Analysis Definition</h3>
+                <blockquote>"(1) a system of symbols which acts to (2) establish powerful, pervasive, and long-lasting moods and motivations in men by (3) formulating conceptions of a general order of existence and (4) clothing these conceptions with such an aura of factuality that (5) the moods and motivations seem uniquely realistic."</blockquote>
+                <h3>Component Breakdown Template</h3>
+                <table>
+                    <thead><tr><th>Component</th><th>Entities (◻)</th><th>Morphisms (→)</th><th>Model-OF (representation)</th><th>Model-FOR (prescription)</th></tr></thead>
+                    <tbody>
+                        <tr><td>1. System of Symbols</td><td>[concrete symbols]</td><td>[how symbols interact]</td><td>How system [mirrors reality]</td><td>How system [dictates behavior]</td></tr>
+                        <tr><td>2. Moods/Motivations</td><td>[emotional states] ◻ [behavioral drives]</td><td>[induction mechanism]</td><td>"This is how the world feels"</td><td>"This is how you should act"</td></tr>
+                        <tr><td>3. Conceptions of Order</td><td>[cosmology/worldview]</td><td>[worldview formulation]</td><td>[Structure of existence]</td><td>[Blueprint for living]</td></tr>
+                        <tr><td>4. Aura of Factuality</td><td>[truth-claiming mechanisms]</td><td>[legitimization process]</td><td>"This is true"</td><td>"This must be obeyed"</td></tr>
+                        <tr><td>5. Uniquely Realistic</td><td>[totalizing framework]</td><td>[exclusion of alternatives]</td><td>"This is how reality works"</td><td>"There is no alternative"</td></tr>
+                    </tbody>
+                </table>
+                <h3>Sitemap Template</h3>
+                <pre class="mermaid">
+graph TD
+    A["&lt;System Name&gt;"]
+    A --> B1["1. System of Symbols"]
+    A --> B2["2. Moods/Motivations"]
+    A --> B3["3. Conceptions of Order"]
+    A --> B4["4. Aura of Factuality"]
+    A --> B5["5. Uniquely Realistic"]
+    B1 --> C1["◻ Symbol 1"]; B1 --> C2["◻ Symbol 2"]
+    B2 --> D1["◻ Mood"]; B2 --> D2["◻ Motivation"]
+    B3 --> E1["Model-OF"]; B3 --> E2["Model-FOR"]
+    B4 --> F1["◻ Legitimizing Mechanism"]
+    B5 --> G1["→ Exclusion Process"]
+                </pre>
+            </div>
+        </article>
+        
+        <!-- Universal Analyses -->
+        <article class="card" data-category="universal">
+            <span class="card-category universal">Universal</span>
+            <h2>Example: Corporate Brand Culture</h2>
+            <div class="card-content">
+                <h3>System Identification</h3>
+                <p><strong>System Name:</strong> "Acme Corp Culture"</p>
+                <p><strong>Core Purpose:</strong> Maintain employee alignment through shared mythology.</p>
+                <h3>Geertzian Analysis</h3>
+                <blockquote>"(1) a system of symbols (logos/mottos) which acts to (2) establish powerful moods (belonging) and motivations (overwork) by (3) formulating conceptions of corporate destiny and (4) clothing these with stock price validation that (5) makes company loyalty seem uniquely realistic."</blockquote>
+                <h3>Component Breakdown</h3>
+                <table>
+                    <thead><tr><th>Component</th><th>Entities</th><th>Morphisms</th><th>Model-OF</th><th>Model-FOR</th></tr></thead>
+                    <tbody>
+                        <tr><td>1. Symbols</td><td>◻ Logo ◻ Values posters</td><td>→ signify → decorate</td><td>"We're a family"</td><td>"Wear branded merch"</td></tr>
+                        <tr><td>2. Moods/Motivations</td><td>◻ Belonging ◻ Promotion hunger</td><td>→ induce → reward</td><td>"Work is identity"</td><td>"Sacrifice for success"</td></tr>
+                        <tr><td>3. Conceptions of Order</td><td>◻ "Disrupt or die"</td><td>→ formulate</td><td>Market Darwinism</td><td>Constant hustle</td></tr>
+                        <tr><td>4. Aura of Factuality</td><td>◻ Stock price ◻ All-hands applause</td><td>→ sacralize → validate</td><td>"Shareholders = truth"</td><td>"Obey growth targets"</td></tr>
+                        <tr><td>5. Uniquely Realistic</td><td>◻ "There's no alternative"</td><td>→ silence dissent</td><td>"Capitalism is nature"</td><td>"Comply or leave"</td></tr>
+                    </tbody>
+                </table>
+                <h3>Sitemap</h3>
+                <pre class="mermaid">
+graph TD
+    A["Acme Corp Culture"]
+    A --> B1["1. Symbols"]
+    A --> B2["2. Moods/Motivations"]
+    A --> B3["3. Conceptions of Order"]
+    A --> B4["4. Aura of Factuality"]
+    A --> B5["5. Uniquely Realistic"]
+    B1 --> C1["◻ Logo"]; B1 --> C2["◻ Values Posters"]
+    B2 --> D1["◻ Belonging"]; B2 --> D2["◻ Promotion Hunger"]
+    B3 --> E1["Model-OF: Market Darwinism"]; B3 --> E2["Model-FOR: Constant hustle"]
+    B4 --> F1["◻ Stock Price"]; B4 --> F2["◻ All-Hands Applause"]
+    B5 --> G1["→ Silence Dissent"]
+                </pre>
+            </div>
+        </article>
+
+        <article class="card" data-category="universal">
+            <span class="card-category universal">Universal</span>
+            <h2>Vatican II (1962–65)</h2>
+            <div class="card-content">
+                <h3>System Identification</h3>
+                <p><strong>System Name:</strong> “Vatican II—Aggiornamento Machine”</p>
+                <p><strong>Core Purpose:</strong> Re-orient global Catholic ritual/authority toward modernity and lay participation.</p>
+                <h3>Geertzian Analysis</h3>
+                <blockquote>“(1) A system of symbols (council texts, vernacular liturgy, altar turned to people) which acts to (2) establish powerful moods and motivations (openness, participation, conscience) by (3) formulating conceptions of a general order (Church in the modern world) and (4) clothing them with an aura of factuality (conciliar authority, global episcopal assent) that (5) makes the reformed rites and roles seem uniquely realistic.”</blockquote>
+                <h3>Component Breakdown</h3>
+                <table>
+                    <thead><tr><th>Component</th><th>Entities (◻)</th><th>Morphisms (→)</th><th>Model-OF</th><th>Model-FOR</th></tr></thead>
+                    <tbody>
+                        <tr><td>1. Symbols</td><td>◻ Vernacular Mass ◻ Documents</td><td>→ update → include</td><td>Church amidst history</td><td>Active laity, shared worship</td></tr>
+                        <tr><td>2. Moods/Motivations</td><td>◻ Hope ◻ Conscience</td><td>→ induce → authorize</td><td>Renewal feels possible</td><td>Participate, discern</td></tr>
+                        <tr><td>3. Conceptions of Order</td><td>◻ “People of God”</td><td>→ formulate</td><td>Pilgrim Church</td><td>Collegial governance</td></tr>
+                        <tr><td>4. Aura of Factuality</td><td>◻ Council votes ◻ Papal promulgation</td><td>→ validate</td><td>“The Church decided”</td><td>Obey reformed practice</td></tr>
+                        <tr><td>5. Uniquely Realistic</td><td>◻ Global uniform reform</td><td>→ exclude Latin-only ideal</td><td>Modern Church</td><td>No return to pre-1962 normal</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </article>
+
+        <article class="card" data-category="universal">
+            <span class="card-category universal">Universal</span>
+            <h2>Selma & the Voting Rights Act (1965)</h2>
+            <div class="card-content">
+                <h3>System Identification</h3>
+                <p><strong>System Name:</strong> “Black Church Civil Ritual of Rights”</p>
+                <p><strong>Core Purpose:</strong> Stage moral sovereignty to force federal protection of voting rights.</p>
+                <h3>Geertzian Analysis</h3>
+                <blockquote>“(1) Symbols (hymns, marches, pulpits) (2) establish moods/motivations (courage, disciplined nonviolence) by (3) formulating order (America judged by its creed) and (4) clothing it with factuality (televised beatings, clergy witness) so (5) justice claims feel uniquely realistic.”</blockquote>
+                <h3>Component Breakdown</h3>
+                <table>
+                    <thead><tr><th>Component</th><th>Entities</th><th>Morphisms</th><th>Model-OF</th><th>Model-FOR</th></tr></thead>
+                    <tbody>
+                        <tr><td>1. Symbols</td><td>◻ March ◻ Hymn ◻ Cross</td><td>→ sacralize protest</td><td>Nation under oath</td><td>Walk, witness</td></tr>
+                        <tr><td>2. Moods/Motivations</td><td>◻ Fear→Resolve</td><td>→ transform</td><td>Suffering as proof</td><td>Endure, stay nonviolent</td></tr>
+                        <tr><td>3. Conceptions of Order</td><td>◻ Covenant nation</td><td>→ interpret</td><td>Creed vs practice</td><td>Federal redress</td></tr>
+                        <tr><td>4. Aura of Factuality</td><td>◻ TV footage ◻ Arrests</td><td>→ expose</td><td>State violence</td><td>Pass VRA, enforce</td></tr>
+                        <tr><td>5. Uniquely Realistic</td><td>◻ “Now or never”</td><td>→ delegitimize delay</td><td>Urgent legitimacy</td><td>Immediate reform</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </article>
+
+        <article class="card" data-category="universal">
+            <span class="card-category universal">Universal</span>
+            <h2>PTL / Televangelism Scandal (1980s)</h2>
+            <div class="card-content">
+                <h3>System Identification</h3>
+                <p><strong>System Name:</strong> “Prosperity Broadcast Church”</p>
+                <p><strong>Core Purpose:</strong> Monetize hope via mediated charisma.</p>
+                <h3>Geertzian Analysis</h3>
+                <blockquote>“(1) Spectacle symbols (sets, hotlines) (2) induce moods/motivations (comfort, generosity) by (3) formulating order (wealth = blessing) and (4) validating with ‘proof’ (testimonies, donations meters) so (5) giving feels uniquely realistic.”</blockquote>
+                <h3>Component Breakdown</h3>
+                <table>
+                    <thead><tr><th>Component</th><th>Entities</th><th>Morphisms</th><th>Model-OF</th><th>Model-FOR</th></tr></thead>
+                    <tbody>
+                        <tr><td>1. Symbols</td><td>◻ TV stage ◻ Phone bank</td><td>→ invite</td><td>Grace televised</td><td>Call, pledge</td></tr>
+                        <tr><td>2. Moods/Motivations</td><td>◻ Hope ◻ Guilt</td><td>→ trigger</td><td>Blessing measurable</td><td>Sow seed money</td></tr>
+                        <tr><td>3. Conceptions of Order</td><td>◻ Prosperity gospel</td><td>→ narrate</td><td>Faith→wealth</td><td>Prove faith by giving</td></tr>
+                        <tr><td>4. Aura of Factuality</td><td>◻ On-air testimonies</td><td>→ sacralize</td><td>“Miracles on tape”</td><td>Trust the host</td></tr>
+                        <tr><td>5. Uniquely Realistic</td><td>◻ Closed loop</td><td>→ dismiss critics</td><td>“Touch not anointed”</td><td>Ignore scrutiny</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </article>
+        
+        <!-- Many other cards follow this pattern... Due to space limitations, this example includes a selection of the provided cards. -->
+        
+        <!-- Ideology Template -->
+        <article class="card template-card" data-category="ideology">
+            <span class="card-category ideology">Ideology Prompt</span>
+            <h2>Ideology as a Cultural System: Geertzian Analyzer Prompt</h2>
+            <div class="card-content">
+                <h3>System Identification</h3>
+                <p><strong>System Name:</strong> [e.g., "Meritocracy Ideology"]</p>
+                <p><strong>Core Purpose:</strong> [1-sentence description of system's function]</p>
+                <h3>Geertzian Analysis Definition</h3>
+                <blockquote>"(1) a system of symbols and beliefs which acts to (2) establish pervasive and persistent orientations and commitments by (3) formulating conceptions of social order and legitimacy, and (4) clothing these conceptions with such an aura of obviousness and authority that (5) the orientations and commitments seem uniquely natural and necessary."</blockquote>
+                <h3>Component Breakdown</h3>
+                <table>
+                    <thead><tr><th>Component</th><th>Entities (◻)</th><th>Morphisms (→)</th><th>Model-OF</th><th>Model-FOR</th></tr></thead>
+                    <tbody>
+                        <tr><td>1. Symbols & Beliefs</td><td>◻ Slogans ◻ Narratives ◻ Icons ◻ Doctrines</td><td>→ evoke → justify</td><td>"Ideology mirrors society's values"</td><td>"Uphold or challenge the system"</td></tr>
+                        <tr><td>2. Orientations/Commitments</td><td>◻ Loyalty ◻ Suspicion ◻ Solidarity ◻ Hostility</td><td>→ induce → reinforce</td><td>"This is how society feels"</td><td>"Adopt, defend, or resist"</td></tr>
+                        <tr><td>3. Conceptions of Order</td><td>◻ Social hierarchy ◻ Justice ◻ Authority</td><td>→ express → legitimize</td><td>"Society is structured this way"</td><td>"Behave according to the order"</td></tr>
+                        <tr><td>4. Aura of Obviousness</td><td>◻ Common sense ◻ Official rhetoric ◻ Rituals</td><td>→ naturalize → authorize</td><td>"This is self-evident and true"</td><td>"Accept as given, act accordingly"</td></tr>
+                        <tr><td>5. Natural/Necessary</td><td>◻ Total worldview ◻ Exclusion of alternatives</td><td>→ silence dissent</td><td>"No other way makes sense"</td><td>"Dismiss alternatives as illegitimate"</td></tr>
+                    </tbody>
+                </table>
+                <h3>Sitemap</h3>
+                <pre class="mermaid">
+graph TD
+    A["Ideology as Cultural System"]
+    A --> B1["1. Symbols & Beliefs"]
+    A --> B2["2. Orientations/Commitments"]
+    A --> B3["3. Conceptions of Order"]
+    A --> B4["4. Aura of Obviousness"]
+    A --> B5["5. Natural/Necessary"]
+    B1 --> C1["◻ Slogans"]; B1 --> C2["◻ Doctrines"]
+    B2 --> D1["◻ Loyalty"]; B2 --> D2["◻ Hostility"]
+    B3 --> E1["Model-OF: Society is structured"]; B3 --> E2["Model-FOR: Behave accordingly"]
+    B4 --> F1["◻ Common sense"]
+    B5 --> G1["→ Silence dissent"]
+                </pre>
+            </div>
+        </article>
+        
+        <!-- Ideology Example -->
+        <article class="card" data-category="ideology">
+            <span class="card-category ideology">Ideology</span>
+            <h2>Meritocracy Ideology (20th–21st c.)</h2>
+            <div class="card-content">
+                <h3>System Identification</h3>
+                <p><strong>System Name:</strong> “Meritocracy”</p>
+                <p><strong>Core Purpose:</strong> Legitimize hierarchy as the fair outcome of talent measured by standardized metrics.</p>
+                <h3>Geertzian Ideology Analysis</h3>
+                <blockquote>“(1) a system of symbols and beliefs (test scores, elite diplomas, rankings) which acts to (2) establish orientations and commitments (striving, status anxiety, contempt for ‘undeserving’) by (3) formulating conceptions of social order and legitimacy (hierarchy as earned), and (4) clothing these with an aura of obviousness and authority (metrics, league tables, hiring rubrics) that (5) the commitments seem uniquely natural and necessary.”</blockquote>
+                <h3>Component Breakdown</h3>
+                <table>
+                    <thead><tr><th>Component</th><th>Entities (◻)</th><th>Morphisms (→)</th><th>Model-OF</th><th>Model-FOR</th></tr></thead>
+                    <tbody>
+                        <tr><td>1. Symbols & Beliefs</td><td>◻ SAT/GPAs ◻ Ivy crests ◻ Rankings</td><td>→ evoke → justify</td><td>Talent quantified</td><td>Chase scores/schools</td></tr>
+                        <tr><td>2. Orientations/Commitments</td><td>◻ Striving ◻ Anxiety ◻ Contempt</td><td>→ induce → reinforce</td><td>Worth feels measurable</td><td>Optimize CV</td></tr>
+                        <tr><td>3. Conceptions of Order</td><td>◻ Earned hierarchy</td><td>→ express → legitimize</td><td>Inequality = fairness</td><td>Accept winners/losers</td></tr>
+                        <tr><td>4. Aura of Obviousness</td><td>◻ Metrics ◻ HR rubrics</td><td>→ naturalize → authorize</td><td>Numbers don’t lie</td><td>Trust rankings</td></tr>
+                        <tr><td>5. Natural/Necessary</td><td>◻ No alternative</td><td>→ silence dissent</td><td>“Fair by design”</td><td>Dismiss structural critique</td></tr>
+                    </tbody>
+                </table>
+                <h3>Sitemap</h3>
+                <pre class="mermaid">
+graph TD
+    A["Meritocracy Ideology"]
+    A --> B1["1. Symbols & Beliefs"]
+    A --> B2["2. Orientations/Commitments"]
+    A --> B3["3. Conceptions of Order"]
+    A --> B4["4. Aura of Obviousness"]
+    A --> B5["5. Natural/Necessary"]
+    B1 --> C1["◻ Tests"]; B1 --> C2["◻ Diplomas"]
+    B2 --> D1["◻ Striving"]; B2 --> D2["◻ Contempt"]
+    B3 --> E1["Model-OF: Earned order"]; B3 --> E2["Model-FOR: Optimize self"]
+    B4 --> F1["◻ Rankings"]
+    B5 --> G1["→ Alternatives dismissed"]
+                </pre>
+            </div>
+        </article>
+
+        <!-- Common Sense Template -->
+        <article class="card template-card" data-category="common-sense">
+            <span class="card-category common-sense">Common Sense Prompt</span>
+            <h2>Common Sense as a Cultural System: Geertzian Analyzer Prompt</h2>
+            <div class="card-content">
+                <h3>Geertzian Analysis Definition</h3>
+                <blockquote>"(1) a system of practical symbols and maxims which acts to (2) establish a pervasive tone of obviousness and immediate plausibility by (3) formulating conceptions of everyday reality and order, and (4) clothing these conceptions with such an air of 'of-courseness' and self-evidence that (5) the judgments and habits seem naturally given and beyond question."</blockquote>
+                <h3>Component Breakdown</h3>
+                <table>
+                    <thead><tr><th>Component</th><th>Entities (◻)</th><th>Morphisms (→)</th><th>Model-OF</th><th>Model-FOR</th></tr></thead>
+                    <tbody>
+                        <tr><td>1. Symbols & Maxims</td><td>◻ Sayings ◻ Proverbs ◻ Gestures ◻ Everyday rules</td><td>→ evoke → normalize</td><td>"Common sense mirrors reality"</td><td>"Act in ways that seem obvious"</td></tr>
+                        <tr><td>2. Tone of Obviousness</td><td>◻ 'Of-courseness' ◻ Plausibility ◻ Practicality</td><td>→ induce → reinforce</td><td>"This is how the world is"</td><td>"Trust what feels natural"</td></tr>
+                        <tr><td>3. Conceptions of Reality</td><td>◻ Everyday order ◻ Local wisdom ◻ Practical logic</td><td>→ express → shape</td><td>"Reality is self-evident"</td><td>"Follow the grain of daily life"</td></tr>
+                        <tr><td>4. Air of Self-Evidence</td><td>◻ Shared habits ◻ Unquestioned routines</td><td>→ legitimize → naturalize</td><td>"This is just how things go"</td><td>"Don't question the obvious"</td></tr>
+                        <tr><td>5. Naturally Given</td><td>◻ Taken-for-granted worldview</td><td>→ exclude alternatives</td><td>"No other way makes sense"</td><td>"Dismiss what seems odd or foreign"</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </article>
+
+        <!-- Common Sense Example -->
+        <article class="card" data-category="common-sense">
+            <span class="card-category common-sense">Common Sense</span>
+            <h2>Broken Windows Policing (1990s–2010s)</h2>
+            <div class="card-content">
+                <h3>System Identification</h3>
+                <p><strong>System Name:</strong> “Disorder → Crime Common Sense”</p>
+                <p><strong>Core Purpose:</strong> Justify aggressive low-level enforcement as the obvious path to safety.</p>
+                <h3>Analysis</h3>
+                <blockquote>“(1) a system of practical symbols and maxims (‘crack down on the small stuff’) which acts to (2) establish a pervasive tone of obviousness (‘everyone knows disorder invites crime’) by (3) formulating conceptions of everyday reality and order (visible order prevents serious crime), and (4) clothing these with such an air of ‘of-courseness’ (stats dashboards, ‘clean streets’) that (5) the judgments and habits (stop-and-frisk, zero tolerance) seem naturally given and beyond question.”</blockquote>
+                <h3>Component Breakdown</h3>
+                <table>
+                    <thead><tr><th>Component</th><th>Entities (◻)</th><th>Morphisms (→)</th><th>Model-OF</th><th>Model-FOR</th></tr></thead>
+                    <tbody>
+                        <tr><td>1. Symbols & Maxims</td><td>◻ “Fix the broken window” ◻ Graffiti sweeps</td><td>→ evoke → normalize</td><td>Disorder signals invite crime</td><td>Enforce minor infractions</td></tr>
+                        <tr><td>2. Tone of Obviousness</td><td>◻ “Common sense policing”</td><td>→ induce → reinforce</td><td>Order = safety</td><td>Support crackdowns</td></tr>
+                        <tr><td>3. Conceptions of Reality</td><td>◻ Neighborhood as signal ecology</td><td>→ shape</td><td>Signals steer offenders</td><td>Remove visible disorder</td></tr>
+                        <tr><td>4. Air of Self-Evidence</td><td>◻ CompStat maps ◻ Press briefings</td><td>→ naturalize</td><td>Numbers prove it</td><td>Accept tactics</td></tr>
+                        <tr><td>5. Naturally Given</td><td>◻ “It’s what works”</td><td>→ exclude alternatives</td><td>Alternatives seem naïve</td><td>Dismiss reform claims</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </article>
+        
+        <!-- Cultural OS Template -->
+        <article class="card template-card" data-category="os">
+            <span class="card-category os">Cultural OS Prompt</span>
+            <h2>Cultural Operating System: “The Impact of the Concept of Man on the Concept of Culture”</h2>
+            <div class="card-content">
+                 <h3>Analysis</h3>
+                <blockquote>“(1) a system of symbols and control mechanisms (rituals, narratives, rules, instructions) which acts to (2) establish powerful, pervasive, and long-lasting patterns of meaning and human incompleteness by (3) formulating conceptions of human existence—‘incomplete animals’ whose nervous systems demand culture—and (4) clothing these conceptions in such detailed directive forms (plans, recipes, control loops) that (5) the patterns of behavior and identity seem uniquely realistic and inevitable—‘we all begin with…natural equipment…but end having lived only one.’”</blockquote>
+                <h3>Component Breakdown</h3>
+                <table>
+                    <thead><tr><th>Component</th><th>Entities (◻)</th><th>Morphisms (→)</th><th>Model-OF</th><th>Model-FOR</th></tr></thead>
+                    <tbody>
+                        <tr><td>1. Symbols & Control Mechanisms</td><td>◻ Ritual loops ◻ Myths ◻ Plans ◻ Recipes ◻ Rules</td><td>→ instruct → regulate</td><td>“Culture is a set of control mechanisms”</td><td>“Follow cultural scripts to govern behavior”</td></tr>
+                        <tr><td>2. Patterns of Meaning & Incompleteness</td><td>◻ Incomplete animal ◻ Brain–culture coevolution</td><td>→ induce → sustain</td><td>“Man…unfinished…completes himself via culture”</td><td>“Complete self through particular cultural forms”</td></tr>
+                        <tr><td>3. Conceptions of Human Existence</td><td>◻ Incompleteness ◻ Evolutionary necessity ◻ Symbolic dependence</td><td>→ formulate</td><td>“Man’s nervous system…positively demands culture”</td><td>“Engage in cultural learning as survival imperative”</td></tr>
+                        <tr><td>4. Detailed Directive Forms</td><td>◻ Breathing control ◻ Yogic symbols ◻ Javanese personhood</td><td>→ embed → enact</td><td>“To be human…to control one’s breathing”</td><td>“Adopt ritual mastery to enact humanity”</td></tr>
+                        <tr><td>5. Realistic & Inevitable Outcome</td><td>◻ Single lived life ◻ Cultural being threshold</td><td>→ exclude alternatives</td><td>“Without culture, humans would be unworkable monstrosities”</td><td>“Accept the Cultural OS as natural and necessary”</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </article>
+        
+        <!-- Cultural OS Example -->
+        <article class="card" data-category="os">
+            <span class="card-category os">Cultural OS</span>
+            <h2>The Benedictine Rule (c. 6th century → present)</h2>
+            <div class="card-content">
+                <h3>System Identification</h3>
+                <p><strong>System Name:</strong> “Monastic Time OS”</p>
+                <p><strong>Core Purpose:</strong> Program daily life to produce a stable religious self via prayer–work cycles.</p>
+                <h3>Analysis</h3>
+                <blockquote>“(1) a system of symbols and control mechanisms (Rule, Hours, habit, cloister) which (2) establishes long-lasting patterns of meaning and disciplined incompleteness (obedience, humility) by (3) formulating a conception of human existence ordered to ora et labora, and (4) clothing it in detailed directives (timetables, fasts, silence, offices) so that (5) monastic behavior and identity appear uniquely realistic and inevitable.”</blockquote>
+                <h3>Component Breakdown</h3>
+                <table>
+                    <thead><tr><th>Component</th><th>Entities (◻)</th><th>Morphisms (→)</th><th>Model-OF</th><th>Model-FOR</th></tr></thead>
+                    <tbody>
+                        <tr><td>1. Symbols & Controls</td><td>◻ Rule ◻ Habit ◻ Bell</td><td>→ instruct → regulate</td><td>Life as liturgical time</td><td>Keep the Hours</td></tr>
+                        <tr><td>2. Patterns & Incompleteness</td><td>◻ Obedience ◻ Humility</td><td>→ induce → sustain</td><td>Self needs discipline</td><td>Submit to schedule</td></tr>
+                        <tr><td>3. Conceptions of Existence</td><td>◻ Work–prayer telos</td><td>→ formulate</td><td>Salvation via routine</td><td>Balance ora/labora</td></tr>
+                        <tr><td>4. Directive Forms</td><td>◻ Timetable ◻ Silence</td><td>→ embed → enact</td><td>Minute scripting</td><td>Follow rubrics</td></tr>
+                        <tr><td>5. Inevitable Outcome</td><td>◻ Monk identity</td><td>→ exclude alternatives</td><td>Cloistered personhood</td><td>Stay within Rule</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </article>
+
+        <!-- Art Template -->
+        <article class="card template-card" data-category="art">
+            <span class="card-category art">Art Prompt</span>
+            <h2>Art as a Cultural System: Geertzian Analyzer Prompt</h2>
+            <div class="card-content">
+                <h3>Geertzian Analysis Definition</h3>
+                <blockquote>"(1) a system of symbols and forms which acts to (2) materialize distinctive sensibilities and patterns of feeling by (3) expressing and shaping conceptions of experience and reality, and (4) embedding these conceptions in objects and performances with such immediacy and presence that (5) the sensibilities and meanings seem directly apprehensible and socially consequential."</blockquote>
+                <h3>Component Breakdown</h3>
+                <table>
+                    <thead><tr><th>Component</th><th>Entities (◻)</th><th>Morphisms (→)</th><th>Model-OF</th><th>Model-FOR</th></tr></thead>
+                    <tbody>
+                        <tr><td>1. Symbols & Forms</td><td>◻ Artworks ◻ Styles ◻ Gestures ◻ Colors</td><td>→ evoke → signify</td><td>"Art mirrors experience"</td><td>"Create/interpret art to shape feeling"</td></tr>
+                        <tr><td>2. Sensibilities/Feelings</td><td>◻ Awe ◻ Disruption ◻ Belonging ◻ Alienation</td><td>→ induce → provoke</td><td>"This is how the world feels"</td><td>"Engage, respond, critique"</td></tr>
+                        <tr><td>3. Conceptions of Reality</td><td>◻ Worldview ◻ Social ideals ◻ Aesthetic norms</td><td>→ express → shape</td><td>"Art expresses reality"</td><td>"Adopt or challenge meanings"</td></tr>
+                        <tr><td>4. Immediacy/Presence</td><td>◻ Material objects ◻ Performances</td><td>→ embed → enact</td><td>"Meaning is tangible"</td><td>"Experience art as real"</td></tr>
+                        <tr><td>5. Social Consequence</td><td>◻ Shared sensibility ◻ Public discourse</td><td>→ validate → transform</td><td>"Art matters socially"</td><td>"Let art affect society"</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </article>
+        
+        <!-- Art Example -->
+        <article class="card" data-category="art">
+            <span class="card-category art">Art</span>
+            <h2>Pop Art (UK/US, 1950s–60s)</h2>
+            <div class="card-content">
+                <h3>System Identification</h3>
+                <p><strong>System Name:</strong> “Mass Image Reflex”</p>
+                <p><strong>Core Purpose:</strong> Mirror and mutate consumer culture to reveal its desires and emptiness.</p>
+                <h3>Analysis</h3>
+                <blockquote>“(1) commercial color, serial repetition, celebrity icons (2) materialize ironic desire and boredom by (3) expressing reality as media loops and commodities, (4) embedding it in shiny paintings/objects so (5) consumer sensibility feels both obvious and questionable in public debate.”</blockquote>
+                <h3>Component Breakdown</h3>
+                <table>
+                    <thead><tr><th>Component</th><th>Entities (◻)</th><th>Morphisms (→)</th><th>Model-OF</th><th>Model-FOR</th></tr></thead>
+                    <tbody>
+                        <tr><td>1. Symbols & Forms</td><td>◻ Warhol silkscreens ◻ Lichtenstein dots</td><td>→ signify</td><td>Commodity image</td><td>Consume/critique</td></tr>
+                        <tr><td>2. Sensibilities/Feelings</td><td>◻ Want ◻ Ennui</td><td>→ induce</td><td>Desire as joke</td><td>Smile, doubt</td></tr>
+                        <tr><td>3. Conceptions of Reality</td><td>◻ Media-world</td><td>→ shape</td><td>Fame as ontology</td><td>Repeat icons</td></tr>
+                        <tr><td>4. Immediacy/Presence</td><td>◻ Industrial finish</td><td>→ embed</td><td>Ad aesthetics</td><td>Blur art/ads</td></tr>
+                        <tr><td>5. Social Consequence</td><td>◻ Public irony</td><td>→ transform</td><td>Talk about taste</td><td>Expose spectacle</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </article>
+        
+        <!-- Religion Template -->
+        <article class="card template-card" data-category="religion">
+            <span class="card-category religion">Religion Prompt</span>
+            <h2>Religion as a Cultural System: Geertzian Analyzer Prompt</h2>
+            <div class="card-content">
+                <h3>Geertzian Analysis Definition</h3>
+                <blockquote>“(1) a system of symbols (myths, rituals, sacred texts, icons) which acts to (2) establish powerful, pervasive, and long-lasting moods and motivations (reverence, fear, devotion) by (3) formulating conceptions of a general order of existence (cosmology, moral universe) and (4) clothing these conceptions with such an aura of factuality (sacred authority, doctrinal claims, clerical endorsement) that (5) the moods and motivations seem uniquely realistic and necessary.”</blockquote>
+                <h3>Component Breakdown</h3>
+                <table>
+                    <thead><tr><th>Component</th><th>Entities (◻)</th><th>Morphisms (→)</th><th>Model-OF</th><th>Model-FOR</th></tr></thead>
+                    <tbody>
+                        <tr><td>1. System of Symbols</td><td>◻ Myths ◻ Rituals ◻ Sacred texts ◻ Icons</td><td>→ evoke → symbolize</td><td>“World is created and ordered by gods”</td><td>“Perform rituals to align with cosmos”</td></tr>
+                        <tr><td>2. Moods/Motivations</td><td>◻ Reverence ◻ Fear ◻ Devotion</td><td>→ induce → compel</td><td>“This is how the universe feels”</td><td>“Live in piety and obedience”</td></tr>
+                        <tr><td>3. Conceptions of Order</td><td>◻ Cosmology ◻ Moral laws ◻ Eschatology</td><td>→ express → legitimize</td><td>“Reality structured by divine law”</td><td>“Follow commandments and doctrines”</td></tr>
+                        <tr><td>4. Aura of Factuality</td><td>◻ Clerical authority ◻ Miracles ◻ Testimony</td><td>→ authorize → sanctify</td><td>“Doctrine is ultimate truth”</td><td>“Obey religious authority”</td></tr>
+                        <tr><td>5. Uniquely Realistic</td><td>◻ Salvation necessity ◻ Only path worldview</td><td>→ exclude alternatives</td><td>“Only religion explains existence”</td><td>“Reject nonreligious accounts”</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </article>
+        
+        <!-- Religion Example -->
+        <article class="card" data-category="religion">
+            <span class="card-category religion">Religion</span>
+            <h2>Presbyterian Fellowship-in-Work: Knoxville Foosball</h2>
+            <div class="card-content">
+                <h3>System Identification</h3>
+                <p><strong>System Name:</strong> “Custodian’s Foosball Fellowship (Knoxville Presbyterian)”</p>
+                <p><strong>Core Purpose:</strong> Reaffirm communal bonds, service ethos, and intergenerational belonging through post-worship cleaning and playful fellowship.</p>
+                <h3>Analysis</h3>
+                <blockquote>“(1) a system of symbols (sanctuary, cleaning tools, fellowship hall, foosball table) which acts to (2) establish moods and motivations (care, humility, playfulness, kinship) by (3) formulating conceptions of a general order (Sabbath service, the Body of Christ, vocation) and (4) clothing these with an aura of factuality (pastor’s blessing, session norms, weekly rhythm) that (5) the moods and motivations seem uniquely realistic and necessary (Sunday = worship → service → fellowship).”</blockquote>
+                <h3>Component Breakdown</h3>
+                <table>
+                    <thead><tr><th>Component</th><th>Entities (◻)</th><th>Morphisms (→)</th><th>Model-OF</th><th>Model-FOR</th></tr></thead>
+                    <tbody>
+                        <tr><td>1. System of Symbols</td><td>◻ Sanctuary ◻ Mop/broom ◻ Fellowship hall ◻ Foosball table</td><td>→ evoke → symbolize</td><td>Sacred/ordinary braided</td><td>Clean God’s house; then linger and play</td></tr>
+                        <tr><td>2. Moods/Motivations</td><td>◻ Care ◻ Humility ◻ Joy ◻ Kinship</td><td>→ induce → compel</td><td>Church feels like family</td><td>Serve together; include kids/kin</td></tr>
+                        <tr><td>3. Conceptions of Order</td><td>◻ Sabbath service → service work → fellowship ◻ Vocation-as-calling</td><td>→ express → legitimize</td><td>“Faith works through love”</td><td>Keep spaces, keep people</td></tr>
+                        <tr><td>4. Aura of Factuality</td><td>◻ Pastor/elder acknowledgment ◻ Facility rota ◻ Weekly bulletin</td><td>→ authorize → sanctify</td><td>This is “how Sundays go”</td><td>Show up, pitch in, stay present</td></tr>
+                        <tr><td>5. Uniquely Realistic</td><td>◻ Sunday rhythm (worship–work–play)</td><td>→ exclude alternatives</td><td>Mere consumption ≠ church</td><td>Prefer lingering care over quick exit</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </article>
+
+    </main>
+
+    <div id="modal-container">
+        <div id="modal-content">
+            <span class="close-button">&times;</span>
+            <div id="modal-body"></div>
+        </div>
+    </div>
+
+    <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+
+        document.addEventListener('DOMContentLoaded', () => {
+            mermaid.initialize({ 
+                startOnLoad: true,
+                theme: 'neutral',
+                securityLevel: 'loose',
+                fontFamily: 'var(--font-family)'
+            });
+
+            const modalContainer = document.getElementById('modal-container');
+            const modalBody = document.getElementById('modal-body');
+            const closeButton = document.querySelector('.close-button');
+            const cards = document.querySelectorAll('.card');
+
+            cards.forEach(card => {
+                card.addEventListener('click', () => {
+                    // Clone the card's content to avoid moving the original
+                    const cardContent = card.cloneNode(true);
+                    modalBody.innerHTML = ''; // Clear previous content
+                    modalBody.appendChild(cardContent);
+                    
+                    modalContainer.style.display = 'block';
+
+                    // Re-render Mermaid diagram inside the modal
+                    // We need to do this asynchronously after the modal is displayed
+                    setTimeout(() => {
+                        const mermaidDiv = modalBody.querySelector('.mermaid');
+                        if (mermaidDiv) {
+                           mermaid.init(undefined, mermaidDiv);
+                        }
+                    }, 0);
+                });
+            });
+
+            const closeModal = () => {
+                modalContainer.style.display = 'none';
+                modalBody.innerHTML = '';
+            };
+
+            closeButton.addEventListener('click', closeModal);
+
+            modalContainer.addEventListener('click', (event) => {
+                if (event.target === modalContainer) {
+                    closeModal();
+                }
+            });
+            
+            document.addEventListener('keydown', (event) => {
+                if (event.key === "Escape") {
+                    closeModal();
+                }
+            });
+        });
+    </script>
+
+</body>
+</html>

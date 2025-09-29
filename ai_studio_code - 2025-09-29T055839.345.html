@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Geertzian Systems - NES Edition</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --nes-bg: #D0D0D0; /* Light Gray */
+            --nes-dark-gray: #7C7C7C;
+            --nes-black: #000000;
+            --nes-white: #FCFCFC;
+            --nes-red: #B53120;
+            --nes-blue: #005AD9;
+            --font-pixel: 'Press Start 2P', cursive;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: var(--font-pixel);
+            background-color: #333;
+            color: var(--nes-white);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .nes-container {
+            width: 100%;
+            max-width: 1400px;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            border: 4px solid var(--nes-black);
+            background: var(--nes-dark-gray);
+            box-shadow: inset 0 0 0 4px #555;
+        }
+
+        /* --- TV Screen Area --- */
+        .tv-screen-container {
+            flex-grow: 1;
+            background: var(--nes-black);
+            padding: 20px;
+            position: relative;
+            overflow-y: auto;
+            border-bottom: 4px solid var(--nes-black);
+            scrollbar-color: var(--nes-dark-gray) var(--nes-black);
+            scrollbar-width: thin;
+        }
+        
+        /* Scanline effect for CRT vibe */
+        .tv-screen-container::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            background: repeating-linear-gradient(
+                0deg,
+                rgba(0, 0, 0, 0.2) 0,
+                rgba(0, 0, 0, 0.2) 1px,
+                transparent 1px,
+                transparent 3px
+            );
+            z-index: 2;
+        }
+
+        .tv-content {
+            font-family: Arial, Helvetica, sans-serif; /* A more readable font for content */
+            line-height: 1.6;
+            color: #333;
+            background: var(--nes-bg);
+            padding: 20px 30px;
+            min-height: 100%;
+            opacity: 1;
+            transition: opacity 0.2s linear;
+        }
+
+        .tv-screen-container.loading .tv-content {
+            opacity: 0;
+            animation: flicker 0.3s infinite;
+        }
+        
+        .loading-text {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 24px;
+            color: var(--nes-white);
+            text-shadow: 2px 2px var(--nes-red);
+        }
+
+        .tv-screen-container.loading .loading-text {
+            display: block;
+        }
+
+
+        @keyframes flicker {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        /* --- Cartridge Library --- */
+        .cartridge-library {
+            background: var(--nes-dark-gray);
+            padding: 20px;
+            height: 220px;
+            flex-shrink: 0;
+            overflow-x: auto;
+            overflow-y: hidden;
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            border-top: 4px solid #555;
+            scrollbar-color: var(--nes-black) var(--nes-dark-gray);
+            scrollbar-width: thin;
+        }
+        
+        .cartridge-container h3 {
+            margin: 0;
+            padding: 10px;
+            font-size: 1em;
+            text-align: center;
+            color: var(--nes-bg);
+            text-shadow: 2px 2px var(--nes-black);
+        }
+
+        .cartridge {
+            width: 130px;
+            height: 140px;
+            background-color: var(--nes-dark-gray);
+            border: 4px solid var(--nes-black);
+            flex-shrink: 0;
+            cursor: pointer;
+            position: relative;
+            transition: transform 0.1s linear, box-shadow 0.1s linear;
+            box-shadow: 4px 4px 0 var(--nes-black);
+        }
+        
+        .cartridge.active {
+            transform: translateY(-10px);
+            box-shadow: 6px 10px 0px rgba(0,0,0,0.7);
+            background-color: #8c8c8c;
+        }
+        
+        .cartridge:not(.active):hover {
+            transform: translateY(-5px);
+        }
+
+        .cartridge-label {
+            background: var(--nes-white);
+            color: var(--nes-black);
+            height: 60px;
+            margin: 15px 10px 10px 10px;
+            padding: 5px;
+            text-align: center;
+            font-size: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+        
+        .cartridge-grip {
+            position: absolute;
+            bottom: 5px;
+            left: 10px;
+            right: 10px;
+            height: 10px;
+            background: repeating-linear-gradient(90deg, #666, #666 4px, #555 4px, #555 8px);
+        }
+        
+        /* --- Content Styling --- */
+        .tv-content h2 { font-size: 20px; color: var(--nes-red); text-shadow: 2px 2px #000; margin-top: 0; }
+        .tv-content h3 { font-size: 16px; color: var(--nes-blue); margin-top: 25px; border-bottom: 2px solid var(--nes-dark-gray); padding-bottom: 5px; }
+        blockquote { border-left: 4px solid var(--nes-blue); background: #e0e0e0; padding: 10px; margin: 15px 0; font-style: italic; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 14px; background: var(--nes-white); }
+        th, td { border: 2px solid var(--nes-dark-gray); padding: 8px; text-align: left; }
+        th { background-color: var(--nes-dark-gray); color: var(--nes-white); }
+        .mermaid { background: #fff; padding: 10px; border: 2px solid var(--nes-dark-gray); }
+
+        /* Mobile Adjustments */
+        @media (max-width: 768px) {
+            body { padding: 5px; height: auto; overflow: visible; }
+            .nes-container { height: auto; }
+            .cartridge-library { height: auto; flex-wrap: wrap; justify-content: center; }
+            .cartridge-container h3 { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+    <div class="nes-container">
+        <div class="tv-screen-container" id="tv-screen">
+            <div class="loading-text">LOADING...</div>
+            <div class="tv-content" id="tv-content">
+                <!-- Content will be loaded here -->
+            </div>
+        </div>
+        
+        <div class="cartridge-container">
+            <h3>SELECT A CARTRIDGE</h3>
+            <div class="cartridge-library" id="cartridge-library">
+                <!-- Cartridges will be generated here by JS -->
+            </div>
+        </div>
+    </div>
+
+    <div id="data-store" style="display: none;">
+        <article data-title="Corporate Culture" data-category="universal">
+            <h2>Corporate Brand Culture</h2>
+            <h3>System Identification</h3><p><strong>System Name:</strong> "Acme Corp Culture"</p><p><strong>Core Purpose:</strong> Maintain employee alignment through shared mythology.</p><h3>Geertzian Analysis</h3><blockquote>"(1) a system of symbols (logos/mottos) which acts to (2) establish powerful moods (belonging) and motivations (overwork) by (3) formulating conceptions of corporate destiny and (4) clothing these with stock price validation that (5) makes company loyalty seem uniquely realistic."</blockquote><h3>Component Breakdown</h3><table><thead><tr><th>Component</th><th>Entities</th><th>Morphisms</th><th>Model-OF</th><th>Model-FOR</th></tr></thead><tbody><tr><td>1. Symbols</td><td>◻ Logo ◻ Values posters</td><td>→ signify → decorate</td><td>"We're a family"</td><td>"Wear branded merch"</td></tr><tr><td>2. Moods/Motivations</td><td>◻ Belonging ◻ Promotion hunger</td><td>→ induce → reward</td><td>"Work is identity"</td><td>"Sacrifice for success"</td></tr><tr><td>3. Conceptions of Order</td><td>◻ "Disrupt or die"</td><td>→ formulate</td><td>Market Darwinism</td><td>Constant hustle</td></tr><tr><td>4. Aura of Factuality</td><td>◻ Stock price ◻ All-hands applause</td><td>→ sacralize → validate</td><td>"Shareholders = truth"</td><td>"Obey growth targets"</td></tr><tr><td>5. Uniquely Realistic</td><td>◻ "There's no alternative"</td><td>→ silence dissent</td><td>"Capitalism is nature"</td><td>"Comply or leave"</td></tr></tbody></table>
+            <h3>Sitemap</h3><pre class="mermaid">graph TD; A["Acme Corp Culture"]-->B1["1. Symbols"]; A-->B2["2. Moods/Motivations"]; A-->B3["3. Conceptions of Order"]; A-->B4["4. Aura of Factuality"]; A-->B5["5. Uniquely Realistic"]; B1-->C1["◻ Logo"]; B1-->C2["◻ Values Posters"]; B2-->D1["◻ Belonging"]; B2-->D2["◻ Promotion Hunger"]; B3-->E1["Model-OF: Market Darwinism"]; B3-->E2["Model-FOR: Constant hustle"]; B4-->F1["◻ Stock Price"]; B4-->F2["◻ All-Hands Applause"]; B5-->G1["→ Silence Dissent"];</pre>
+        </article>
+        <article data-title="Vatican II" data-category="universal">
+            <h2>Vatican II (1962–65)</h2>
+            <h3>System Identification</h3><p><strong>System Name:</strong> “Vatican II—Aggiornamento Machine”</p><p><strong>Core Purpose:</strong> Re-orient global Catholic ritual/authority toward modernity and lay participation.</p><h3>Geertzian Analysis</h3><blockquote>“(1) A system of symbols (council texts, vernacular liturgy, altar turned to people) which acts to (2) establish powerful moods and motivations (openness, participation, conscience) by (3) formulating conceptions of a general order (Church in the modern world) and (4) clothing them with an aura of factuality (conciliar authority, global episcopal assent) that (5) makes the reformed rites and roles seem uniquely realistic.”</blockquote><h3>Component Breakdown</h3><table><thead><tr><th>Component</th><th>Entities (◻)</th><th>Morphisms (→)</th><th>Model-OF</th><th>Model-FOR</th></tr></thead><tbody><tr><td>1. Symbols</td><td>◻ Vernacular Mass ◻ Documents</td><td>→ update → include</td><td>Church amidst history</td><td>Active laity, shared worship</td></tr><tr><td>2. Moods/Motivations</td><td>◻ Hope ◻ Conscience</td><td>→ induce → authorize</td><td>Renewal feels possible</td><td>Participate, discern</td></tr><tr><td>3. Conceptions of Order</td><td>◻ “People of God”</td><td>→ formulate</td><td>Pilgrim Church</td><td>Collegial governance</td></tr><tr><td>4. Aura of Factuality</td><td>◻ Council votes ◻ Papal promulgation</td><td>→ validate</td><td>“The Church decided”</td><td>Obey reformed practice</td></tr><tr><td>5. Uniquely Realistic</td><td>◻ Global uniform reform</td><td>→ exclude Latin-only ideal</td><td>Modern Church</td><td>No return to pre-1962 normal</td></tr></tbody></table>
+        </article>
+        <article data-title="Meritocracy" data-category="ideology">
+            <h2>Meritocracy Ideology (20th–21st c.)</h2>
+            <h3>System Identification</h3><p><strong>System Name:</strong> “Meritocracy”</p><p><strong>Core Purpose:</strong> Legitimize hierarchy as the fair outcome of talent measured by standardized metrics.</p><h3>Geertzian Ideology Analysis</h3><blockquote>“(1) a system of symbols and beliefs (test scores, elite diplomas, rankings) which acts to (2) establish orientations and commitments (striving, status anxiety, contempt for ‘undeserving’) by (3) formulating conceptions of social order and legitimacy (hierarchy as earned), and (4) clothing these with an aura of obviousness and authority (metrics, league tables, hiring rubrics) that (5) the commitments seem uniquely natural and necessary.”</blockquote><h3>Component Breakdown</h3><table><thead><tr><th>Component</th><th>Entities (◻)</th><th>Morphisms (→)</th><th>Model-OF</th><th>Model-FOR</th></tr></thead><tbody><tr><td>1. Symbols & Beliefs</td><td>◻ SAT/GPAs ◻ Ivy crests ◻ Rankings</td><td>→ evoke → justify</td><td>Talent quantified</td><td>Chase scores/schools</td></tr><tr><td>2. Orientations/Commitments</td><td>◻ Striving ◻ Anxiety ◻ Contempt</td><td>→ induce → reinforce</td><td>Worth feels measurable</td><td>Optimize CV</td></tr><tr><td>3. Conceptions of Order</td><td>◻ Earned hierarchy</td><td>→ express → legitimize</td><td>Inequality = fairness</td><td>Accept winners/losers</td></tr><tr><td>4. Aura of Obviousness</td><td>◻ Metrics ◻ HR rubrics</td><td>→ naturalize → authorize</td><td>Numbers don’t lie</td><td>Trust rankings</td></tr><tr><td>5. Natural/Necessary</td><td>◻ No alternative</td><td>→ silence dissent</td><td>“Fair by design”</td><td>Dismiss structural critique</td></tr></tbody></table>
+            <h3>Sitemap</h3><pre class="mermaid">graph TD; A["Meritocracy Ideology"]-->B1["1. Symbols & Beliefs"]; A-->B2["2. Orientations/Commitments"]; A-->B3["3. Conceptions of Order"]; A-->B4["4. Aura of Obviousness"]; A-->B5["5. Natural/Necessary"]; B1-->C1["◻ Tests"]; B1-->C2["◻ Diplomas"]; B2-->D1["◻ Striving"]; B2-->D2["◻ Contempt"]; B3-->E1["Model-OF: Earned order"]; B3-->E2["Model-FOR: Optimize self"]; B4-->F1["◻ Rankings"]; B5-->G1["→ Alternatives dismissed"];</pre>
+        </article>
+        <article data-title="Broken Windows" data-category="common-sense">
+            <h2>Broken Windows Policing (1990s–2010s)</h2>
+            <h3>System Identification</h3><p><strong>System Name:</strong> “Disorder → Crime Common Sense”</p><p><strong>Core Purpose:</strong> Justify aggressive low-level enforcement as the obvious path to safety.</p><h3>Analysis</h3><blockquote>“(1) a system of practical symbols and maxims (‘crack down on the small stuff’) which acts to (2) establish a pervasive tone of obviousness (‘everyone knows disorder invites crime’) by (3) formulating conceptions of everyday reality and order (visible order prevents serious crime), and (4) clothing these with such an air of ‘of-courseness’ (stats dashboards, ‘clean streets’) that (5) the judgments and habits (stop-and-frisk, zero tolerance) seem naturally given and beyond question.”</blockquote><h3>Component Breakdown</h3><table><thead><tr><th>Component</th><th>Entities (◻)</th><th>Morphisms (→)</th><th>Model-OF</th><th>Model-FOR</th></tr></thead><tbody><tr><td>1. Symbols & Maxims</td><td>◻ “Fix the broken window” ◻ Graffiti sweeps</td><td>→ evoke → normalize</td><td>Disorder signals invite crime</td><td>Enforce minor infractions</td></tr><tr><td>2. Tone of Obviousness</td><td>◻ “Common sense policing”</td><td>→ induce → reinforce</td><td>Order = safety</td><td>Support crackdowns</td></tr><tr><td>3. Conceptions of Reality</td><td>◻ Neighborhood as signal ecology</td><td>→ shape</td><td>Signals steer offenders</td><td>Remove visible disorder</td></tr><tr><td>4. Air of Self-Evidence</td><td>◻ CompStat maps ◻ Press briefings</td><td>→ naturalize</td><td>Numbers prove it</td><td>Accept tactics</td></tr><tr><td>5. Naturally Given</td><td>◻ “It’s what works”</td><td>→ exclude alternatives</td><td>Alternatives seem naïve</td><td>Dismiss reform claims</td></tr></tbody></table>
+        </article>
+        <article data-title="Benedictine Rule" data-category="os">
+            <h2>The Benedictine Rule (c. 6th century → present)</h2>
+            <h3>System Identification</h3><p><strong>System Name:</strong> “Monastic Time OS”</p><p><strong>Core Purpose:</strong> Program daily life to produce a stable religious self via prayer–work cycles.</p><h3>Analysis</h3><blockquote>“(1) a system of symbols and control mechanisms (Rule, Hours, habit, cloister) which (2) establishes long-lasting patterns of meaning and disciplined incompleteness (obedience, humility) by (3) formulating a conception of human existence ordered to ora et labora, and (4) clothing it in detailed directives (timetables, fasts, silence, offices) so that (5) monastic behavior and identity appear uniquely realistic and inevitable.”</blockquote><h3>Component Breakdown</h3><table><thead><tr><th>Component</th><th>Entities (◻)</th><th>Morphisms (→)</th><th>Model-OF</th><th>Model-FOR</th></tr></thead><tbody><tr><td>1. Symbols & Controls</td><td>◻ Rule ◻ Habit ◻ Bell</td><td>→ instruct → regulate</td><td>Life as liturgical time</td><td>Keep the Hours</td></tr><tr><td>2. Patterns & Incompleteness</td><td>◻ Obedience ◻ Humility</td><td>→ induce → sustain</td><td>Self needs discipline</td><td>Submit to schedule</td></tr><tr><td>3. Conceptions of Existence</td><td>◻ Work–prayer telos</td><td>→ formulate</td><td>Salvation via routine</td><td>Balance ora/labora</td></tr><tr><td>4. Directive Forms</td><td>◻ Timetable ◻ Silence</td><td>→ embed → enact</td><td>Minute scripting</td><td>Follow rubrics</td></tr><tr><td>5. Inevitable Outcome</td><td>◻ Monk identity</td><td>→ exclude alternatives</td><td>Cloistered personhood</td><td>Stay within Rule</td></tr></tbody></table>
+        </article>
+        <article data-title="Pop Art" data-category="art">
+            <h2>Pop Art (UK/US, 1950s–60s)</h2>
+            <h3>System Identification</h3><p><strong>System Name:</strong> “Mass Image Reflex”</p><p><strong>Core Purpose:</strong> Mirror and mutate consumer culture to reveal its desires and emptiness.</p><h3>Analysis</h3><blockquote>“(1) commercial color, serial repetition, celebrity icons (2) materialize ironic desire and boredom by (3) expressing reality as media loops and commodities, (4) embedding it in shiny paintings/objects so (5) consumer sensibility feels both obvious and questionable in public debate.”</blockquote><h3>Component Breakdown</h3><table><thead><tr><th>Component</th><th>Entities (◻)</th><th>Morphisms (→)</th><th>Model-OF</th><th>Model-FOR</th></tr></thead><tbody><tr><td>1. Symbols & Forms</td><td>◻ Warhol silkscreens ◻ Lichtenstein dots</td><td>→ signify</td><td>Commodity image</td><td>Consume/critique</td></tr><tr><td>2. Sensibilities/Feelings</td><td>◻ Want ◻ Ennui</td><td>→ induce</td><td>Desire as joke</td><td>Smile, doubt</td></tr><tr><td>3. Conceptions of Reality</td><td>◻ Media-world</td><td>→ shape</td><td>Fame as ontology</td><td>Repeat icons</td></tr><tr><td>4. Immediacy/Presence</td><td>◻ Industrial finish</td><td>→ embed</td><td>Ad aesthetics</td><td>Blur art/ads</td></tr><tr><td>5. Social Consequence</td><td>◻ Public irony</td><td>→ transform</td><td>Talk about taste</td><td>Expose spectacle</td></tr></tbody></table>
+        </article>
+        <article data-title="Knoxville Foosball" data-category="religion">
+            <h2>Presbyterian Fellowship-in-Work: Knoxville Foosball</h2>
+            <h3>System Identification</h3><p><strong>System Name:</strong> “Custodian’s Foosball Fellowship (Knoxville Presbyterian)”</p><p><strong>Core Purpose:</strong> Reaffirm communal bonds, service ethos, and intergenerational belonging through post-worship cleaning and playful fellowship.</p><h3>Analysis</h3><blockquote>“(1) a system of symbols (sanctuary, cleaning tools, fellowship hall, foosball table) which acts to (2) establish moods and motivations (care, humility, playfulness, kinship) by (3) formulating conceptions of a general order (Sabbath service, the Body of Christ, vocation) and (4) clothing these with an aura of factuality (pastor’s blessing, session norms, weekly rhythm) that (5) the moods and motivations seem uniquely realistic and necessary (Sunday = worship → service → fellowship).”</blockquote><h3>Component Breakdown</h3><table><thead><tr><th>Component</th><th>Entities (◻)</th><th>Morphisms (→)</th><th>Model-OF</th><th>Model-FOR</th></tr></thead><tbody><tr><td>1. System of Symbols</td><td>◻ Sanctuary ◻ Mop/broom ◻ Fellowship hall ◻ Foosball table</td><td>→ evoke → symbolize</td><td>Sacred/ordinary braided</td><td>Clean God’s house; then linger and play</td></tr><tr><td>2. Moods/Motivations</td><td>◻ Care ◻ Humility ◻ Joy ◻ Kinship</td><td>→ induce → compel</td><td>Church feels like family</td><td>Serve together; include kids/kin</td></tr><tr><td>3. Conceptions of Order</td><td>◻ Sabbath service → service work → fellowship ◻ Vocation-as-calling</td><td>→ express → legitimize</td><td>“Faith works through love”</td><td>Keep spaces, keep people</td></tr><tr><td>4. Aura of Factuality</td><td>◻ Pastor/elder acknowledgment ◻ Facility rota ◻ Weekly bulletin</td><td>→ authorize → sanctify</td><td>This is “how Sundays go”</td><td>Show up, pitch in, stay present</td></tr><tr><td>5. Uniquely Realistic</td><td>◻ Sunday rhythm (worship–work–play)</td><td>→ exclude alternatives</td><td>Mere consumption ≠ church</td><td>Prefer lingering care over quick exit</td></tr></tbody></table>
+        </article>
+        <!-- NOTE: The complete version would have all 50+ <article> blocks here. -->
+    </div>
+
+    <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const systemsData = [];
+            const dataStore = document.getElementById('data-store');
+            const tvScreen = document.getElementById('tv-screen');
+            const tvContent = document.getElementById('tv-content');
+            const cartridgeLibrary = document.getElementById('cartridge-library');
+            
+            // 1. PARSE DATA and CREATE CARTRIDGES
+            const init = () => {
+                mermaid.initialize({ 
+                    startOnLoad: false, 
+                    theme: 'neutral',
+                    fontFamily: 'Arial',
+                    logLevel: 'fatal'
+                });
+                
+                const articles = dataStore.querySelectorAll('article');
+                articles.forEach((article, index) => {
+                    const title = article.dataset.title;
+                    systemsData.push({
+                        title: title,
+                        html: article.innerHTML
+                    });
+                    
+                    const cart = document.createElement('div');
+                    cart.className = 'cartridge';
+                    cart.dataset.index = index;
+                    cart.innerHTML = `
+                        <div class="cartridge-label">${title}</div>
+                        <div class="cartridge-grip"></div>
+                    `;
+                    cartridgeLibrary.appendChild(cart);
+                });
+                
+                cartridgeLibrary.addEventListener('click', handleCartridgeSelect);
+                
+                // Load the first cartridge by default
+                loadCartridge(0);
+            };
+
+            // 2. HANDLE CARTRIDGE SELECTION
+            const handleCartridgeSelect = (e) => {
+                const cart = e.target.closest('.cartridge');
+                if (cart && !cart.classList.contains('active')) {
+                    const index = parseInt(cart.dataset.index);
+                    loadCartridge(index);
+                }
+            };
+            
+            // 3. LOAD CONTENT TO "TV"
+            const loadCartridge = (index) => {
+                // Update active state visuals
+                const currentActive = cartridgeLibrary.querySelector('.active');
+                if (currentActive) currentActive.classList.remove('active');
+                cartridgeLibrary.querySelector(`[data-index='${index}']`).classList.add('active');
+
+                // Start loading animation
+                tvScreen.classList.add('loading');
+                tvContent.innerHTML = ''; // Clear previous content
+
+                // Simulate loading time
+                setTimeout(async () => {
+                    tvContent.innerHTML = systemsData[index].html;
+                    
+                    // Render Mermaid diagram if it exists
+                    try {
+                        await mermaid.run({ nodes: tvContent.querySelectorAll('.mermaid') });
+                    } catch (e) {
+                        console.error("Mermaid rendering failed:", e);
+                    }
+
+                    // End loading animation
+                    tvScreen.classList.remove('loading');
+                    tvScreen.scrollTop = 0; // Scroll to top
+                }, 500); // 0.5 second load time
+            };
+            
+            init();
+        });
+    </script>
+</body>
+</html>
