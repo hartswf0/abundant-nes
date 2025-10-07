@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>abundant-nes</title>
+  <meta name="theme-color" content="#0b0f12" />
+  <style>
+  :root{
+    /* Base (overridden by presets) */
+    --bg:#0b0f12; --fg:#f2fff0; --accent:#7aff7a; --line:#0a1a12; --slug-bg:#020805; --slug-fg:#f4fff5;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  html,body{height:100%; margin:0}
+  body{background:radial-gradient(900px 600px at 50% -80px,#16221b,var(--bg)); color:var(--fg); font:17px/1.25 var(--mono)}
+
+  /* tiny mode switch */
+  .mode{position:fixed; top:6px; left:6px; z-index:1000; border:2px solid var(--line); background:var(--slug-bg); color:var(--fg);
+        font-weight:900; letter-spacing:.06em; padding:6px 8px; border-radius:10px; box-shadow:0 2px 0 #000}
+  .tetrad{position:fixed; top:8px; left:58px; width:18px; height:18px; display:grid; grid-template-columns:repeat(2,1fr); gap:2px; z-index:1000}
+  .tetrad div{border:2px solid var(--line); background:transparent}
+
+  .led{position:fixed; top:8px; right:8px; width:10px; height:10px; border-radius:3px; background:#28372c; box-shadow:inset 0 0 0 2px #06100a}
+  .on{background:var(--accent) !important; box-shadow:0 0 10px var(--accent)}
+
+  .shelf{display:grid; grid-template-columns:repeat(auto-fill,minmax(112px,1fr)); gap:8px; padding:8px}
+  .cart{display:flex; flex-direction:column; gap:6px; padding:10px; border:3px solid var(--line); border-radius:12px;
+        background:linear-gradient(180deg,#0e1713,#0a130f); box-shadow:inset 0 0 0 2px #122219}
+  .slug{font-size:2.2rem; font-weight:900; padding:8px 12px; border:3px solid var(--line); border-radius:10px;
+        background:var(--slug-bg); color:var(--slug-fg); text-align:center; letter-spacing:.02em;
+        font-variant-numeric:tabular-nums; text-shadow:0 2px 0 #000, 0 0 18px color-mix(in srgb, var(--accent) 25%, transparent)}
+
+  .dock{position:fixed; left:0; right:0; bottom:0; transform:translateY(100%); transition:transform .15s ease; background:linear-gradient(180deg,#0e1713,#0a130f); border-top:3px solid var(--line); box-shadow:0 -8px 0 #000}
+  .dock.show{transform:translateY(0)}
+  .dock-head{display:flex; align-items:center; gap:10px; padding:8px}
+  .dock-head .slug{font-size:1.3rem; padding:6px 10px}
+  .dock-ctl{margin-left:auto; display:flex; gap:10px; align-items:center}
+  .ico{width:46px; height:46px; display:inline-grid; place-items:center; border:3px solid var(--line); border-radius:10px; background:var(--slug-bg); color:var(--fg); font-weight:900}
+  .ico:active{transform:translateY(1px)}
+  .dock-iframe{width:100%; height:42vh; border:0; background:#070f0b}
+
+  .cart:focus-within, .cart:focus, .ico:focus, .mode:focus{outline:2px solid var(--accent); outline-offset:2px}
+
+  /* color presets via [data-mode] on body */
+  body[data-mode="DMG"]{--bg:#0b0f12; --fg:#eaffd9; --accent:#8dff5a; --line:#25492e; --slug-bg:#0a130d; --slug-fg:#f4ffe6}
+  body[data-mode="NES"]{--bg:#0b0c12; --fg:#fffcf2; --accent:#ff4d4d; --line:#3a3a3a; --slug-bg:#121214; --slug-fg:#fff}
+  body[data-mode="TRM"]{--bg:#000; --fg:#e8ffe8; --accent:#00ff7f; --line:#073d1f; --slug-bg:#001105; --slug-fg:#e8ffe8}
+  body[data-mode="WFR"]{--bg:#0d0e10; --fg:#e7f0ff; --accent:#7ab3ff; --line:#254a7a; --slug-bg:#0a0f14; --slug-fg:#f4f9ff}
+</style>
+</head>
+<body data-mode="DMG">
+<button class="mode" id="mode">DMG</button>
+<div class="tetrad" id="tetrad" aria-hidden="true"><div></div><div></div><div></div><div></div></div>
+<div class="led" id="led"></div>
+<div class="shelf" id="shelf" aria-live="polite"></div>
+
+<div class="dock" id="dock" aria-label="preview">
+  <div class="dock-head">
+    <div class="slug" id="dockSlug">---</div>
+    <div class="dock-ctl">
+      <a class="ico" id="btnOpen" aria-label="Open" target="_blank" rel="noopener">O</a>
+      <a class="ico" id="btnInfo" aria-label="Info"  target="_blank" rel="noopener">I</a>
+      <a class="ico" id="btnRaw"  aria-label="Raw"   target="_blank" rel="noopener">R</a>
+    </div>
+  </div>
+  <!-- FIX: remove duplicated attributes/closing tags -->
+  <iframe id="preview" class="dock-iframe" title="preview"></iframe>
+</div>
+
+<script>
+(function(){
+  'use strict';
+  // GitHub wiring (renamed to avoid global collisions)
+  const ghOwner='hartswf0', ghRepo='abundant-nes', ghBranch='main';
+  const api = `https://api.github.com/repos/${ghOwner}/${ghRepo}/contents/`;
+  const raw = (n)=>`https://raw.githubusercontent.com/${ghOwner}/${ghRepo}/${ghBranch}/${encodeURIComponent(n)}`;
+  const blob= (n)=>`https://github.com/${ghOwner}/${ghRepo}/blob/${ghBranch}/${encodeURIComponent(n)}`;
+
+  const $ = (id)=>document.getElementById(id);
+  const shelf=$('shelf'), dock=$('dock'), led=$('led');
+  const modeBtn=$('mode'), tetrad=$('tetrad');
+  const dockSlug=$('dockSlug');
+  const btnOpen=$('btnOpen'), btnInfo=$('btnInfo'), btnRaw=$('btnRaw');
+  const frame=$('preview');
+
+  let current=null;
+
+  function vib(ms=8){ try{ navigator.vibrate && navigator.vibrate(ms) }catch(_){} }
+
+  // Slug rules: prefer `.###.html` exactly; else use last 3 digits before extension; else 3-char compact fallback
+  function trimHtmlExt(s){
+    const lo=s.toLowerCase(); if(lo.endsWith('.html')) return s.slice(0,-5); if(lo.endsWith('.htm')) return s.slice(0,-4); return s;
+  }
+  function slugFromTriple(name){
+    const strict=name.match(/\.([0-9]{3})\.html?$/i); if(strict) return strict[1];
+    const loose=name.match(/([0-9]{3,})\.html?$/i); if(loose) return loose[1].slice(-3);
+    return trimHtmlExt(name).replace(/[^a-z0-9]+/gi,'').slice(0,3).toUpperCase();
+  }
+  const isTripleFile=(n)=>/\.[0-9]{3}\.html?$/i.test(n);
+
+  function makeCart(name){
+    const el=document.createElement('button'); el.className='cart'; el.type='button'; el.setAttribute('aria-label',`Load ${name}`);
+    const slug=document.createElement('div'); slug.className='slug'; slug.textContent=slugFromTriple(name); el.appendChild(slug);
+    el.addEventListener('click',()=>{ load(name); });
+    return el;
+  }
+
+  function mount(list){
+    shelf.innerHTML='';
+    list.forEach(n=> shelf.appendChild(makeCart(n)));
+  }
+
+  function showDock(name){
+    current=name; dockSlug.textContent=slugFromTriple(name);
+    btnOpen.href=blob(name); btnRaw.href=raw(name); btnInfo.href=blob(name)+'?plain=1';
+    frame.src=raw(name);
+    dock.classList.add('show'); vib(12);
+  }
+  function hideDock(){ current=null; frame.src='about:blank'; dock.classList.remove('show'); dockSlug.textContent='---'; vib(6); }
+
+  async function fetchFiles(){
+    const r=await fetch(api,{headers:{'Accept':'application/vnd.github+json'}});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    return r.json();
+  }
+
+  async function boot(){
+    try{
+      const data=await fetchFiles();
+      const htmls=data.filter(f=>f.type==='file' && /\.html?$/i.test(f.name)).map(f=>f.name);
+      // Focus only on files that end with .###.html (as requested)
+      const triples=htmls.filter(isTripleFile);
+      // Sort by numeric slug DESC for recency-like feel
+      triples.sort((a,b)=>{
+        const A=parseInt(slugFromTriple(a),10), B=parseInt(slugFromTriple(b),10);
+        if(Number.isFinite(A)&&Number.isFinite(B)) return B-A; // desc
+        return a.localeCompare(b);
+      });
+      mount(triples);
+      led.classList.add('on');
+    }catch(e){ console.warn(e); }
+  }
+
+  // Public actions
+  async function load(name){ showDock(name); }
+  btnOpen.addEventListener('click',()=>vib(8));
+  btnRaw.addEventListener('click',()=>vib(8));
+  btnInfo.addEventListener('click',()=>vib(6));
+
+  // Self-tests (compact)
+  (function tests(){
+    const ok=[];
+    // Existing tests
+    ok.push(slugFromTriple('file.007.html')==='007');
+    ok.push(slugFromTriple('ai_studio_code - 2025-09-29T060923.271.html')==='271');
+    ok.push(isTripleFile('x.123.html')===true && isTripleFile('x123.html')===false);
+    // Added tests
+    ok.push(slugFromTriple('x.045.htm')==='045'); // .htm strict
+    ok.push(isTripleFile('x.045.htm')===true);    // .htm detect
+    const fb = slugFromTriple('no-digits.html');  // fallback is 3 chars
+    ok.push(typeof fb==='string' && fb.length===3 && fb===fb.toUpperCase());
+    ok.push(slugFromTriple('file.1234.html')==='234'); // last 3 of longer run
+    if(!ok.every(Boolean)) console.warn('Self-tests failed', ok);
+  })();
+
+  boot();
+  // Mode cycling
+  const modes=['DMG','NES','TRM','WFR'];
+  function setMode(m){ document.body.setAttribute('data-mode',m); modeBtn.textContent=m; }
+  modeBtn.addEventListener('click',()=>{
+    const i=modes.indexOf(document.body.getAttribute('data-mode')||'DMG');
+    setMode(modes[(i+1)%modes.length]);
+  });
+  tetrad.addEventListener('click',()=>modeBtn.click());
+  window.addEventListener('keydown',(e)=>{ if(e.key.toLowerCase()==='t') modeBtn.click(); });
+})();
+</script>
+</body>
+</html>
