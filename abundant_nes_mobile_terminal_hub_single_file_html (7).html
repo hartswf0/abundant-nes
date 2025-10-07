@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>abundant-nes</title>
+  <meta name="theme-color" content="#0b0f12" />
+  <style>
+    :root{
+      /* DMG palette */
+      --bg:#0b0f12; --fg:#eaffd9; --accent:#8dff5a; --line:#25492e; --slug-bg:#0a130d; --slug-fg:#f4ffe6;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace;
+    }
+    *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+    html,body{height:100%; margin:0}
+    body{background:radial-gradient(900px 600px at 50% -80px,#16221b,var(--bg)); color:var(--fg); font:17px/1.2 var(--mono)}
+
+    .led{position:fixed; top:8px; right:8px; width:10px; height:10px; border-radius:3px; background:#28372c; box-shadow:inset 0 0 0 2px #06100a}
+    .on{background:var(--accent) !important; box-shadow:0 0 10px var(--accent)}
+
+    .wrap{min-height:100vh; display:grid; grid-template-rows:auto 1fr; gap:8px}
+
+    /* RADIO PANEL (retro console) */
+    .panel{position:relative; height:44vh; min-height:320px; display:grid; grid-template-columns:64px 1fr 64px; align-items:stretch; gap:8px}
+
+    .side{display:grid; align-content:center; gap:12px; padding:8px; background:linear-gradient(180deg,#0d1713,#0a130f); border:3px solid var(--line); border-radius:12px}
+    .side .knob{width:44px; height:44px; border-radius:50%; border:3px solid var(--line); background:radial-gradient(circle at 30% 30%, #18251c, #0a130f); box-shadow:inset 0 0 0 3px #1a2b22}
+    .knob:active{transform:translateY(1px)}
+
+    .console{position:relative; border:3px solid var(--line); border-radius:12px; background:linear-gradient(180deg,#0e1713,#0a130f); box-shadow:inset 0 0 0 3px #122219; padding:8px}
+
+    /* semicircle meter */
+    .meter{width:100%; height:54%; display:block}
+    .needle{transform-origin:100px 100px; transition:transform .12s ease}
+    .ticks line{opacity:.5}
+
+    /* center display */
+    .display{position:absolute; left:8px; right:8px; bottom:8px; top:56%; border:3px solid var(--line); border-radius:10px; display:grid; place-items:center; background:radial-gradient(closest-side,#0f1a14,#0a130f)}
+    .slug{font-size:2.6rem; font-weight:900; padding:.35em .6em; border:3px solid var(--line); border-radius:12px; background:var(--slug-bg); color:var(--slug-fg); font-variant-numeric:tabular-nums; letter-spacing:.02em; text-shadow:0 2px 0 #000, 0 0 18px color-mix(in srgb, var(--accent) 25%, transparent)}
+
+    /* dock */
+    .dock{position:relative; display:grid; grid-template-rows:auto 1fr; border-top:3px solid var(--line); background:linear-gradient(180deg,#0e1713,#0a130f); box-shadow:0 -8px 0 #000; height:100%}
+    .dock-head{display:flex; align-items:center; gap:10px; padding:8px}
+    .dock-head .slug{font-size:1.3rem}
+    .dock-ctl{margin-left:auto; display:flex; gap:10px; align-items:center}
+    .ico{width:46px; height:46px; display:inline-grid; place-items:center; border:3px solid var(--line); border-radius:10px; background:#0a130d}
+    .ico:active{transform:translateY(1px)}
+    .ico.o::before{content:""; width:20px; height:20px; border:3px solid var(--fg); border-radius:50%}
+    .ico.t::before{content:""; width:0; height:0; border-left:12px solid transparent; border-right:12px solid transparent; border-bottom:22px solid var(--fg)}
+
+    .dock-iframe{width:100%; height:100%; border:0; background:#070f0b}
+
+    .noise{position:absolute; inset:0; pointer-events:none; opacity:0; background:repeating-linear-gradient(0deg, #0f1a1400 0 2px, #0f1a1422 2px 3px)}
+    .noise.on{opacity:.6; animation:noise .2s steps(2) infinite}
+    @keyframes noise{to{transform:translateY(1px)}}
+
+    .cart:focus, .ico:focus{outline:2px solid var(--accent); outline-offset:2px}
+  </style>
+</head>
+<body>
+  <div class="led" id="led"></div>
+  <div class="wrap">
+    <div class="panel" id="panel">
+      <div class="side" aria-hidden="true">
+        <button class="knob" id="leftOpen" title="open"></button>
+        <button class="knob" id="leftPrev" title="prev"></button>
+      </div>
+
+      <div class="console">
+        <svg class="meter" viewBox="0 0 200 110" preserveAspectRatio="xMidYMin meet" aria-hidden="true">
+          <!-- arc -->
+          <path d="M10,100 A90,90 0 0 1 190,100" fill="none" stroke="var(--fg)" stroke-width="3"/>
+          <!-- ticks -->
+          <g class="ticks" id="ticks" stroke="var(--fg)" stroke-width="2"></g>
+          <!-- needle -->
+          <line id="needle" class="needle" x1="100" y1="100" x2="100" y2="16" stroke="var(--accent)" stroke-width="3"/>
+        </svg>
+        <div class="display"><div class="slug" id="slug">---</div></div>
+      </div>
+
+      <div class="side" aria-hidden="true">
+        <button class="knob" id="rightNext" title="next"></button>
+        <button class="knob" id="rightEject" title="eject"></button>
+      </div>
+    </div>
+
+    <div class="dock" id="dock" aria-label="preview">
+      <div class="dock-head">
+        <div class="slug" id="dockSlug">---</div>
+        <div class="dock-ctl">
+          <button class="ico o" id="btnOpen" aria-label="open" type="button"></button>
+          <button class="ico t" id="btnEject" aria-label="eject" type="button"></button>
+        </div>
+      </div>
+      <div class="noise" id="noise"></div>
+      <iframe id="preview" class="dock-iframe" title="preview"></iframe>
+    </div>
+  </div>
+
+<script>
+(function(){
+  'use strict';
+  const ghOwner='hartswf0', ghRepo='abundant-nes', ghBranch='main';
+  const api = `https://api.github.com/repos/${ghOwner}/${ghRepo}/contents/`;
+  const site = (n)=>`https://${ghOwner}.github.io/${ghRepo}/${encodeURIComponent(n)}`; // exact pages url
+
+  const $=id=>document.getElementById(id);
+  const led=$('led');
+  const slugEl=$('slug');
+  const ticksGroup=$('ticks');
+  const needle=document.getElementById('needle');
+  const leftOpen=$('leftOpen'), leftPrev=$('leftPrev');
+  const rightNext=$('rightNext'), rightEject=$('rightEject');
+  const dockSlug=$('dockSlug');
+  const frame=$('preview');
+  const btnOpen=$('btnOpen');
+  const btnEject=$('btnEject');
+  const noiseEl=$('noise');
+
+  let files=[], list=[], index=0;
+
+  function vib(ms=10){ try{ navigator.vibrate && navigator.vibrate(ms); }catch(_){} }
+
+  // audio hiss
+  let actx=null;
+  function playHiss(ms=220){
+    try{
+      if(!actx) actx=new (window.AudioContext||window.webkitAudioContext)();
+      const sr=actx.sampleRate, len=Math.max(1,Math.floor(sr*ms/1000));
+      const buf=actx.createBuffer(1,len,sr); const d=buf.getChannelData(0);
+      for(let i=0;i<len;i++){ d[i]=(Math.random()*2-1)*0.35; }
+      const src=actx.createBufferSource(); src.buffer=buf;
+      const g=actx.createGain(); g.gain.setValueAtTime(0.001, actx.currentTime);
+      g.gain.linearRampToValueAtTime(0.6, actx.currentTime+0.02);
+      g.gain.exponentialRampToValueAtTime(0.001, actx.currentTime+ms/1000);
+      src.connect(g).connect(actx.destination); src.start();
+      noiseEl.classList.add('on'); setTimeout(()=>noiseEl.classList.remove('on'), ms);
+    }catch(e){/* ignore */}
+  }
+
+  function trimHtmlExt(s){ const lo=s.toLowerCase(); return lo.endsWith('.html')?s.slice(0,-5): lo.endsWith('.htm')?s.slice(0,-4): s; }
+  function slugFromTriple(name){
+    const strict=name.match(/\.([0-9]{3})\.html?$/i); if(strict) return strict[1];
+    const loose=name.match(/([0-9]{3,})\.html?$/i); if(loose) return loose[1].slice(-3);
+    return trimHtmlExt(name).replace(/[^a-z0-9]+/gi,'').slice(0,3).toUpperCase();
+  }
+  const isTripleFile=n=>/\.[0-9]{3}\.html?$/i.test(n);
+
+  // Draw 21 tick marks along the arc
+  function mountTicks(){
+    if(!ticksGroup) return;
+    ticksGroup.innerHTML='';
+    const N=21; // visual only
+    for(let i=0;i<N;i++){
+      const t=document.createElementNS('http://www.w3.org/2000/svg','line');
+      const deg=-90 + (i/(N-1))*180; // -90..+90
+      const rad=deg*Math.PI/180;
+      const cx=100, cy=100, R1=84, R2=90;
+      const x1=cx+Math.cos(rad)*R1, y1=cy+Math.sin(rad)*R1;
+      const x2=cx+Math.cos(rad)*R2, y2=cy+Math.sin(rad)*R2;
+      t.setAttribute('x1',x1.toFixed(1)); t.setAttribute('y1',y1.toFixed(1));
+      t.setAttribute('x2',x2.toFixed(1)); t.setAttribute('y2',y2.toFixed(1));
+      ticksGroup.appendChild(t);
+    }
+  }
+
+  function setIndex(i, play=true){
+    if(!list.length) return;
+    index = (i%list.length+list.length)%list.length;
+    const name=list[index];
+    const s=slugFromTriple(name);
+    slugEl.textContent=s; dockSlug.textContent=s;
+    // rotate needle over -90..+90
+    const deg = -90 + (index/(list.length-1||1))*180;
+    if(needle) needle.style.transform = `rotate(${deg}deg)`;
+    if(play){ frame.src=site(name); playHiss(240); vib(8); }
+  }
+
+  // Keyboard + side knobs
+  leftPrev.addEventListener('click', ()=> setIndex(index-1));
+  rightNext.addEventListener('click',()=> setIndex(index+1));
+  leftOpen.addEventListener('click', ()=>{ if(!list.length) return; window.open(site(list[index]), '_blank','noopener'); vib(8); });
+  rightEject.addEventListener('click',()=>{ frame.src='about:blank'; vib(6); });
+  document.addEventListener('keydown',(e)=>{
+    if(e.key==='ArrowRight' || e.key==='ArrowUp') setIndex(index+1);
+    else if(e.key==='ArrowLeft' || e.key==='ArrowDown') setIndex(index-1);
+    else if(e.key==='Enter') window.open(site(list[index]), '_blank','noopener');
+    else if(e.key==='Escape') { frame.src='about:blank'; }
+  });
+
+  btnOpen.addEventListener('click', ()=>{ if(!list.length) return; window.open(site(list[index]), '_blank','noopener'); vib(8); });
+  btnEject.addEventListener('click', ()=>{ frame.src='about:blank'; vib(6); });
+
+  async function fetchFiles(){ const r=await fetch(api,{headers:{'Accept':'application/vnd.github+json'}}); if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }
+
+  async function boot(){
+    try{
+      const data=await fetchFiles();
+      const htmls=data.filter(f=>f.type==='file' && /\.html?$/i.test(f.name)).map(f=>f.name);
+      list=htmls.filter(isTripleFile).sort((a,b)=>{ const A=parseInt(slugFromTriple(a),10), B=parseInt(slugFromTriple(b),10); if(Number.isFinite(A)&&Number.isFinite(B)) return B-A; return a.localeCompare(b); });
+      mountTicks(); setIndex(0,false); led.classList.add('on');
+    }catch(e){ console.warn(e); }
+  }
+
+  // compatibility helper for existing tests
+  function nearestIndexFromDeg(deg){
+    const N = list.length || 1; // when unknown, behave as single station
+    const norm = ((deg%360)+360)%360;
+    if(N===1) return 0;
+    return Math.round((norm/360)*(N-1));
+  }
+
+  // self-tests
+  (function tests(){
+    const ok=[];
+    ok.push(slugFromTriple('file.007.html')==='007');
+    ok.push(slugFromTriple('ai_studio_code - 2025-09-25T152010.895.html')==='895');
+    ok.push(isTripleFile('x.045.htm')===true);
+    const u = site('ai_studio_code - 2025-09-25T152010.895.html');
+    ok.push(u==='https://hartswf0.github.io/abundant-nes/ai_studio_code%20-%202025-09-25T152010.895.html');
+    ok.push(nearestIndexFromDeg(0)===0);
+    ok.push(nearestIndexFromDeg(359)===0); // with N=1 default, edge wraps to 0
+    if(!ok.every(Boolean)) console.warn('Self-tests failed', ok);
+  })();
+
+  boot();
+})();
+</script>
+</body>
+</html>
