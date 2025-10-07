@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>abundant-nes</title>
+  <meta name="theme-color" content="#0b0f12" />
+  <style>
+    :root{
+      /* DMG palette */
+      --bg:#0b0f12; --fg:#eaffd9; --accent:#8dff5a; --line:#25492e; --slug-bg:#0a130d; --slug-fg:#f4ffe6;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace;
+    }
+    *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+    html,body{height:100%; margin:0}
+    body{background:radial-gradient(900px 600px at 50% -80px,#16221b,var(--bg)); color:var(--fg); font:17px/1.2 var(--mono)}
+
+    .led{position:fixed; top:8px; right:8px; width:10px; height:10px; border-radius:3px; background:#28372c; box-shadow:inset 0 0 0 2px #06100a}
+    .on{background:var(--accent) !important; box-shadow:0 0 10px var(--accent)}
+
+    .wrap{min-height:100vh; display:grid; grid-template-rows:auto auto 42vh; gap:8px}
+
+    /* RADIO DIAL */
+    .dial{position:relative; height:44vh; min-height:320px; display:grid; place-items:center}
+    .ring{width:min(92vw,520px); aspect-ratio:1; border:3px solid var(--line); border-radius:50%; background:radial-gradient(closest-side,#0f1a14,#0a120e)}
+    .ticks{position:absolute; inset:0; pointer-events:none}
+    .tick{position:absolute; width:2px; height:10px; background:var(--fg); opacity:.35; transform-origin:50% calc(50% + 190px)}
+
+    .knob{position:absolute; width:46%; aspect-ratio:1; border:3px solid var(--line); border-radius:50%; background:linear-gradient(180deg,#0d1713,#0a130f); box-shadow:inset 0 0 0 3px #1a2b22; display:grid; place-items:center; transform:rotate(0deg); touch-action:none}
+    .pointer{position:absolute; top:6%; left:50%; width:4px; height:18%; transform:translateX(-50%); background:var(--accent); box-shadow:0 0 8px color-mix(in srgb, var(--accent) 40%, transparent)}
+
+    .readout{position:absolute; width:42%; aspect-ratio:1; border-radius:50%; display:grid; place-items:center}
+    .slug{font-size:2.8rem; font-weight:900; padding:.4em .6em; border:3px solid var(--line); border-radius:12px; background:var(--slug-bg); color:var(--slug-fg); font-variant-numeric:tabular-nums; letter-spacing:.02em; text-shadow:0 2px 0 #000, 0 0 18px color-mix(in srgb, var(--accent) 25%, transparent)}
+
+    /* dock */
+    .dock{position:relative; border-top:3px solid var(--line); background:linear-gradient(180deg,#0e1713,#0a130f); box-shadow:0 -8px 0 #000}
+    .dock-head{display:flex; align-items:center; gap:10px; padding:8px}
+    .dock-head .slug{font-size:1.3rem}
+    .dock-ctl{margin-left:auto; display:flex; gap:10px; align-items:center}
+    .ico{width:46px; height:46px; display:inline-grid; place-items:center; border:3px solid var(--line); border-radius:10px; background:#0a130d}
+    .ico:active{transform:translateY(1px)}
+    .ico.o::before{content:""; width:20px; height:20px; border:3px solid var(--fg); border-radius:50%}
+    .ico.t::before{content:""; width:0; height:0; border-left:12px solid transparent; border-right:12px solid transparent; border-bottom:22px solid var(--fg)}
+
+    .dock-iframe{width:100%; height:100%; border:0; background:#070f0b}
+
+    .noise{position:absolute; inset:0; pointer-events:none; opacity:0; background:repeating-linear-gradient(0deg, #0f1a1400 0 2px, #0f1a1422 2px 3px)}
+    .noise.on{opacity:.6; animation:noise .2s steps(2) infinite}
+    @keyframes noise{to{transform:translateY(1px)}}
+
+    .cart:focus, .ico:focus{outline:2px solid var(--accent); outline-offset:2px}
+  </style>
+</head>
+<body>
+  <div class="led" id="led"></div>
+  <div class="wrap">
+    <div class="dial" id="dial">
+      <div class="ring"></div>
+      <div class="ticks" id="ticks"></div>
+      <div class="knob" id="knob" aria-label="tuner" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
+        <div class="pointer"></div>
+        <div class="readout"><div class="slug" id="slug">---</div></div>
+      </div>
+    </div>
+
+    <div class="dock" id="dock" aria-label="preview">
+      <div class="dock-head">
+        <div class="slug" id="dockSlug">---</div>
+        <div class="dock-ctl">
+          <button class="ico o" id="btnOpen" aria-label="open" type="button"></button>
+          <button class="ico t" id="btnEject" aria-label="eject" type="button"></button>
+        </div>
+      </div>
+      <div class="noise" id="noise"></div>
+      <iframe id="preview" class="dock-iframe" title="preview"></iframe>
+    </div>
+  </div>
+
+<script>
+(function(){
+  'use strict';
+  const ghOwner='hartswf0', ghRepo='abundant-nes', ghBranch='main';
+  const api = `https://api.github.com/repos/${ghOwner}/${ghRepo}/contents/`;
+  const site = (n)=>`https://${ghOwner}.github.io/${ghRepo}/${encodeURIComponent(n)}`; // exact pages url
+
+  const $=id=>document.getElementById(id);
+  const led=$('led');
+  const ticks=$('ticks');
+  const knob=$('knob');
+  const slugEl=$('slug');
+  const dockSlug=$('dockSlug');
+  const frame=$('preview');
+  const btnOpen=$('btnOpen');
+  const btnEject=$('btnEject');
+  const noiseEl=$('noise');
+
+  let files=[], list=[], index=0, grabbing=false, center={x:0,y:0}, angle=0;
+
+  function vib(ms=10){ try{ navigator.vibrate && navigator.vibrate(ms); }catch(_){} }
+
+  // audio hiss
+  let actx=null;
+  function playHiss(ms=220){
+    try{
+      if(!actx) actx=new (window.AudioContext||window.webkitAudioContext)();
+      const sr=actx.sampleRate, len=Math.max(1,Math.floor(sr*ms/1000));
+      const buf=actx.createBuffer(1,len,sr); const d=buf.getChannelData(0);
+      for(let i=0;i<len;i++){ d[i]=(Math.random()*2-1)*0.35; }
+      const src=actx.createBufferSource(); src.buffer=buf;
+      const g=actx.createGain(); g.gain.setValueAtTime(0.001, actx.currentTime);
+      g.gain.linearRampToValueAtTime(0.6, actx.currentTime+0.02);
+      g.gain.exponentialRampToValueAtTime(0.001, actx.currentTime+ms/1000);
+      src.connect(g).connect(actx.destination); src.start();
+      noiseEl.classList.add('on'); setTimeout(()=>noiseEl.classList.remove('on'), ms);
+    }catch(e){/* ignore */}
+  }
+
+  function trimHtmlExt(s){ const lo=s.toLowerCase(); return lo.endsWith('.html')?s.slice(0,-5): lo.endsWith('.htm')?s.slice(0,-4): s; }
+  function slugFromTriple(name){
+    const strict=name.match(/\.([0-9]{3})\.html?$/i); if(strict) return strict[1];
+    const loose=name.match(/([0-9]{3,})\.html?$/i); if(loose) return loose[1].slice(-3);
+    return trimHtmlExt(name).replace(/[^a-z0-9]+/gi,'').slice(0,3).toUpperCase();
+  }
+  const isTripleFile=n=>/\.[0-9]{3}\.html?$/i.test(n);
+
+  function mountTicks(){
+    ticks.innerHTML='';
+    const N=list.length; if(!N) return;
+    for(let i=0;i<N;i++){
+      const t=document.createElement('div'); t.className='tick';
+      const deg = (i/N)*360; t.style.transform=`rotate(${deg}deg) translateY(8px)`;
+      ticks.appendChild(t);
+    }
+  }
+
+  function setIndex(i, play=true){
+    if(!list.length) return;
+    index = (i%list.length+list.length)%list.length;
+    const name=list[index];
+    const s=slugFromTriple(name);
+    slugEl.textContent=s; dockSlug.textContent=s;
+    // rotate knob to station angle
+    const deg=(index/list.length)*360; angle=deg; knob.style.transform=`rotate(${deg}deg)`;
+    if(play){
+      frame.src=site(name);
+      playHiss(240); vib(8);
+    }
+  }
+
+  function angleFrom(x,y){ return Math.atan2(y-center.y, x-center.x) * 180/Math.PI + 180; } // 0..360
+  function nearestIndexFromDeg(deg){ const N=list.length||1; return Math.round((deg/360)*N)%N; }
+
+  function onPointerDown(e){ grabbing=true; const r=knob.getBoundingClientRect(); center={x:r.left+r.width/2, y:r.top+r.height/2}; document.addEventListener('pointermove', onPointerMove); document.addEventListener('pointerup', onPointerUp,{once:true}); }
+  function onPointerMove(e){ if(!grabbing) return; const deg=angleFrom(e.clientX, e.clientY); setIndex(nearestIndexFromDeg(deg)); }
+  function onPointerUp(){ grabbing=false; document.removeEventListener('pointermove', onPointerMove); }
+
+  knob.addEventListener('pointerdown', onPointerDown);
+  knob.addEventListener('keydown', (e)=>{
+    if(!list.length) return;
+    if(e.key==='ArrowRight' || e.key==='ArrowUp'){ setIndex(index+1); }
+    else if(e.key==='ArrowLeft' || e.key==='ArrowDown'){ setIndex(index-1); }
+  });
+
+  btnOpen.addEventListener('click', ()=>{ if(!list.length) return; window.open(site(list[index]), '_blank','noopener'); vib(8); });
+  btnEject.addEventListener('click', ()=>{ frame.src='about:blank'; vib(6); });
+
+  async function fetchFiles(){ const r=await fetch(api,{headers:{'Accept':'application/vnd.github+json'}}); if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }
+
+  async function boot(){
+    try{
+      const data=await fetchFiles();
+      const htmls=data.filter(f=>f.type==='file' && /\.html?$/i.test(f.name)).map(f=>f.name);
+      list=htmls.filter(isTripleFile).sort((a,b)=>{ const A=parseInt(slugFromTriple(a),10), B=parseInt(slugFromTriple(b),10); if(Number.isFinite(A)&&Number.isFinite(B)) return B-A; return a.localeCompare(b); });
+      mountTicks(); setIndex(0,false); led.classList.add('on');
+    }catch(e){ console.warn(e); }
+  }
+
+  // self-tests
+  (function tests(){
+    const ok=[];
+    ok.push(slugFromTriple('file.007.html')==='007');
+    ok.push(slugFromTriple('ai_studio_code - 2025-09-25T152010.895.html')==='895');
+    ok.push(isTripleFile('x.045.htm')===true);
+    const u = site('ai_studio_code - 2025-09-25T152010.895.html');
+    ok.push(u==='https://hartswf0.github.io/abundant-nes/ai_studio_code%20-%202025-09-25T152010.895.html');
+    ok.push(nearestIndexFromDeg(0)===0);
+    ok.push(nearestIndexFromDeg(359)===0);
+    if(!ok.every(Boolean)) console.warn('Self-tests failed', ok);
+  })();
+
+  boot();
+})();
+</script>
+</body>
+</html>
