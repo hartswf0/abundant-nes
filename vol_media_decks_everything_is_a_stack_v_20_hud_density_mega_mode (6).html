@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>SEA SEQUENCER — Pure Stacks</title>
+<style>
+  :root{
+    --abyss:#03080f; --ink:#e9f6ff; --muted:#8fb4c9;
+    --cyan:#58e0ff; --azure:#4aa3ff; --teal:#36d1c4; --foam:#dff4ff;
+    --shadow:0 18px 44px rgba(0,0,0,.55), 0 2px 14px rgba(0,0,0,.35);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent; touch-action:none}
+  html,body{height:100%}
+  body{margin:0; background:radial-gradient(1200px 800px at 50% 40%, #081b2c 0%, var(--abyss) 60%); color:var(--ink); font:14px/1.2 Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; overflow:hidden}
+  canvas#scene{position:fixed; inset:0; display:block}
+
+  /* HUD */
+  #hud{position:fixed; inset:0; pointer-events:none}
+  #paramDock{position:absolute; right:16px; bottom:18px; display:none; gap:12px; pointer-events:auto}
+  #safeBottom{position:fixed; left:0; right:0; bottom:0; height:132px; pointer-events:none}
+  /* Alley — the only visible UI at boot */
+  #alley{position:absolute; right:16px; top:50%; transform:translateY(-50%); display:flex; flex-direction:column; gap:12px; pointer-events:auto}
+
+  /* Stack widgets (sliders now look like stacks) */
+  .stack{--w:70px; width:var(--w); height:108px; background:linear-gradient(180deg, rgba(170,220,255,.10), rgba(255,255,255,.02)); border:1px solid rgba(160,210,255,.22); border-radius:14px; box-shadow:var(--shadow); position:relative; overflow:hidden}
+  .stack .glyph{position:absolute; top:6px; left:6px; font-size:10px; letter-spacing:.08em; color:var(--muted)}
+  .stack .legend{position:absolute; bottom:6px; width:100%; text-align:center; font-size:10px; color:#cfe8ff}
+  .stack .layers{position:absolute; inset:14px 10px 20px 10px; display:flex; flex-direction:column; justify-content:flex-end; gap:4px}
+  .stack .lay{height:8px; border-radius:4px; background:rgba(170,220,255,.16); box-shadow:0 0 10px rgba(120,200,255,.18)}
+  .stack.accent{border-color:rgba(120,200,255,.55); box-shadow:0 0 0 1px rgba(120,200,255,.35), inset 0 0 28px rgba(120,200,255,.14), var(--shadow)}
+
+  #colorPipe{position:fixed; left:0; right:0; bottom:0; height:3px; background:linear-gradient(90deg, #1c5d7a, #78d9ff); opacity:.55; pointer-events:none}
+  @media (max-width:760px){ .stack{--w:64px; height:100px} #safeBottom{height:122px} }
+</style>
+</head>
+<body>
+  <canvas id="scene"></canvas>
+  <div id="hud">
+    <!-- PARAM surface (lazy, appears only after tapping Alley) -->
+    <div id="paramDock"></div>
+
+    <!-- Alley: the only control at boot -->
+    <div id="alley">
+      <div class="stack accent" id="alleyOpen"><div class="glyph">OPEN</div><div class="layers" id="alleyOpenLayers"></div><div class="legend" id="alleyOpenLegend">PARAM</div></div>
+      <div class="stack" id="alleyGrid"><div class="glyph">GRID</div><div class="layers" id="alleyGridLayers"></div><div class="legend" id="alleyGridLegend">8×8</div></div>
+      <div class="stack" id="alleyPack"><div class="glyph">PACK</div><div class="layers" id="alleyPackLayers"></div><div class="legend" id="alleyPackLegend">SEA</div></div>
+      <div class="stack" id="alleyEcho"><div class="glyph">ECHO</div><div class="layers" id="alleyEchoLayers"></div><div class="legend" id="alleyEchoLegend">MIX</div></div>
+      <div class="stack" id="alleyPlay"><div class="glyph">PLAY</div><div class="layers" id="alleyPlayLayers"></div><div class="legend" id="alleyPlayLegend">STOP</div></div>
+    </div>
+
+    <div id="safeBottom"></div>
+    <div id="colorPipe"></div>
+  </div>
+
+<script>
+(()=>{
+  /* ============ DOM/Setup ============ */
+  const canvas=document.getElementById('scene');
+  const ctx=canvas.getContext('2d');
+  const $=id=>document.getElementById(id);
+  const DPR=Math.max(1,devicePixelRatio||1);
+  let W=0,H=0; function resize(){W=innerWidth;H=innerHeight;canvas.width=W*DPR;canvas.height=H*DPR;canvas.style.width=W+'px';canvas.style.height=H+'px';ctx.setTransform(DPR,0,0,DPR,0,0);} addEventListener('resize',resize,{passive:true}); resize();
+  const buzz=(p)=>{try{navigator.vibrate&&navigator.vibrate(p||10)}catch{}};
+
+  /* ============ Colors per row ============ */
+  const ROW_COLORS=['#0ea5e9','#22d3ee','#38bdf8','#67e8f9','#93c5fd','#a5f3fc','#60a5fa','#7dd3fc'];
+
+  /* ============ State ============ */
+  const state={
+    gridOpts:[16,8,4,2,1], gridIdx:1, cols:8, rows:8,
+    baseCell:30, defaultLayers:12,
+    playing:false, t:0, bpm:118, playhead:0,
+    selection:null, editor:false,
+    focus:{tx:0,tz:0,sx:0,sz:0,scale:1,targetScale:1,lerp:0.22},
+    aimInflate:48,
+    staging:{sound:null,look:null,armed:false},
+    paramPage:0,
+    echo:.25
+  };
+
+  /* ============ Params ============ */
+  const PARAMS_SOUND=[
+    {key:'vel',label:'VEL'},{key:'prob',label:'PRB'},{key:'len',label:'LEN'},
+    {key:'pitch',label:'PIT'},{key:'pan',label:'PAN'},{key:'send',label:'REV'},
+  ];
+
+  /* ============ Grid ============ */
+  function makeCell(r){return{on:Math.random()<0.22,vel:0.6,prob:0.9,len:0.6,pitch:0,pan:(r-3.5)/3.5,send:0.25,lum:0.9,sep:1.05,layers:0.7,halo:0.7,sat:0.95,twist:0.02,_layersCache:state.defaultLayers,_pulse:0,_wig:0}};
+  function makeGrid(cols){const g=[];for(let r=0;r<state.rows;r++){const row=[];for(let c=0;c<cols;c++)row.push(makeCell(r));g.push(row);}return g}
+  let grid=makeGrid(state.cols);
+
+  /* ============ Build visual stacks ============ */
+  function buildLayers(el,n=10,lit=4){el.innerHTML='';for(let i=0;i<n;i++){const d=document.createElement('div');d.className='lay';if(i>=n-lit)d.style.background='linear-gradient(90deg,#58e0ff,#fff)';el.appendChild(d)}}
+  buildLayers($('alleyOpenLayers'),8,6); buildLayers($('alleyGridLayers'),8,5); buildLayers($('alleyPackLayers'),8,4); buildLayers($('alleyEchoLayers'),8,Math.round(8*state.echo)); buildLayers($('alleyPlayLayers'),8,2);
+
+  /* ============ Geometry helpers (isometric) ============ */
+  function safeRect(){const r=document.getElementById('safeBottom').getBoundingClientRect();return{x:0,y:0,w:W,h:Math.max(0,H-(r.height+8))}}
+  function spacing(){const G=Math.max(state.cols,state.rows);const fx=G/state.cols,fz=G/state.rows;return{dx:state.baseCell*fx*1.42,dz:state.baseCell*fz*1.42}}
+  function isoProject(x,y,z){const phi=0.16*Math.PI, theta=0.24*Math.PI;const cy=Math.cos(theta),sy=Math.sin(theta);const cx=Math.cos(phi),sx=Math.sin(phi);let X=x,Y=y,Z=z;let x1=X*cy+Z*sy;let z1=-X*sy+Z*cy;let y2=Y*cx-z1*sx;const f=state.focus; x1-=f.sx;y2-=f.sz;const R=safeRect();return{x:R.x+R.w*.5+x1,y:R.y+R.h*.5+y2,depth:z1}}
+  function cellCenter(c,r){const {dx,dz}=spacing();const w=(state.cols-1)*dx;const h=(state.rows-1)*dz;return{x:c*dx-w/2,y:0,z:r*dz-h/2}}
+
+  function colorize(hex,sat){const n=parseInt(hex.slice(1),16);let r=(n>>16)&255,g=(n>>8)&255,b=n&255;const gr=0.3*r+0.59*g+0.11*b;const mix=(t,a,b)=>Math.round(a*(1-t)+b*t);r=mix(1-sat,r,gr);g=mix(1-sat,g,gr);b=mix(1-sat,b,gr);return`rgb(${r},${g},${b})`}
+  function roundedRect(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath()}
+  function calcLayersFrom(v){return Math.round(6+v*18)}
+
+  /* ============ Draw ============ */
+  function drawStack(c,r,cell){
+    const base=cellCenter(c,r);const color=ROW_COLORS[r%ROW_COLORS.length];
+    const p=isoProject(base.x + Math.sin(cell._wig)*6*cell._pulse, 0, base.z + Math.cos(cell._wig)*6*cell._pulse);
+    const layers= calcLayersFrom(cell.layers); const lum=cell.lum, sat=cell.sat, halo=cell.halo, sep=cell.sep, tw=cell.twist;
+
+    // back plate
+    ctx.save();ctx.translate(p.x,p.y);ctx.globalAlpha=.10;ctx.fillStyle=color;roundedRect(-18,-10,36,20,7);ctx.fill();ctx.restore();
+
+    for(let i=0;i<layers;i++){
+      const y=i*(10*sep);
+      const px=isoProject(base.x+Math.sin(i*.12+cell._wig)*tw*14* (1+cell._pulse*0.4), -y, base.z);
+      ctx.save();ctx.translate(px.x,px.y);ctx.globalAlpha=(.10+i*.02)*lum*(1+cell._pulse*0.35);
+      ctx.fillStyle=colorize(color,sat);ctx.shadowColor='#7fdcff';ctx.shadowBlur=10*halo*(1+cell._pulse*1.2);
+      roundedRect(-26/2,-14/2,26,14,6);ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  /* ============ Interaction ============ */
+  function pickCell(mx,my){let best=null,bestD=1e9;for(let r=0;r<state.rows;r++)for(let c=0;c<state.cols;c++){const P=isoProject(cellCenter(c,r).x,0,cellCenter(c,r).z);const dx=mx-P.x,dy=my-P.y;const d=dx*dx+dy*dy - state.aimInflate*state.aimInflate;if(d<bestD){bestD=d;best={r,c}}}return best}
+
+  function scrubTo(col){ if(typeof col!=='number') return; const c=Math.max(0,Math.min(state.cols-1,col|0)); state.playhead=c; buzz(4); for(let r=0;r<state.rows;r++){ const cell=grid[r][c]; if(cell.on) trig(r,cell,true); } }
+
+  canvas.addEventListener('pointerdown',e=>{const R=canvas.getBoundingClientRect();const mx=e.clientX-R.left,my=e.clientY-R.top;const hit=pickCell(mx,my);if(hit){canvas.setPointerCapture(e.pointerId);state.selection=hit;state.editor=true; populateParamDock(); focusOnSelection(); scrubTo(hit.c); buzz(16); e.preventDefault();}})
+  canvas.addEventListener('pointermove',e=>{if(!state.editor) return; const R=canvas.getBoundingClientRect();const mx=e.clientX-R.left,my=e.clientY-R.top;const hit=pickCell(mx,my); if(hit) scrubTo(hit.c)})
+  addEventListener('pointerup',()=>{state.editor=false})
+
+  function focusOnSelection(){if(!state.selection){state.focus.targetScale=1;return}const sel=state.selection;const base=cellCenter(sel.c,sel.r);const R=safeRect();const aX=R.x+R.w*.52,aY=R.y+R.h*.72;const p=isoProject(base.x,0,base.z);state.focus.tx+=(p.x-aX);state.focus.tz+=(p.y-aY);state.focus.targetScale=Math.min(2.2,1.0+(16/state.cols)*0.26)}
+
+  /* ============ Param Dock (stacks-as-sliders) ============ */
+  const PAGE_SIZE=4; function clamp01(x){return Math.max(0,Math.min(1,x))}
+  function value01(key,c){if(key==='pitch')return (c.pitch+12)/24; if(key==='pan')return (c.pan+1)/2; return (key in c)? c[key] : .5}
+  function applySound(obj,k,v){if(k==='pitch')obj.pitch=Math.round((v*2-1)*24); else if(k==='pan')obj.pan=(v*2-1); else obj[k]=v}
+  function populateParamDock(){ const dock=$('paramDock'); dock.style.display='flex'; dock.innerHTML=''; const sel=state.selection; if(!sel) return; const SET=PARAMS_SOUND; const page= state.paramPage % Math.max(1,Math.ceil(SET.length/PAGE_SIZE)); const slice=SET.slice(page*PAGE_SIZE, page*PAGE_SIZE+PAGE_SIZE); const active= ROW_COLORS[sel.r%ROW_COLORS.length];
+    slice.forEach(p=>{const s=document.createElement('div'); s.className='stack'; s.innerHTML=`<div class="glyph">${p.label}</div><div class="layers"></div><div class="legend"></div>`; const L=s.querySelector('.layers'); let v=value01(p.key, grid[sel.r][sel.c]); const render=(vv)=>{const lit=Math.max(1,Math.round(1+vv*7)); buildLayers(L,8,lit)}; render(v);
+      // Thick drag feel (bigger steps, strong haptics)
+      let grabbing=false, sy=0, sv=v, last=-1; const dead=6;
+      s.addEventListener('pointerdown',e=>{grabbing=true; sy=e.clientY; sv=v; s.setPointerCapture(e.pointerId); buzz([8,12,8])});
+      s.addEventListener('pointermove',e=>{ if(!grabbing) return; const dy=sy-e.clientY; let dv=(Math.abs(dy)>dead?(dy>0?(dy-dead):(dy+dead)):0)/120; v=clamp01(sv+dv); render(v);
+        const cell=grid[sel.r][sel.c]; applySound(cell, p.key, v); if(p.key!=='prob'){ trig(sel.r, cell, true); } const tick=Math.round(v*16); if(tick!==last){ last=tick; buzz(4);} });
+      s.addEventListener('pointerup',()=>{grabbing=false; buzz(12)});
+      s.style.borderColor=active; s.style.boxShadow=`0 0 0 1px ${active}66, inset 0 0 26px ${active}22, var(--shadow)`; dock.appendChild(s);
+    });
+    // MORE stack if needed
+    if(SET.length>PAGE_SIZE){ const more=document.createElement('div'); more.className='stack'; more.innerHTML='<div class="glyph">MORE</div><div class="layers" id="moreLayers"></div><div class="legend" id="moreLegend"></div>'; const Lm=more.querySelector('#moreLayers'); buildLayers(Lm,8,2+page); more.querySelector('#moreLegend').textContent=`${page+1}/${Math.ceil(SET.length/PAGE_SIZE)}`; more.addEventListener('pointerdown',()=>{state.paramPage++; populateParamDock(); buzz(8)}); dock.appendChild(more); }
+  }
+
+  /* ============ Audio — richer packs + echo ============ */
+  const AC=(window.AudioContext||window.webkitAudioContext); let audioCtx=null, master=null, wet=null, dry=null, delay=null, fb=null, tone=null;
+  function ensureAudio(){ if(audioCtx) return; if(!AC) return; audioCtx=new AC(); master=audioCtx.createGain(); master.gain.value=.26; master.connect(audioCtx.destination);
+    dry=audioCtx.createGain(); wet=audioCtx.createGain(); dry.gain.value=.78; wet.gain.value=.22; dry.connect(master); wet.connect(master);
+    delay=audioCtx.createDelay(0.7); delay.delayTime.value=0.33; fb=audioCtx.createGain(); fb.gain.value=0.35; tone=audioCtx.createBiquadFilter(); tone.type='lowpass'; tone.frequency.value=2600; delay.connect(fb).connect(tone).connect(delay); delay.connect(wet);
+  }
+  function noise(len=2){ const b=audioCtx.createBuffer(1, audioCtx.sampleRate*len, audioCtx.sampleRate); const d=b.getChannelData(0); for(let i=0;i<d.length;i++){ d[i]=(Math.random()*2-1)*0.6 + (d[i-1]||0)*0.38;} return b; }
+  function osc(type='sine'){ const o=audioCtx.createOscillator(); o.type=type; return o; }
+  function env(){ const g=audioCtx.createGain(); g.gain.value=0; return g; }
+  function voiceWhale(){ const o=osc('sine'), g=env(), p=audioCtx.createStereoPanner(); o.connect(g).connect(dry); g.connect(delay); p.pan.value=0; g.connect(p).connect(dry); return {o,g,p,start(f,len=1.2){ const t=audioCtx.currentTime; o.frequency.setValueAtTime(f,t); o.frequency.exponentialRampToValueAtTime(Math.max(40,f*0.4), t+len); g.gain.cancelScheduledValues(t); g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.22, t+0.08); g.gain.exponentialRampToValueAtTime(0.0001, t+len); } } }
+  function voicePluck(type='triangle'){ const o=osc(type), f=audioCtx.createBiquadFilter(); f.type='lowpass'; f.frequency.value=900; const g=env(); o.connect(f).connect(g); g.connect(dry); g.connect(delay); return {o,f,g,hit(frq,vel=0.5,shape=0.7){ const t=audioCtx.currentTime; o.frequency.setTargetAtTime(frq,t,0.01); f.frequency.setTargetAtTime(700+shape*2400,t,0.02); g.gain.cancelScheduledValues(t); g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(vel, t+0.01); g.gain.exponentialRampToValueAtTime(0.0001, t+0.24); }} }
+  function voiceSurf(){ const s=audioCtx.createBufferSource(); s.buffer=noise(2.5); s.loop=true; const f=audioCtx.createBiquadFilter(); f.type='bandpass'; f.frequency.value=250; f.Q.value=0.7; const g=audioCtx.createGain(); g.gain.value=0.12; s.connect(f).connect(g).connect(dry); g.connect(delay); s.start(); return {set(x){ g.gain.setTargetAtTime(x, audioCtx.currentTime, 0.2); }} }
+
+  let packs=[
+    {name:'SEA', whale:'sine', pluck:'triangle', echo:0.30, tone:2600},
+    {name:'DEEP', whale:'sine', pluck:'square',   echo:0.40, tone:1800},
+    {name:'REEF', whale:'triangle', pluck:'sawtooth', echo:0.28, tone:3200},
+    {name:'GLASS', whale:'sine', pluck:'sine', echo:0.22, tone:3800}
+  ], packIdx=0;
+  let whale, pluck, surf;
+
+  function applyPack(i){ ensureAudio(); packIdx=(i%packs.length+packs.length)%packs.length; const P=packs[packIdx];
+    if(!whale){ whale=voiceWhale(); whale.o.start(); }
+    if(!pluck){ pluck=voicePluck(P.pluck); pluck.o.start(); }
+    if(!surf){ surf=voiceSurf(); }
+    state.echo=P.echo; tone.frequency.setTargetAtTime(P.tone, audioCtx.currentTime, 0.2); fb.gain.setTargetAtTime(0.25+state.echo*0.6, audioCtx.currentTime, 0.2);
+    $('alleyPackLegend').textContent=P.name; buildLayers($('alleyPackLayers'),8,Math.round(3+packIdx));
+  }
+
+  function trig(row,cell,preview){ ensureAudio(); if(Math.random()>cell.prob) return; const base=[28,31,33,35,36,38,40,43][row%8]; const f= 55*Math.pow(2, ((base+cell.pitch)/12));
+    // motion pulse
+    cell._pulse = Math.min(1, cell._pulse + 0.85*(preview?0.5:1)); cell._wig += Math.random()*0.7;
+    // sound
+    if(row%2===0){ pluck.hit(f*(row===2?2:1), 0.25+cell.vel*0.7, 0.5+cell.send*0.5); }
+    else { whale.start(f* (row===7?4:1), 0.9+cell.len*0.9); }
+  }
+
+  // Alley actions
+  $('alleyOpen').addEventListener('pointerdown',()=>{ populateParamDock(); $('paramDock').style.display='flex'; buzz([10,20,10]) });
+  $('alleyGrid').addEventListener('pointerdown',()=>{ state.gridIdx=(state.gridIdx+1)%state.gridOpts.length; state.cols=state.gridOpts[state.gridIdx]; grid=makeGrid(state.cols); $('alleyGridLegend').textContent= state.cols===1? '1×1' : `${state.cols}×${state.cols}`; buildLayers($('alleyGridLayers'),8,8-state.gridIdx); buzz(10) });
+  $('alleyPack').addEventListener('pointerdown',()=>{ applyPack(packIdx+1); buzz([12,24,12]) });
+  $('alleyEcho').addEventListener('pointerdown',e=>{ ensureAudio(); // stack-like slider: vertical drag
+    const el=e.currentTarget; let grab=false, sy=0, sv=state.echo; const L=$('alleyEchoLayers'); const render=()=>buildLayers(L,8,Math.round(1+state.echo*7)); render();
+    const onMove=ev=>{ if(!grab) return; const dy=sy-ev.clientY; state.echo=Math.max(0,Math.min(1, sv + dy/180)); fb.gain.setTargetAtTime(0.2+state.echo*0.7, audioCtx.currentTime, 0.1); render(); };
+    const onUp=()=>{ grab=false; removeEventListener('pointermove',onMove); removeEventListener('pointerup',onUp); };
+    grab=true; sy=e.clientY; addEventListener('pointermove',onMove); addEventListener('pointerup',onUp); buzz([6,8,6]);
+  });
+  $('alleyPlay').addEventListener('pointerdown',()=>{ ensureAudio(); state.playing=!state.playing; $('alleyPlayLegend').textContent= state.playing?'PLAY':'STOP'; buildLayers($('alleyPlayLayers'),8,state.playing?8:2); buzz([14,28,14]) });
+
+  // ===== Tick & Render
+  function update(dt){ // playhead & per-cell pulse decay
+    if(state.playing){ const bps=state.bpm/60; state.t+=dt*bps; const next=Math.floor(state.t)%state.cols; if(next!==state.playhead){ state.playhead=next; for(let r=0;r<state.rows;r++){ const cell=grid[r][state.playhead]; if(cell.on) trig(r,cell); } buzz(3); }}
+    for(let r=0;r<state.rows;r++) for(let c=0;c<state.cols;c++){ const cell=grid[r][c]; cell._pulse *= 0.88; cell._wig += cell._pulse*0.2; }
+    state.focus.sx += (state.focus.tx-state.focus.sx)*state.focus.lerp; state.focus.sz += (state.focus.tz-state.focus.sz)*state.focus.lerp; state.focus.scale += (state.focus.targetScale-state.focus.scale)*state.focus.lerp; }
+
+  function render(){ ctx.clearRect(0,0,W,H); const R=safeRect(); const side=Math.min(R.w,R.h); const cx=R.x+R.w*.5, cy=R.y+R.h*.5; const base=side/Math.max(640,side)*state.focus.scale; ctx.save(); ctx.translate(cx,cy); ctx.scale(base,base); ctx.translate(-cx,-cy);
+    // playhead ribbon (minimized behind)
+    const phx=cellCenter(state.playhead,0).x; const p0=isoProject(phx,-140, cellCenter(0,0).z-140); const p1=isoProject(phx,220, cellCenter(state.cols-1,state.rows-1).z+140); ctx.save(); ctx.globalAlpha=0.08; ctx.strokeStyle='#cfe8ff'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(p0.x,p0.y); ctx.lineTo(p1.x,p1.y); ctx.stroke(); ctx.restore();
+    // painter's order
+    const order=[]; for(let r=0;r<state.rows;r++) for(let c=0;c<state.cols;c++) order.push({r,c}); order.sort((a,b)=>(a.r+a.c)-(b.r+b.c)); order.forEach(({r,c})=>drawStack(c,r,grid[r][c]));
+    ctx.restore(); }
+
+  let last=performance.now(); function loop(now){ const dt=Math.min(0.05,(now-last)/1000); last=now; update(dt); render(); requestAnimationFrame(loop);} requestAnimationFrame(loop);
+
+  // Boot
+  applyPack(0); // init audio + packs
+  // seed pattern
+  for(let c=0;c<state.cols;c++){ grid[0][c].on = c%4===0; grid[1][c].on = c%8===4; grid[2][c].on = c%2===0; grid[3][c].on = (c+2)%4===0; }
+
+  // Self-tests
+  try{
+    console.assert(document.querySelector('#alley').children.length>=5, 'Only Alley visible at boot');
+    console.assert(document.getElementById('paramDock').style.display!=='flex', 'Param dock hidden at boot');
+    const cols0=state.cols; document.getElementById('alleyGrid').dispatchEvent(new PointerEvent('pointerdown',{bubbles:true})); console.assert(state.cols!==cols0, 'Grid cycles on tap');
+    console.assert(typeof applyPack==='function', 'applyPack present');
+  }catch(e){ console.warn('[Sea Sequencer tests] minor issue', e); }
+})();
+</script>
+</body>
+</html>

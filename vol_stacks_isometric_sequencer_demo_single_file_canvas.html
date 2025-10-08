@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>VOL‑Stacks — Isometric Sequencer (Single‑File)</title>
+<style>
+  /* ─────────────────────────────
+     CORE SKIN — black void, neon glow, no chrome
+     ───────────────────────────── */
+  :root{
+    --bg:#050507; --ink:#e8e8e8; --muted:#7a7a7a; --hud:#101218;
+    --glow:#ffffff; --accent:#89f5ff; --danger:#ff4d6d; --ok:#80ffcc;
+    --shadow:0 8px 28px rgba(0,0,0,.55), 0 2px 8px rgba(0,0,0,.3);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent; touch-action:none}
+  html,body{height:100%}
+  body{margin:0; background:var(--bg); color:var(--ink); font:14px/1.2 system-ui,Segoe UI,Inter,Roboto,Helvetica,Arial,sans-serif; overflow:hidden}
+  canvas#scene{position:fixed; inset:0; display:block}
+  /* HUD is screen-locked */
+  #hud{position:fixed; inset:0; pointer-events:none}
+  .corner{position:absolute; display:flex; gap:10px; align-items:end; pointer-events:auto}
+  .corner.tl{top:10px; left:10px}
+  .corner.tr{top:10px; right:10px}
+  .corner.bl{bottom:10px; left:10px}
+  .corner.br{bottom:10px; right:10px}
+
+  /* Stack buttons in HUD — text-minimal, stack-shaped controls */
+  .stackBtn{--w:44px; width:var(--w); height:88px; background:linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.0)); border:1px solid rgba(255,255,255,.18); border-radius:12px; box-shadow:var(--shadow); position:relative; overflow:hidden; display:grid; place-items:end center; padding:6px}
+  .stackBtn .layers{position:absolute; inset:8px 6px; display:flex; flex-direction:column; justify-content:flex-end; gap:3px}
+  .stackBtn .lay{height:6px; border-radius:3px; background:rgba(255,255,255,.15); filter:drop-shadow(0 0 6px rgba(255,255,255,.15))}
+  .stackBtn[data-active="1"]{outline:2px solid var(--accent);}
+  .stackBtn .glyph{position:absolute; top:6px; left:6px; font-size:10px; letter-spacing:.08em; color:var(--muted)}
+  .stackBtn .legend{position:absolute; bottom:4px; width:100%; text-align:center; font-size:10px; color:#bdbdbd; opacity:.8}
+  .stackBtn.accent{border-color:rgba(137,245,255,.55); box-shadow:0 0 0 1px rgba(137,245,255,.35), inset 0 0 24px rgba(137,245,255,.08), var(--shadow)}
+
+  /* Slim bar for transport & tempo */
+  .bar{background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.15); border-radius:12px; padding:6px 10px; display:flex; gap:10px; align-items:center; box-shadow:var(--shadow)}
+  .iconBtn{width:38px; height:38px; border-radius:10px; border:1px solid rgba(255,255,255,.18); background:rgba(255,255,255,.06); display:grid; place-items:center; cursor:pointer; user-select:none}
+  .iconBtn[data-on="1"]{outline:2px solid var(--ok)}
+  .label{font-size:11px; color:#bdbdbd}
+  .dial{width:120px; height:10px; border-radius:99px; background:rgba(255,255,255,.08); position:relative}
+  .dial .fill{position:absolute; left:0; top:0; bottom:0; width:30%; border-radius:99px; background:linear-gradient(90deg, var(--accent), #fff)}
+
+  /* Selection color pipe — HUD adopts selected color */
+  #colorPipe{position:fixed; left:0; right:0; bottom:0; height:3px; background:linear-gradient(90deg, #666, #aaa); opacity:.6; pointer-events:none}
+
+  /* Tiny on-canvas hints (optional) */
+  #hint{position:fixed; left:50%; transform:translateX(-50%); bottom:6px; font-size:11px; color:#9aa; letter-spacing:.04em; opacity:.7; pointer-events:none}
+
+  /* Mobile thumb-zone consideration */
+  @media (max-width:680px){
+    .stackBtn{--w:40px; height:76px}
+    .bar{gap:6px}
+    .dial{width:96px}
+  }
+</style>
+</head>
+<body>
+  <canvas id="scene"></canvas>
+  <div id="hud" aria-hidden="false">
+    <!-- TOP-LEFT: View presets -->
+    <div class="corner tl">
+      <div class="bar" id="viewBar">
+        <div class="iconBtn" data-view="iso" title="ISO">◧</div>
+        <div class="iconBtn" data-view="top" title="TOP">▭</div>
+        <div class="iconBtn" data-view="low" title="LOW">◩</div>
+        <div class="iconBtn" data-view="side" title="SIDE">▮</div>
+      </div>
+    </div>
+
+    <!-- TOP-RIGHT: Grid density + mode -->
+    <div class="corner tr" style="gap:12px">
+      <div class="stackBtn accent" id="gridBtn" title="Grid Density">
+        <div class="glyph">GRID</div>
+        <div class="layers" id="gridLayers"></div>
+        <div class="legend" id="gridLegend">16×16</div>
+      </div>
+      <div class="stackBtn" id="modeBtn" title="Dock Mode">
+        <div class="glyph">MODE</div>
+        <div class="layers" id="modeLayers"></div>
+        <div class="legend" id="modeLegend">GRID</div>
+      </div>
+    </div>
+
+    <!-- BOTTOM-LEFT: Transport + Tempo -->
+    <div class="corner bl">
+      <div class="bar">
+        <div class="iconBtn" id="playBtn" title="Play/Pause">▶</div>
+        <div class="label">Tempo</div>
+        <div class="dial" id="tempoDial"><div class="fill"></div></div>
+        <div class="label" id="bpmLbl">120 BPM</div>
+      </div>
+    </div>
+
+    <!-- BOTTOM-RIGHT: Param stacks (contextual) -->
+    <div class="corner br" id="dockParams" style="gap:12px"></div>
+  </div>
+  <div id="colorPipe"></div>
+  <div id="hint">tap stack = toggle • drag dock vertically = adjust • pinch/scroll = zoom • drag = orbit • two‑finger drag = pan</div>
+
+<script>
+(()=>{
+  /* =====================================================
+     MATH & ENGINE — 2.5D isometric on a 2D canvas (no deps)
+     ===================================================== */
+  const canvas = document.getElementById('scene');
+  const ctx = canvas.getContext('2d');
+  const DPR = Math.max(1, devicePixelRatio||1);
+  let W = 0, H = 0; const resize =()=>{W=innerWidth; H=innerHeight; canvas.width=W*DPR; canvas.height=H*DPR; canvas.style.width=W+'px'; canvas.style.height=H+'px'; ctx.setTransform(DPR,0,0,DPR,0,0)};
+  addEventListener('resize', resize, {passive:true}); resize();
+
+  // Palette for 8 rows (voices)
+  const ROW_COLORS = ['#ff7a7a','#ffd27a','#a6ff7a','#7affdc','#7ab5ff','#c47aff','#ff7ad1','#7aff9d'];
+
+  // Scene state
+  const state = {
+    gridOpts:[16,8,4,2,1], gridIdx:0, // 16×16 default
+    cols:16, rows:8, cellSize:28, stackLayers:10,
+    orbit:{phi:Math.PI*0.2, theta:Math.PI*0.22, dist:520, panX:0, panY:0},
+    ortho:true,
+    playing:false, t:0, bpm:120,
+    playhead:0, // column index advancing with time
+    selection:null, // {r,c}
+    mode:'GRID', // GRID | SOUND
+  };
+
+  // HUD wiring
+  const gridBtn = document.getElementById('gridBtn');
+  const gridLayersEl = document.getElementById('gridLayers');
+  const gridLegend = document.getElementById('gridLegend');
+  const modeBtn = document.getElementById('modeBtn');
+  const modeLayersEl = document.getElementById('modeLayers');
+  const modeLegend = document.getElementById('modeLegend');
+  const tempoDial = document.getElementById('tempoDial');
+  const bpmLbl = document.getElementById('bpmLbl');
+  const playBtn = document.getElementById('playBtn');
+  const dockParams = document.getElementById('dockParams');
+  const colorPipe = document.getElementById('colorPipe');
+
+  // Build tiny layer visuals inside HUD stacks
+  const buildLayers =(el, n=8, lit=4)=>{ el.innerHTML=''; for(let i=0;i<n;i++){ const d=document.createElement('div'); d.className='lay'; if(i>=n-lit) d.style.background='linear-gradient(90deg, var(--accent), #fff)'; el.appendChild(d);} };
+  buildLayers(gridLayersEl, 6, 6); buildLayers(modeLayersEl, 6, 3);
+
+  // Dock param stack factory (VEL, PROB, LEN, PITCH, PAN, SEND)
+  const PARAMS = [
+    {key:'vel', label:'VEL'}, {key:'prob', label:'PRB'}, {key:'len', label:'LEN'},
+    {key:'pitch', label:'PIT'}, {key:'pan', label:'PAN'}, {key:'send', label:'SND'}
+  ];
+
+  // Pattern + per-cell params
+  function makeGrid(cols){
+    const g = [];
+    for(let r=0;r<state.rows;r++){
+      const row=[];
+      for(let c=0;c<cols;c++){
+        row.push({on:Math.random()<0.18, vel:0.7, prob:0.9, len:1, pitch:0, pan:(r-3.5)/3.5, send:0.2});
+      }
+      g.push(row);
+    }
+    return g;
+  }
+  let grid = makeGrid(state.cols);
+
+  // Update grid density
+  function setGridByIndex(idx){
+    state.gridIdx = (idx+state.gridOpts.length)%state.gridOpts.length;
+    const size = state.gridOpts[state.gridIdx];
+    state.cols = size; grid = makeGrid(state.cols);
+    gridLegend.textContent = (size===1? '1×1': `${size}×${size}`);
+    const lit = 1 + (5 - state.gridIdx); // 6..2
+    buildLayers(gridLayersEl, 6, Math.max(2, Math.min(6, lit)));
+  }
+
+  // Mode toggle (GRID <-> SOUND)
+  function toggleMode(){
+    state.mode = (state.mode==='GRID' ? 'SOUND' : 'GRID');
+    modeLegend.textContent = state.mode;
+    buildLayers(modeLayersEl, 6, state.mode==='GRID'?3:5);
+    refreshDockParams();
+  }
+
+  // DOCK PARAMS — rebuild depending on selection & mode
+  function refreshDockParams(){
+    dockParams.innerHTML='';
+    const sel = state.selection;
+    const isSel = !!sel;
+    const activeColor = isSel ? ROW_COLORS[sel.r%ROW_COLORS.length] : '#e5e5e5';
+    colorPipe.style.background = `linear-gradient(90deg, ${activeColor}, #fff)`;
+
+    const keys = PARAMS.map(p=>p);
+    keys.forEach((p,i)=>{
+      const btn = document.createElement('div');
+      btn.className = 'stackBtn';
+      btn.innerHTML = `<div class="glyph">${p.label}</div><div class="layers"></div><div class="legend"></div>`;
+      const layers = btn.querySelector('.layers');
+      let v = 0.5;
+      if(isSel){ v = grid[sel.r][sel.c][p.key]; }
+      const lit = Math.round(1 + v*5);
+      buildLayers(layers, 6, lit);
+      btn.style.borderColor = isSel? activeColor : 'rgba(255,255,255,.18)';
+      btn.style.boxShadow = isSel? `0 0 0 1px ${activeColor}55, inset 0 0 24px ${activeColor}22, var(--shadow)` : 'var(--shadow)';
+
+      // Drag vertically to adjust (maps to 0..1; some params are signed)
+      let grabbing=false, sy=0, sv=v;
+      btn.addEventListener('pointerdown', e=>{ grabbing=true; sy=e.clientY; sv=v; btn.setPointerCapture(e.pointerId); });
+      btn.addEventListener('pointermove', e=>{
+        if(!grabbing) return; const dy = sy - e.clientY; v = clamp(sv + dy/160, 0, 1);
+        const lit2 = Math.round(1 + v*5); buildLayers(layers, 6, lit2);
+        if(isSel){
+          const cell = grid[sel.r][sel.c];
+          if(p.key==='pitch'){ cell[p.key] = Math.round( (v*2-1) * 12 ); }
+          else if(p.key==='pan'){ cell[p.key] = (v*2-1); }
+          else { cell[p.key] = v; }
+        }
+      });
+      addEventListener('pointerup', ()=>{ grabbing=false; }, {passive:true});
+
+      dockParams.appendChild(btn);
+    });
+  }
+
+  // Geometry helpers — isometric transform (orthographic)
+  function isoProject(x,y,z){
+    // Orbit angles
+    const {phi,theta,dist,panX,panY} = state.orbit;
+    // rotate around Y (theta) then X (phi)
+    const cy=Math.cos(theta), sy=Math.sin(theta);
+    const cx=Math.cos(phi),   sx=Math.sin(phi);
+    // translate so grid center at origin
+    let X=x, Y=y, Z=z;
+    // y-rotation
+    let x1 =  X*cy + Z*sy;
+    let z1 = -X*sy + Z*cy;
+    // x-rotation
+    let y2 =  Y*cx - z1*sx;
+    // ortho: ignore z in projection, use scale by dist
+    const scale = 1; // orthographic scale (we treat zoom by dist separately)
+    return {
+      x: W*0.5 + panX + x1*scale,
+      y: H*0.5 + panY + y2*scale,
+      depth: (z1) // for sorting
+    };
+  }
+
+  // World layout
+  function cellCenter(c, r){
+    const s = state.cellSize;
+    const width = (state.cols-1)*s;
+    const height = (state.rows-1)*s;
+    return {
+      x: (c*s - width/2),
+      y: 0,
+      z: (r*s - height/2)
+    };
+  }
+
+  // Draw a single stack (vertical translucent plates)
+  function drawStack(c, r, cell){
+    const base = cellCenter(c,r);
+    const color = ROW_COLORS[r%ROW_COLORS.length];
+    const isSelected = state.selection && state.selection.r===r && state.selection.c===c;
+
+    // Base plate shadow
+    const baseP = isoProject(base.x, base.y, base.z);
+    ctx.save();
+    ctx.translate(baseP.x, baseP.y);
+    ctx.globalAlpha = 0.12; ctx.fillStyle = color; 
+    roundedRect(-14, -8, 28, 16, 6); ctx.fill();
+    ctx.restore();
+
+    // Number of lit layers = velocity proxy when on; 0 if off
+    const L = state.stackLayers;
+    const lit = cell.on ? Math.max(1, Math.round(2 + cell.vel*(L-2))) : 0;
+
+    for(let i=0;i<L;i++){
+      const y = i*10;
+      const p = isoProject(base.x, base.y - y, base.z);
+      const w = 22; const h = 10; const rads=5;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      const active = (i < lit);
+      ctx.globalAlpha = active? (0.28 + i*0.02) : 0.08;
+      ctx.fillStyle = color;
+      roundedRect(-w/2, -h/2, w, h, rads); ctx.fill();
+      if(active){ ctx.shadowColor = color; ctx.shadowBlur = 12; }
+      if(isSelected && i===lit-1){ // halo on top lit layer
+        ctx.globalAlpha = 0.9; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.2; roundedRect(-w/2, -h/2, w, h, rads); ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }
+
+  function roundedRect(x,y,w,h,r){
+    ctx.beginPath();
+    ctx.moveTo(x+r,y);
+    ctx.arcTo(x+w,y,x+w,y+h,r);
+    ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r);
+    ctx.arcTo(x,y,x+w,y,r);
+    ctx.closePath();
+  }
+
+  function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+
+  // INPUT: orbit / pan / zoom
+  let dragging=false, twoFinger=false, lx=0, ly=0, lastDist=0;
+  canvas.addEventListener('pointerdown',e=>{dragging=true; lx=e.clientX; ly=e.clientY; canvas.setPointerCapture(e.pointerId)});
+  canvas.addEventListener('pointermove',e=>{
+    if(!dragging) return;
+    if(twoFinger){ // pan
+      state.orbit.panX += (e.clientX-lx);
+      state.orbit.panY += (e.clientY-ly);
+    } else { // orbit
+      state.orbit.theta += (e.clientX-lx)*0.006;
+      state.orbit.phi   = clamp(state.orbit.phi + (e.clientY-ly)*0.006, -Math.PI/2+0.05, Math.PI/2-0.05);
+    }
+    lx=e.clientX; ly=e.clientY;
+  });
+  addEventListener('pointerup',()=>{dragging=false; twoFinger=false}, {passive:true});
+
+  // Touch gestures: two-finger -> pan, pinch to zoom
+  let activeTouches = new Map();
+  canvas.addEventListener('touchstart', (e)=>{ for(const t of e.changedTouches) activeTouches.set(t.identifier, {x:t.clientX,y:t.clientY}); if(activeTouches.size===2) twoFinger=true; }, {passive:false});
+  canvas.addEventListener('touchmove', (e)=>{
+    if(activeTouches.size===2){
+      const ts=[...activeTouches.keys()];
+      const t0=[...e.touches].find(t=>t.identifier===ts[0]);
+      const t1=[...e.touches].find(t=>t.identifier===ts[1]);
+      if(t0&&t1){
+        const dx=t0.clientX-t1.clientX, dy=t0.clientY-t1.clientY; const d=Math.hypot(dx,dy);
+        if(lastDist){ const dd=d-lastDist; state.orbit.dist = clamp(state.orbit.dist - dd*0.8, 220, 1200); }
+        lastDist=d;
+      }
+    }
+  }, {passive:false});
+  canvas.addEventListener('touchend', (e)=>{ for(const t of e.changedTouches) activeTouches.delete(t.identifier); if(activeTouches.size<2){ twoFinger=false; lastDist=0; } }, {passive:true});
+
+  // Wheel zoom
+  canvas.addEventListener('wheel', e=>{ state.orbit.dist = clamp(state.orbit.dist + Math.sign(e.deltaY)*24, 220, 1400); }, {passive:true});
+
+  // Hit testing — math-based (no raycast). We sweep through cells and pick nearest projected center.
+  function pickCell(mx,my){
+    let best=null, bestD=28; // px threshold
+    for(let r=0;r<state.rows;r++){
+      for(let c=0;c<state.cols;c++){
+        const base=cellCenter(c,r); const p=isoProject(base.x,0,base.z);
+        const d=Math.hypot(mx-p.x, my-p.y);
+        if(d<bestD){bestD=d; best={r,c};}
+      }
+    }
+    return best;
+  }
+
+  canvas.addEventListener('click', (e)=>{
+    const rect=canvas.getBoundingClientRect(); const mx=e.clientX-rect.left, my=e.clientY-rect.top;
+    const hit = pickCell(mx,my);
+    if(hit){
+      const cell = grid[hit.r][hit.c];
+      if(state.selection && state.selection.r===hit.r && state.selection.c===hit.c){ // second tap toggles
+        cell.on=!cell.on;
+      } else {
+        state.selection = hit;
+        refreshDockParams();
+      }
+    } else {
+      state.selection=null; refreshDockParams();
+    }
+  });
+
+  // VIEW presets
+  document.getElementById('viewBar').addEventListener('click', (e)=>{
+    const v = e.target.getAttribute('data-view'); if(!v) return;
+    if(v==='iso'){ state.orbit.theta=Math.PI*0.22; state.orbit.phi=Math.PI*0.2; }
+    if(v==='top'){ state.orbit.theta=0; state.orbit.phi=-Math.PI/2+0.12; }
+    if(v==='low'){ state.orbit.theta=Math.PI*0.22; state.orbit.phi=-0.1; }
+    if(v==='side'){ state.orbit.theta=Math.PI/2; state.orbit.phi=0.15; }
+  });
+
+  // GRID density
+  gridBtn.addEventListener('click', ()=>{ setGridByIndex(state.gridIdx+1); });
+
+  // MODE toggle
+  modeBtn.addEventListener('click', toggleMode);
+
+  // TEMPO dial
+  let dialGrab=false, dialSX=0, dialStart=state.bpm;
+  tempoDial.addEventListener('pointerdown', e=>{ dialGrab=true; dialSX=e.clientX; dialStart=state.bpm; tempoDial.setPointerCapture(e.pointerId); });
+  tempoDial.addEventListener('pointermove', e=>{
+    if(!dialGrab) return; const dx=e.clientX-dialSX; state.bpm = Math.round(clamp(dialStart + dx*0.6, 50, 200));
+    bpmLbl.textContent = `${state.bpm} BPM`; tempoDial.querySelector('.fill').style.width = `${(state.bpm-50)/(200-50)*100}%`;
+  });
+  addEventListener('pointerup', ()=>{ dialGrab=false; }, {passive:true});
+
+  // PLAY
+  playBtn.addEventListener('click', ()=>{ state.playing=!state.playing; playBtn.dataset.on = state.playing? '1':'0'; if(state.playing) ensureAudio(); });
+
+  /* =====================================================
+     AUDIO — minimal WebAudio beeps (8 voices, per-row)
+     ===================================================== */
+  const AC = (window.AudioContext||window.webkitAudioContext);
+  let audioCtx=null; let master=null; let reverb=null; let t0=0;
+  function ensureAudio(){
+    if(audioCtx) return; audioCtx=new AC();
+    master=audioCtx.createGain(); master.gain.value=0.2; master.connect(audioCtx.destination);
+    reverb=audioCtx.createDelay(0.5); reverb.delayTime.value=0.22; reverb.connect(master);
+    t0=audioCtx.currentTime;
+  }
+  function trig(row, cell){
+    if(!audioCtx) return; if(Math.random()>cell.prob) return;
+    const o=audioCtx.createOscillator(); const g=audioCtx.createGain(); const p=audioCtx.createStereoPanner();
+    const base=[48,50,52,53,55,57,59,60][row%8]; // scale fragment
+    const freq = 440 * Math.pow(2, ((base + cell.pitch) - 69)/12);
+    o.frequency.value = freq;
+    g.gain.value = 0; const v = cell.vel * (cell.on?1:0);
+    const now = audioCtx.currentTime;
+    const len = 0.08 + cell.len*0.24; // seconds
+    g.gain.setTargetAtTime(v, now, 0.005);
+    g.gain.setTargetAtTime(0.0001, now+len, 0.08);
+    p.pan.value = cell.pan;
+    o.type = row%2? 'square':'sine';
+    o.connect(g); g.connect(p); p.connect(master); p.connect(reverb);
+    o.start(); o.stop(now + len + 0.25);
+  }
+
+  /* =====================================================
+     TICK & RENDER
+     ===================================================== */
+  function update(dt){
+    // advance playhead based on BPM
+    if(state.playing){
+      const beatsPerSec = state.bpm/60;
+      const colsPerBeat = 1; // one column per beat
+      state.t += dt * beatsPerSec * colsPerBeat;
+      const nextCol = Math.floor(state.t)%state.cols;
+      if(nextCol !== state.playhead){
+        state.playhead = nextCol;
+        // trigger all rows where cell is on
+        for(let r=0;r<state.rows;r++){
+          const cell = grid[r][state.playhead]; if(cell.on) trig(r, cell);
+        }
+      }
+    }
+  }
+
+  function render(){
+    ctx.clearRect(0,0,W,H);
+
+    // Camera scale by zoom (dist)
+    ctx.save();
+    const z = 520/state.orbit.dist; // zoom factor
+    ctx.translate(W*0.5 + state.orbit.panX, H*0.5 + state.orbit.panY);
+    ctx.scale(z,z);
+    ctx.translate(-W*0.5 - state.orbit.panX, -H*0.5 - state.orbit.panY);
+
+    // Draw grid back-to-front by row+col (simple painter's)
+    const order=[];
+    for(let r=0;r<state.rows;r++) for(let c=0;c<state.cols;c++) order.push({r,c});
+    order.sort((a,b)=> (a.r+a.c) - (b.r+b.c));
+
+    // Playhead blade
+    const phx = cellCenter(state.playhead, 0).x; // x at playhead col (row 0)
+    const p0 = isoProject(phx, -120, cellCenter(0,0).z - 120);
+    const p1 = isoProject(phx,  220, cellCenter(state.cols-1, state.rows-1).z + 120);
+    ctx.save();
+    ctx.globalAlpha = 0.12; ctx.strokeStyle = '#9ef'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(p0.x,p0.y); ctx.lineTo(p1.x,p1.y); ctx.stroke(); ctx.restore();
+
+    order.forEach(({r,c})=> drawStack(c,r, grid[r][c]));
+
+    ctx.restore();
+
+    // Selection halo line at HUD layer (subtle)
+    if(state.selection){
+      const sel = state.selection; const base = cellCenter(sel.c, sel.r);
+      const p = isoProject(base.x, 0, base.z);
+      ctx.save();
+      ctx.globalAlpha = 0.25; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(p.x, p.y, 22, 0, Math.PI*2); ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  let last=performance.now();
+  function loop(now){
+    const dt = Math.min(0.05, (now-last)/1000); last=now;
+    update(dt); render();
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+
+  // Initial dock build
+  refreshDockParams();
+
+})();
+</script>
+</body>
+</html>

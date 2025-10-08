@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>SEA SEQUENCER — Core Orca Build (Wide Controls)</title>
+<style>
+  :root{
+    --abyss:#03080f; --foam:#dff4ff; --muted:#8fb4c9;
+    --blue:#7fdcff; --cyan:#58e0ff; --ink:#e9f6ff; --glass:rgba(180,230,255,.08);
+    --shadow:0 14px 34px rgba(0,0,0,.55), 0 2px 10px rgba(0,0,0,.35);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent; touch-action:none}
+  html,body{height:100%}
+  body{margin:0; background:radial-gradient(1100px 700px at 50% 42%, #071a2b 0%, var(--abyss) 60%); color:var(--ink); font:14px/1.2 Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; overflow:hidden}
+  #stage{position:fixed; inset:0 0 190px 0}
+  canvas#scene{position:absolute; inset:0; display:block}
+
+  /* Controls — taller, clearer, bigger touch targets */
+  #controls{position:fixed; left:0; right:0; bottom:0; height:190px; display:flex; align-items:center; justify-content:space-between; padding:18px; gap:14px; background:linear-gradient(180deg, transparent, rgba(3,8,15,.88)); backdrop-filter: blur(12px);}    
+  .stack{flex:1.1; min-width:0; height:154px; border-radius:18px; border:1px solid rgba(160,210,255,.18); background:var(--glass); box-shadow:var(--shadow); position:relative; overflow:hidden; display:flex; align-items:flex-end; justify-content:center; transform:translateZ(0)}
+  .stack.big{flex:1.4}
+  .stack .cap{position:absolute; top:10px; left:12px; font-size:11px; letter-spacing:.12em; color:var(--muted)}
+  .stack .legend{position:absolute; bottom:10px; width:100%; text-align:center; font-size:12px; color:#cfe8ff}
+  .stack .meter{position:absolute; inset:18px 12px 26px 12px; display:flex; align-items:flex-end}
+  .bar{width:100%; height:10%; border-radius:12px; background:linear-gradient(180deg, rgba(120,200,255,.18), rgba(255,255,255,.06)); transition:height .12s ease, transform .08s ease}
+  .accent{border-color:rgba(120,200,255,.55); box-shadow:0 0 0 1px rgba(120,200,255,.35), inset 0 0 28px rgba(120,200,255,.12), var(--shadow)}
+
+  /* Press feedback */
+  .stack:active .bar{transform:scaleY(1.04)}
+  .pressFX{position:absolute; inset:0; pointer-events:none}
+  .pressFX::after{content:""; position:absolute; width:24px; height:24px; border-radius:50%; background:radial-gradient(circle, rgba(127,220,255,.35), rgba(127,220,255,0)); transform:translate(-50%,-50%) scale(0.6); opacity:0; transition:opacity .18s ease, transform .22s ease}
+  .stack.pressed .pressFX::after{opacity:.9; transform:translate(var(--px,50%), var(--py,50%)) scale(1.4)}
+
+  @media (max-width:760px){ #controls{height:176px} .stack{height:146px} .stack.big{flex:1.5} }
+</style>
+</head>
+<body>
+  <div id="stage"><canvas id="scene"></canvas></div>
+  <div id="controls">
+    <div class="stack big accent" id="playCtl"><div class="cap">PLAY</div><div class="meter"><div class="bar" id="playBar"></div></div><div class="legend" id="playTxt">STOP</div><span class="pressFX"></span></div>
+    <div class="stack big" id="tempoCtl"><div class="cap">TEMP</div><div class="meter"><div class="bar" id="tempoBar"></div></div><div class="legend" id="tempoTxt">120 BPM</div><span class="pressFX"></span></div>
+    <div class="stack" id="depthCtl"><div class="cap">DEPTH</div><div class="meter"><div class="bar" id="depthBar"></div></div><div class="legend" id="depthTxt">Reverb 30%</div><span class="pressFX"></span></div>
+    <div class="stack" id="mixCtl"><div class="cap">MIX</div><div class="meter"><div class="bar" id="mixBar"></div></div><div class="legend" id="mixTxt">Balanced</div><span class="pressFX"></span></div>
+    <div class="stack" id="modeCtl"><div class="cap">ROW</div><div class="meter"><div class="bar" id="modeBar"></div></div><div class="legend" id="modeTxt">LOW</div><span class="pressFX"></span></div>
+  </div>
+
+<script>
+(()=>{
+  /* ================= Basics ================= */
+  const canvas=document.getElementById('scene');
+  const ctx=canvas.getContext('2d');
+  const DPR=Math.max(1,devicePixelRatio||1);
+  let W=0,H=0; function resize(){W=innerWidth;H=innerHeight-190; if(H<260) H=260; canvas.width=W*DPR; canvas.height=H*DPR; canvas.style.width=W+'px'; canvas.style.height=H+'px'; ctx.setTransform(DPR,0,0,DPR,0,0);} addEventListener('resize',resize,{passive:true}); resize();
+  const vibe=(p)=>{try{navigator.vibrate && navigator.vibrate(p)}catch{}}
+  const micro=()=>vibe([3,20,7]); const tap=()=>vibe(8); const heavy=()=>vibe([10,30,14]);
+
+  /* ================= Grid (minimal) ================= */
+  const ROWS=3, COLS=16; const colors=['#3ac4ff','#7fdcff','#bfe8ff'];
+  const grid=[]; for(let r=0;r<ROWS;r++){ const row=[]; for(let c=0;c<COLS;c++){ row.push({on: Math.random()<0.2, vel:0.7, pulse:0}); } grid.push(row);} 
+  const state={ playing:false, bpm:120, t:0, playCol:0, now:0, selected:{r:0,c:0}, editRow:0, depth:0.3, mixMode:0 };
+
+  /* ================= Drawing ================= */
+  function cellRect(c,r){ const pad=24; const gw=W-pad*2; const gh=H-pad*2; const cw=gw/COLS; const ch=gh/ROWS; const x=pad+c*cw; const y=pad+r*ch; return {x,y,w:cw*0.92,h:ch*0.8}; }
+  function roundRect(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+  function draw(){ ctx.clearRect(0,0,W,H);
+    // background bands per row
+    for(let r=0;r<ROWS;r++){ const {y,h}=cellRect(0,r); const g=ctx.createLinearGradient(0,y,0,y+h); g.addColorStop(0,'rgba(120,200,255,0.05)'); g.addColorStop(1,'rgba(120,200,255,0.0)'); ctx.fillStyle=g; ctx.fillRect(0,y,W,h); }
+    // playline
+    const ph=cellRect(state.playCol,0); ctx.save(); ctx.globalAlpha=0.22; ctx.fillStyle='#7fdcff'; ctx.fillRect(ph.x+ph.w*0.5, 0, 2.5, H); ctx.restore();
+
+    for(let r=0;r<ROWS;r++){
+      for(let c=0;c<COLS;c++){
+        const cell=grid[r][c]; const R=cellRect(c,r); const sel=(state.selected.r===r && state.selected.c===c);
+        const age=state.now-cell.pulse; const pulseA=Math.max(0, 0.8 - age*2.2);
+        ctx.save(); ctx.translate(R.x+R.w/2, R.y+R.h/2);
+        const k= sel? 1.06 : 1.0; const glow=pulseA*13 + (c===state.playCol?8:0);
+        ctx.shadowColor=colors[r]; ctx.shadowBlur=glow; ctx.fillStyle=colors[r];
+        const w=R.w*k, h=R.h*k, rad=Math.min(12, h*0.24);
+        roundRect(-w/2,-h/2,w,h,rad); ctx.globalAlpha = cell.on? (0.86 - 0.26*r) : 0.15; ctx.fill();
+        ctx.globalAlpha = 1.0; ctx.strokeStyle='rgba(255,255,255,.1)'; ctx.lineWidth=1; roundRect(-w/2+2,-h/2+2,w-4,h-4,rad-2); ctx.stroke();
+        ctx.restore();
+      }
+    }
+  }
+
+  /* ================= Interaction ================= */
+  function hitCell(mx,my){ for(let r=0;r<ROWS;r++){ for(let c=0;c<COLS;c++){ const R=cellRect(c,r); if(mx>=R.x && mx<=R.x+R.w && my>=R.y && my<=R.y+R.h) return {r,c}; } } return null; }
+  let dragging=false, startY=0, startV=0;
+  canvas.addEventListener('pointerdown',e=>{ const rect=canvas.getBoundingClientRect(); const mx=e.clientX-rect.left, my=e.clientY-rect.top; const hit=hitCell(mx,my); if(hit){ state.selected=hit; const cell=grid[hit.r][hit.c]; dragging=true; startY=my; startV=cell.vel; canvas.setPointerCapture(e.pointerId); tap(); } else { dragging=false; }
+  }, {passive:false});
+  canvas.addEventListener('pointermove',e=>{ if(!dragging) return; const rect=canvas.getBoundingClientRect(); const my=e.clientY-rect.top; const dy = (startY - my)/120; const cell=grid[state.selected.r][state.selected.c]; const prev=cell.vel; cell.vel = Math.max(0.05, Math.min(1.0, startV + dy)); if(Math.floor(prev*10)!==Math.floor(cell.vel*10)) micro(); });
+  canvas.addEventListener('pointerup',e=>{ if(!dragging) return; const cell=grid[state.selected.r][state.selected.c]; if(Math.abs(startY-(e.clientY-canvas.getBoundingClientRect().top))<5){ cell.on = !cell.on; micro(); } dragging=false; });
+
+  /* ================= Controls ================= */
+  const $=id=>document.getElementById(id);
+  const playCtl=$('playCtl'), playTxt=$('playTxt'), playBar=$('playBar');
+  const tempoCtl=$('tempoCtl'), tempoTxt=$('tempoTxt'), tempoBar=$('tempoBar');
+  const depthCtl=$('depthCtl'), depthTxt=$('depthTxt'), depthBar=$('depthBar');
+  const mixCtl=$('mixCtl'), mixTxt=$('mixTxt'), mixBar=$('mixBar');
+  const modeCtl=$('modeCtl'), modeTxt=$('modeTxt'), modeBar=$('modeBar');
+
+  function pressFX(el, e){ const fx=el.querySelector('.pressFX'); if(!fx) return; const r=el.getBoundingClientRect(); const x=((e.clientX-r.left)/r.width*100).toFixed(1)+'%'; const y=((e.clientY-r.top)/r.height*100).toFixed(1)+'%'; fx.style.setProperty('--px',x); fx.style.setProperty('--py',y); el.classList.add('pressed'); setTimeout(()=>el.classList.remove('pressed'),160); }
+
+  playCtl.addEventListener('pointerdown',e=>{ pressFX(playCtl,e); ensureAudio(); audioCtx.resume(); state.playing=!state.playing; playTxt.textContent = state.playing? 'PLAY' : 'STOP'; playCtl.classList.toggle('accent', state.playing); heavy(); });
+
+  let tGrab=false, tStart=0, bpmStart=state.bpm, tapTimer=0, lastTap=0;
+  tempoCtl.addEventListener('pointerdown',e=>{ pressFX(tempoCtl,e); tGrab=true; tStart=e.clientY; bpmStart=state.bpm; tempoCtl.setPointerCapture(e.pointerId); tap(); });
+  tempoCtl.addEventListener('pointermove',e=>{ if(!tGrab) return; const dy=tStart-e.clientY; state.bpm=Math.round(Math.max(40,Math.min(200, bpmStart + dy*0.8))); tempoTxt.textContent = state.bpm + ' BPM'; tempoBar.style.height = ( (state.bpm-40)/(200-40) * 100 ) + '%'; });
+  tempoCtl.addEventListener('pointerup',e=>{ if(!tGrab) return; tGrab=false; const now=performance.now(); if(now-lastTap<250){ // double-tap nudge to 120
+      state.bpm=120; tempoTxt.textContent='120 BPM'; tempoBar.style.height=( (120-40)/(200-40)*100 )+'%'; micro(); }
+    lastTap=now; });
+
+  let dGrab=false, dStart=0, depthStart=state.depth;
+  depthCtl.addEventListener('pointerdown',e=>{ pressFX(depthCtl,e); dGrab=true; dStart=e.clientY; depthStart=state.depth; depthCtl.setPointerCapture(e.pointerId); tap(); });
+  depthCtl.addEventListener('pointermove',e=>{ if(!dGrab) return; const dy=dStart-e.clientY; state.depth=Math.max(0,Math.min(1, depthStart + dy*0.008)); depthTxt.textContent='Reverb ' + Math.round(state.depth*100)+'%'; depthBar.style.height=(state.depth*100)+'%'; if(busVerb) busVerb.gain.setTargetAtTime(state.depth*0.5, audioCtx.currentTime, 0.05); });
+  depthCtl.addEventListener('pointerup',()=>{ dGrab=false; micro(); });
+
+  mixCtl.addEventListener('pointerdown',e=>{ pressFX(mixCtl,e); state.mixMode=(state.mixMode+1)%3; const labels=['Balanced','Low‑heavy','High‑shimmer']; mixTxt.textContent=labels[state.mixMode]; mixBar.style.height=(state.mixMode===0?50: state.mixMode===1?75:35)+'%'; if(busLow&&busHigh){ busLow.gain.setTargetAtTime(state.mixMode===1?0.5:0.32, audioCtx.currentTime, 0.08); busHigh.gain.setTargetAtTime(state.mixMode===2?0.38:0.20, audioCtx.currentTime, 0.08);} micro(); });
+
+  modeCtl.addEventListener('pointerdown',e=>{ pressFX(modeCtl,e); state.editRow=(state.editRow+1)%3; modeTxt.textContent=['LOW','MID','HIGH'][state.editRow]; modeBar.style.height=[40,60,80][state.editRow]+'%'; tap(); });
+
+  /* ================= Audio (minimal, fast) ================= */
+  const AC=(window.AudioContext||window.webkitAudioContext); let audioCtx=null, master=null, busLow=null, busMid=null, busHigh=null, busVerb=null;
+  function ensureAudio(){ if(audioCtx) return; audioCtx=new AC(); master=audioCtx.createGain(); master.gain.value=0.85; master.connect(audioCtx.destination);
+    busLow=audioCtx.createGain(); busMid=audioCtx.createGain(); busHigh=audioCtx.createGain(); busVerb=audioCtx.createGain();
+    busLow.gain.value=0.32; busMid.gain.value=0.22; busHigh.gain.value=0.20; busVerb.gain.value=state.depth*0.5;
+    const delay=audioCtx.createDelay(0.6), fb=audioCtx.createGain(), lp=audioCtx.createBiquadFilter(); delay.delayTime.value=0.32; fb.gain.value=0.28; lp.type='lowpass'; lp.frequency.value=1800; busVerb.connect(delay); delay.connect(fb); fb.connect(delay); delay.connect(lp); lp.connect(master);
+    busLow.connect(master); busMid.connect(master); busHigh.connect(master);
+    makeInstruments();
+  }
+  function brownNoise(){ const buffer=audioCtx.createBuffer(1, audioCtx.sampleRate*2, audioCtx.sampleRate); const data=buffer.getChannelData(0); let last=0; for(let i=0;i<data.length;i++){ const white=Math.random()*2-1; data[i]=(last+0.02*white)/(1+0.02); last=data[i]; } const src=audioCtx.createBufferSource(); src.buffer=buffer; src.loop=true; return src; }
+  let L=null,M=null,Hh=null;
+  function makeInstruments(){ L=brownNoise(); const lBP=audioCtx.createBiquadFilter(); lBP.type='bandpass'; lBP.frequency.value=40; lBP.Q.value=3; const lG=audioCtx.createGain(); lG.gain.value=0.0; L.connect(lBP); lBP.connect(lG); lG.connect(busLow); lG.connect(busVerb); L.start(); L._bp=lBP; L._g=lG;
+    const o=audioCtx.createOscillator(); o.type='sine'; const mBP=audioCtx.createBiquadFilter(); mBP.type='bandpass'; mBP.frequency.value=520; mBP.Q.value=12; const mG=audioCtx.createGain(); mG.gain.value=0.0; o.connect(mBP); mBP.connect(mG); mG.connect(busMid); mG.connect(busVerb); o.start(); M={o, _bp:mBP, _g:mG};
+    const s=brownNoise(); const hHP=audioCtx.createBiquadFilter(); hHP.type='highpass'; hHP.frequency.value=1200; const hG=audioCtx.createGain(); hG.gain.value=0.0; s.connect(hHP); hHP.connect(hG); hG.connect(busHigh); hG.connect(busVerb); s.start(); Hh={src:s, _hp:hHP, _g:hG}; }
+  function env(node, a=0.01, d=0.4, peak=0.22){ if(!audioCtx) return; const t=audioCtx.currentTime; node.gain.cancelScheduledValues(t); node.gain.setValueAtTime(0.0001,t); node.gain.linearRampToValueAtTime(peak, t+a); node.gain.exponentialRampToValueAtTime(0.0001, t+a+d); }
+  function trigger(r, vel){ if(!audioCtx) return; if(r===0){ L._bp.frequency.setTargetAtTime(36, audioCtx.currentTime, 0.25); env(L._g, 0.03, 1.2, 0.20+0.25*vel); }
+    else if(r===1){ M._bp.frequency.setTargetAtTime(420, audioCtx.currentTime, 0.02); env(M._g, 0.008, 0.25, 0.18+0.30*vel); }
+    else { Hh._hp.frequency.setTargetAtTime(1400, audioCtx.currentTime, 0.03); env(Hh._g, 0.006, 0.22, 0.12+0.28*vel); } }
+
+  /* ================= Loop ================= */
+  let last=performance.now();
+  function step(now){ const dt=Math.min(0.05,(now-last)/1000); last=now; state.now += dt; if(state.playing){ const bps=state.bpm/60; state.t+=dt*bps; const col=Math.floor(state.t)%COLS; if(col!==state.playCol){ state.playCol=col; for(let r=0;r<ROWS;r++){ const cell=grid[r][col]; if(cell.on){ cell.pulse=state.now; trigger(r, cell.vel); } } micro(); } }
+    draw(); requestAnimationFrame(step); }
+  requestAnimationFrame(step);
+})();
+</script>
+</body>
+</html>

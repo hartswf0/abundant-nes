@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>VOL‑MEDIA DECKS v19 — Stack‑Symmetric HUD (Clear Alley)</title>
+<style>
+  /* ======= GLOBAL ======= */
+  *{margin:0;padding:0;box-sizing:border-box;touch-action:none;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  :root{
+    --ink:#fff; --bg:#000; --glass:rgba(0,0,0,.55); --line:rgba(255,255,255,.18);
+    --pad:10px; --rad:12px; --gap:8px; --safe-alley:240px; /* RESERVED: middle-bottom negative space */
+  }
+  body{background:var(--bg);color:var(--ink);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;overflow:hidden}
+  #canvas{width:100vw;height:100vh;display:block}
+
+  /* ======= HUD LAYOUT (edge‑docked; center‑bottom alley kept empty) ======= */
+  #hud{position:fixed;inset:0;pointer-events:none;z-index:10}
+  /* Visualize the reserved alley lightly (toggle-able) */
+  #alley{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);
+    width:var(--safe-alley);height:120px;border-radius:16px;border:1px dashed rgba(255,255,255,.15);
+    pointer-events:none;opacity:.35}
+
+  /* Left + Right vertical docks (screen‑fixed) */
+  .dock{position:absolute;top:10px;bottom:10px;display:flex;flex-direction:column;gap:var(--gap);
+        pointer-events:auto}
+  #dockL{left:10px;align-items:flex-start}
+  #dockR{right:10px;align-items:flex-end}
+
+  .stack{display:grid;grid-auto-rows:38px;gap:var(--gap);padding:var(--pad);
+         background:var(--glass);backdrop-filter:blur(6px);border:1px solid var(--line);border-radius:var(--rad)}
+  .cap{font-weight:800;font-size:12px;opacity:.85;letter-spacing:.08em}
+
+  /* Square mini‑buttons (symmetric card vibe) */
+  .mini{width:38px;height:38px;border-radius:10px;border:1px solid var(--line);background:rgba(0,0,0,.55);
+        display:grid;place-items:center;font-weight:900;font-size:13px;cursor:pointer;user-select:none}
+  .mini:active{transform:translateY(1px)}
+  .mini[aria-pressed="true"]{outline:2px solid rgba(255,255,255,.35)}
+
+  /* Row popup: split L/R, leave center‑bottom alley empty */
+  #rowDock{position:absolute;left:0;right:0;bottom:10px;display:grid;grid-template-columns:1fr auto var(--safe-alley) auto 1fr;gap:0;pointer-events:none}
+  #rowDock .wrap{pointer-events:auto;display:flex;gap:8px;background:var(--glass);border:1px solid var(--line);border-radius:12px;padding:8px 10px;
+                 backdrop-filter:blur(6px);align-items:center}
+  #rowDockL{grid-column:2}
+  #rowDockR{grid-column:4}
+  .chip{min-width:40px;height:40px;border-radius:12px;border:1px solid var(--line);display:grid;place-items:center;font-weight:800;font-size:12px;cursor:pointer}
+  .chip[data-type="dial"]{position:relative}
+  .chip[data-type="dial"]::after{content:"";position:absolute;inset:6px;border-radius:10px;border:1px solid rgba(255,255,255,.15)}
+
+  /* Top view badge */
+  #viewHUD{position:absolute;top:10px;left:50%;transform:translateX(-50%);
+    background:var(--glass);padding:6px 12px;border-radius:10px;font-weight:800;font-size:12px;border:1px solid var(--line)}
+
+  #toast{position:fixed;bottom:10px;left:50%;transform:translateX(-50%);
+    background:rgba(0,0,0,.86);border:1px solid rgba(255,255,255,.2);padding:6px 10px;border-radius:10px;font-size:12px;display:none;z-index:12}
+
+  /* Newspaper mode toggle */
+  .mono body, .mono #hud{filter:grayscale(100%)}
+
+  /* Responsive clamps */
+  @media (max-width:420px){:root{--safe-alley:200px} .mini{width:34px;height:34px} .chip{height:36px;min-width:36px}}
+</style>
+</head>
+<body>
+<canvas id="canvas" aria-label="VOL‑MEDIA grid"></canvas>
+<div id="hud" aria-hidden="false">
+  <div id="viewHUD">FRONT</div>
+  <div id="alley" title="Reserved Alley (clear)"></div>
+
+  <!-- LEFT DOCK: density, packs, presets -->
+  <div id="dockL" class="dock">
+    <div class="stack" id="densityStack" aria-label="Density">
+      <div class="cap">DENS</div>
+      <div class="mini" data-density="16" title="16×16">16</div>
+      <div class="mini" data-density="8"  title="8×8">8</div>
+      <div class="mini" data-density="4"  title="4×4">4</div>
+      <div class="mini" data-density="2"  title="2×2">2</div>
+      <div class="mini" data-density="1"  title="1×1 mega">1</div>
+    </div>
+
+    <div class="stack" id="packStack" aria-label="Packs">
+      <div class="cap">PACK</div>
+      <div class="mini" data-pack="prev" title="Prev">◀</div>
+      <div class="mini" data-pack="next" title="Next">▶</div>
+    </div>
+
+    <div class="stack" id="presetStack" aria-label="Preset">
+      <div class="cap">PRE</div>
+      <div class="mini" data-pre="BASIC">B</div>
+      <div class="mini" data-pre="HOUSE">H</div>
+      <div class="mini" data-pre="DNB">D</div>
+    </div>
+  </div>
+
+  <!-- RIGHT DOCK: transport & camera -->
+  <div id="dockR" class="dock">
+    <div class="stack" id="transportStack" aria-label="Transport">
+      <div class="cap">PLAY</div>
+      <div class="mini" id="btnStart" title="Play/Pause">▶</div>
+      <div class="mini" id="btnOrbit" title="Orbit">○</div>
+      <div class="mini" id="btnFit" title="Fit">□</div>
+      <div class="mini" id="btnZoomIn" title="Zoom In">＋</div>
+      <div class="mini" id="btnZoomOut" title="Zoom Out">－</div>
+      <div class="mini" id="btnPaper" title="Newspaper mode">N</div>
+    </div>
+
+    <div class="stack" id="viewStack" aria-label="Views">
+      <div class="cap">VIEW</div>
+      <div class="mini" data-view="0" title="Front">F</div>
+      <div class="mini" data-view="1" title="Iso L">L</div>
+      <div class="mini" data-view="2" title="Iso R">R</div>
+      <div class="mini" data-view="3" title="Top">T</div>
+      <div class="mini" data-view="4" title="Wide">W</div>
+    </div>
+  </div>
+
+  <!-- ROW DOCK (split L/R, center alley preserved) -->
+  <div id="rowDock">
+    <div id="rowDockL" class="wrap" aria-label="Row left controls">
+      <div class="chip" data-act="sync"  title="Sync">SYNC</div>
+      <div class="chip" data-act="swing" data-type="dial" title="Swing">SWG</div>
+      <div class="chip" data-act="oct"   data-type="dial" title="Octave">OCT</div>
+    </div>
+    <div id="rowDockR" class="wrap" aria-label="Row right controls">
+      <div class="chip" data-act="chor"  data-type="dial" title="Chorus">CHO</div>
+      <div class="chip" data-act="evo"   title="Evolve">EVO</div>
+    </div>
+  </div>
+</div>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(async function(){
+  /* ===== THREE loader (fallbacks) ===== */
+  if(!window.THREE){
+    const CDNs=['https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js','https://unpkg.com/three@0.152.2/build/three.min.js'];
+    for(const src of CDNs){ try{ await new Promise((res,rej)=>{ const s=document.createElement('script'); s.src=src; s.onload=res; s.onerror=rej; document.head.appendChild(s); }); if(window.THREE) break; }catch(e){} }
+  }
+  if(!window.THREE){ alert('WebGL/THREE required.'); return; }
+
+  const canvas=document.getElementById('canvas');
+  const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:false,powerPreference:'high-performance'});
+  const DPR=Math.min(devicePixelRatio||1,2); renderer.setPixelRatio(DPR); renderer.setSize(innerWidth,innerHeight);
+  const scene=new THREE.Scene(); scene.background=new THREE.Color(0x000000);
+  const camera=new THREE.PerspectiveCamera(58, innerWidth/innerHeight, .1, 5000);
+  const camTarget=new THREE.Vector3(0,8,0);
+  function look(){ camera.lookAt(camTarget); }
+
+  /* ===== Lights (reduced glow; depth safe) ===== */
+  scene.add(new THREE.AmbientLight(0xffffff,.26));
+  const key=new THREE.PointLight(0x66ddff,1.1,1200); key.position.set(0,160,260); scene.add(key);
+  const warm=new THREE.PointLight(0xffaa66,.8,900); warm.position.set(180,100,-160); scene.add(warm);
+  const rim=new THREE.DirectionalLight(0xffffff,.45); rim.position.set(-140,180,-40); scene.add(rim);
+
+  /* ===== HUD helpers ===== */
+  const toastEl=document.getElementById('toast');
+  function toast(t){ toastEl.textContent=t; toastEl.style.display='block'; clearTimeout(toast._id); toast._id=setTimeout(()=>toastEl.style.display='none',1100); }
+  function buzz(ms=8){ if('vibrate' in navigator) try{ navigator.vibrate(ms); }catch{} }
+
+  /* ===== Sprite helper (minimal labels; can be hidden) ===== */
+  function mkSprite(text){
+    const cvs=document.createElement('canvas'); const s=256; cvs.width=cvs.height=s; const ctx=cvs.getContext('2d');
+    ctx.clearRect(0,0,s,s); ctx.fillStyle='rgba(0,0,0,0)'; ctx.fillRect(0,0,s,s); ctx.fillStyle='white'; ctx.font='bold 46px Inter, system-ui';
+    ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.shadowColor='rgba(0,0,0,0.55)'; ctx.shadowBlur=12; ctx.fillText(text,s/2,s/2);
+    const tex=new THREE.CanvasTexture(cvs); const mat=new THREE.SpriteMaterial({map:tex,transparent:true,depthWrite:false});
+    const spr=new THREE.Sprite(mat); spr.scale.set(5.2,5.2,1); return spr;
+  }
+
+  /* ===== Mini‑stack builder (symmetric squares) ===== */
+  function makeMiniStack(color, layers=8, spacing=0.55, size=2.6){
+    const g=new THREE.Group(); g.renderOrder=1;
+    for(let i=0;i<layers;i++){
+      const geo=new THREE.PlaneGeometry(size,size);
+      const mat=new THREE.MeshStandardMaterial({color,transparent:true,opacity:0.18,roughness:.65,metalness:.08,side:THREE.DoubleSide,depthWrite:false});
+      const m=new THREE.Mesh(geo,mat); m.rotation.x=-Math.PI/2; m.position.y=i*spacing; m.material.emissive=new THREE.Color(color); m.material.emissiveIntensity=.09; g.add(m);
+    }
+    g.userData.pulse=(level)=>{
+      const L=g.children.length; for(let i=0;i<L;i++){
+        const p=g.children[i]; const on=i<Math.min(L,Math.ceil(level*L));
+        p.material.opacity=on?0.72:0.12; p.material.emissiveIntensity=on?0.6:0.08; p.scale.set(on?1.04:1,1,on?1.04:1);
+      }
+      if(level>0){ const s=1+level*0.12; g.scale.set(s,1,s); setTimeout(()=>g.scale.set(1,1,1),90); }
+    };
+    return g;
+  }
+
+  /* ===== Grid model ===== */
+  const GRID={ rows:8, cols:16, gapX:7.2, gapZ:8.0, origin:new THREE.Vector3(), group:new THREE.Group(), cells:[], labels:[], cursor:null };
+  scene.add(GRID.group);
+  const instruments=['Kick','Snr','Hat','Bass','Chord','Lead','Perc','FX'];
+  const colors=[0xff8844,0xff6688,0xffff66,0x66ffcc,0x99bbff,0xc47dff,0x88ffaa,0xffffff];
+
+  function autoSpacing(){
+    const w=innerWidth, h=innerHeight; const baseX=7.2, baseZ=8.0;
+    const scale=Math.min(Math.max(Math.min(w/960, h/620), 0.85), 1.35);
+    GRID.gapX=baseX*scale; GRID.gapZ=baseZ*scale;
+  }
+
+  function refreshLayout(){
+    const startX=-(GRID.cols-1)*GRID.gapX/2, startZ=-(GRID.rows-1)*GRID.gapZ/2; GRID.origin.set(startX,0,startZ);
+    for(let r=0;r<GRID.rows;r++) for(let c=0;c<GRID.cols;c++){
+      const stack=GRID.cells[r]?.[c]; if(!stack) continue; stack.position.set(startX + c*GRID.gapX, 0, startZ + r*GRID.gapZ);
+    }
+    GRID.labels.forEach((lbl,r)=> lbl.position.set(startX-8.0,6,startZ + r*GRID.gapZ));
+    if(GRID.cursor){ GRID.cursor.position.set(startX, 0.2, 0); GRID.cursor.scale.set(1,1,(GRID.rows*GRID.gapZ + 4)/(GRID.cursor.geometry.parameters.depth||1)); }
+    fitCameraToGrid();
+  }
+
+  function buildGrid(){
+    GRID.cells.length=0; GRID.labels.length=0; while(GRID.group.children.length) GRID.group.remove(GRID.group.children[0]);
+    autoSpacing();
+    const startX=-(GRID.cols-1)*GRID.gapX/2, startZ=-(GRID.rows-1)*GRID.gapZ/2; GRID.origin.set(startX,0,startZ);
+    for(let r=0;r<GRID.rows;r++){
+      const row=[]; for(let c=0;c<GRID.cols;c++){
+        const stack=makeMiniStack(colors[r]);
+        stack.position.set(startX + c*GRID.gapX, 0, startZ + r*GRID.gapZ);
+        stack.userData.rc=[r,c]; stack.userData.active=0; row.push(stack); GRID.group.add(stack);
+      }
+      GRID.cells.push(row);
+    }
+    GRID.cursor=new THREE.Mesh(new THREE.BoxGeometry(3.0,0.35, GRID.rows*GRID.gapZ + 4), new THREE.MeshBasicMaterial({color:0xffffff, transparent:true, opacity:0.1}));
+    GRID.cursor.position.set(startX,0.2,0); GRID.group.add(GRID.cursor);
+    for(let r=0;r<instruments.length;r++){ const spr=mkSprite('R'+(r+1)); spr.scale.set(4.2,4.2,1); spr.position.set(startX-8.0,6,startZ + r*GRID.gapZ); GRID.labels.push(spr); GRID.group.add(spr); }
+  }
+
+  /* ===== Fit camera to grid (frustum‑aware) ===== */
+  let dist=170, orbit=false; camera.position.set(120,80,150); look();
+  function fitCameraToGrid(){
+    // compute bounding of grid for current rows/cols
+    const w=(GRID.cols-1)*GRID.gapX + 6, d=(GRID.rows-1)*GRID.gapZ + 6, h=60; // approximate stack height
+    const fov=THREE.MathUtils.degToRad(camera.fov); const aspect=camera.aspect;
+    // fit vertical and horizontal
+    const distV=(h/2)/Math.tan(fov/2) + 90; // height + buffer
+    const vFovH=2*Math.atan(Math.tan(fov/2)*aspect);
+    const distH=(w/2)/Math.tan(vFovH/2) + 90;
+    dist=Math.max(distV, distH);
+    const yaw=Math.atan2(camera.position.z, camera.position.x) || 0.75; // keep angle
+    camera.position.set(Math.cos(yaw)*dist, 60, Math.sin(yaw)*dist);
+    camTarget.set(0,8,0); look();
+  }
+
+  /* ===== Build initial grid ===== */
+  buildGrid(); refreshLayout();
+
+  /* ===== Pattern + Audio (same core as v18; trimmed for brevity) ===== */
+  const pattern=Array.from({length:GRID.rows},()=>Array(GRID.cols).fill(0));
+  const scales={major:[0,2,4,5,7,9,11], minor:[0,2,3,5,7,8,10], dorian:[0,2,3,5,7,9,10], mixolydian:[0,2,4,5,7,9,10], pentMinor:[0,3,5,7,10]};
+  let root=50; let scaleName='dorian'; let progression=[0,3,4,5];
+  let bpm=112, playing=false, step=0, progressionIdx=0;
+
+  let AC=null, master=null, wet=null, dry=null; const laneFX=[]; let activeVoices=[];
+  function degreeToFreq(deg,oct=0){ const arr=scales[scaleName]; const idx=((deg%arr.length)+arr.length)%arr.length; const semi=arr[idx]+12*oct; return 440*Math.pow(2,((root-69)+semi)/12); }
+
+  async function audioInit(){ if(AC) return true; try{ const C=window.AudioContext||window.webkitAudioContext; if(!C){ toast('AudioContext unsupported'); return false; } AC=new C(); master=AC.createGain(); master.gain.value=.18; master.connect(AC.destination); const rv=AC.createConvolver(); rv.buffer=(function IR(sec=2.1,decay=3){const rate=AC.sampleRate,len=rate*sec,buf=AC.createBuffer(2,len,rate);for(let ch=0;ch<2;ch++){const d=buf.getChannelData(ch);for(let i=0;i<len;i++){d[i]=(Math.random()*2-1)*Math.pow(1-i/len,decay);}}return buf;})(); wet=AC.createGain(); dry=AC.createGain(); wet.gain.value=.22; dry.gain.value=.78; wet.connect(rv).connect(master); dry.connect(master); return true; }catch(e){ console.error(e); toast('Audio init failed'); return false; } }
+
+  function mkEnv(){ const e=AC.createGain(); e.gain.value=0; return e; }
+  function mkFilter(type='lowpass'){ const f=AC.createBiquadFilter(); f.type=type; f.frequency.value=1200; f.Q.value=0.8; return f; }
+  function noiseBuf(){ const b=AC.createBuffer(1, AC.sampleRate*1, AC.sampleRate); const d=b.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1; return b; }
+  function laneProcessors(){ const lanes=[]; for(let i=0;i<GRID.rows;i++){ const sat=AC.createWaveShaper(); const curve=new Float32Array(512); for(let j=0;j<512;j++){ const x=j/511*2-1; curve[j]=Math.tanh(2.2*x);} sat.curve=curve; const laneDry=AC.createGain(); const laneWet=AC.createGain(); laneWet.gain.value=.2; laneDry.gain.value=.8; const pan=AC.createStereoPanner(); pan.pan.value=0; const pre=AC.createGain(); pre.connect(sat); sat.connect(laneDry).connect(dry); sat.connect(laneWet).connect(wet); laneDry.connect(pan).connect(master); laneWet.connect(pan).connect(master); lanes.push({pre,sat,laneDry,laneWet,pan}); } return lanes; }
+
+  function buildKick(dest){ const o=AC.createOscillator(); o.type='sine'; const g=mkEnv(); const f=mkFilter('lowpass'); o.connect(f).connect(g).connect(dest.pre); o.start(); return {start(v){ const t=AC.currentTime; o.frequency.setValueAtTime(120,t); o.frequency.exponentialRampToValueAtTime(40,t+0.08); g.gain.cancelScheduledValues(t); g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.9*Math.min(1,v/2), t+0.005); g.gain.exponentialRampToValueAtTime(0.0001, t+0.28); }}}
+  function buildSnare(dest){ const n=AC.createBufferSource(); n.buffer=noiseBuf(); n.loop=true; const g=mkEnv(); const hp=mkFilter('highpass'); hp.frequency.value=1800; n.connect(hp).connect(g).connect(dest.pre); n.start(); return {start(v){ const t=AC.currentTime; g.gain.cancelScheduledValues(t); g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.7*(v/3+0.5), t+0.005); g.gain.exponentialRampToValueAtTime(0.0001, t+0.18); }}}
+  function buildHat(dest){ const n=AC.createBufferSource(); n.buffer=noiseBuf(); n.loop=true; const g=mkEnv(); const hp=mkFilter('highpass'); hp.frequency.value=6000; n.connect(hp).connect(g).connect(dest.pre); n.start(); return {start(v){ const t=AC.currentTime; g.gain.cancelScheduledValues(t); g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.4*(0.5+v/3), t+0.002); g.gain.exponentialRampToValueAtTime(0.0001, t+0.06); }}}
+  function buildMono(dest,osc='sawtooth'){ const o=AC.createOscillator(); o.type=osc; const f=mkFilter('lowpass'); const g=mkEnv(); o.connect(f).connect(g).connect(dest.pre); o.start(); return {o,f,g,start(freq,vel=.6,decay=.2,shape=0.6){ const t=AC.currentTime; o.frequency.setTargetAtTime(freq,t,0.02); const bright=800 + 2600*shape; f.frequency.setTargetAtTime(bright,t,0.03); g.gain.cancelScheduledValues(t); g.gain.setValueAtTime(g.gain.value,t); g.gain.linearRampToValueAtTime(vel, t+0.01); g.gain.exponentialRampToValueAtTime(0.0001, t+decay); }}}
+  function buildChord(dest){ const gain=mkEnv(); gain.connect(dest.pre); const make=(det=0)=>{ const o=AC.createOscillator(); o.type='triangle'; o.detune.value=det; const f=mkFilter('lowpass'); o.connect(f).connect(gain); o.start(); return {o,f}; }; const a=make(-7), b=make(0), c=make(7); return {start(rootHz,vel=.4,shape=0.6){ const t=AC.currentTime; const thirds=[0,3,4]; const r=rootHz; const fA=r*Math.pow(2,thirds[(progressionIdx%thirds.length)]/12); const fB=r*Math.pow(2,7/12); a.o.frequency.setTargetAtTime(fA,t,0.02); b.o.frequency.setTargetAtTime(r,t,0.02); c.o.frequency.setTargetAtTime(fB,t,0.02); [a.f,b.f,c.f].forEach(f=>f.frequency.setTargetAtTime(900+shape*1800,t,0.04)); gain.gain.cancelScheduledValues(t); gain.gain.setValueAtTime(gain.gain.value,t); gain.gain.linearRampToValueAtTime(vel, t+0.03); gain.gain.exponentialRampToValueAtTime(0.0001, t+0.5); }}}
+
+  function buildVoices(){ if(!AC || activeVoices.length) return; const fx=laneProcessors(); for(let i=0;i<GRID.rows;i++) laneFX[i]=fx[i];
+    activeVoices=[
+      buildKick(laneFX[0]), buildSnare(laneFX[1]), buildHat(laneFX[2]),
+      buildMono(laneFX[3],'sawtooth'), buildChord(laneFX[4]),
+      buildMono(laneFX[5],'square'), buildMono(laneFX[6],'triangle'), buildMono(laneFX[7],'sine')
+    ];
+  }
+
+  /* Row state */
+  const ROWCTL=Array.from({length:GRID.rows},(_,r)=>({row:r, sync:true, swing:0, octave:.5, chorus:.1, evo:false,
+    en:1,lvl:.7,send:.25,width:.5,prob:1,shape:.6 }));
+
+  /* Presets & Packs */
+  const PRESETS={
+    BASIC: (p)=>{ for(let r=0;r<GRID.rows;r++){ for(let c=0;c<GRID.cols;c++){ p[r][c]= (r<3? (c%4===0?1:0) : (Math.random()<0.2?1:0)); } } },
+    HOUSE: (p)=>{ for(let c=0;c<GRID.cols;c++){ p[0][c]=(c%4===0)?2:0; p[1][c]=(c%8===4)?2:0; p[2][c]= (c%2===1)?1:0; } },
+    DNB:   (p)=>{ for(let c=0;c<GRID.cols;c++){ p[0][c]=(c%8===0)?3:0; p[1][c]=(c%8===4)?3:0; p[2][c]= (c%2===0)?1:0; } }
+  };
+  const PACKS=[{name:'TAPE', bass:'sawtooth', lead:'triangle', perc:'square'},
+               {name:'FMISH',bass:'square',  lead:'square',   perc:'square'},
+               {name:'GRAN', bass:'triangle',lead:'sine',     perc:'triangle'},
+               {name:'BIT',  bass:'square',  lead:'sawtooth', perc:'square'},
+               {name:'WAVE', bass:'sawtooth',lead:'sawtooth', perc:'triangle'}];
+  let packIdx=0; function applyPack(i){ packIdx=((i%PACKS.length)+PACKS.length)%PACKS.length; const P=PACKS[packIdx]; if(activeVoices[3]?.o) activeVoices[3].o.type=P.bass; if(activeVoices[5]?.o) activeVoices[5].o.type=P.lead; if(activeVoices[6]?.o) activeVoices[6].o.type=P.perc; if(activeVoices[7]?.o) activeVoices[7].o.type='sine'; toast('Pack: '+P.name); }
+
+  function loadPreset(name='BASIC'){ const fn=PRESETS[name]||PRESETS.BASIC; fn(pattern); toast('Preset: '+name); }
+  function evolveRow(r){ const bar=ROWCTL[r]; if(!bar.evo) return; for(let c=0;c<GRID.cols;c++){ if(Math.random()<0.06){ pattern[r][c] = (pattern[r][c]+1)%4; } } }
+
+  /* Clock */
+  function startClock(){ let last=performance.now(); (function loop(){ const beat=60000/bpm; const stepDur=beat/4; const now=performance.now(); if(playing && AC && AC.state==='running'){ if(now-last>=stepDur){ last=now; tick(); } } requestAnimationFrame(loop); })(); }
+
+  function moveCursor(){ const x0=GRID.origin.x; GRID.cursor.position.x = x0 + step*GRID.gapX; }
+  function shouldFire(row){ const en=ROWCTL[row].en>0.1; if(!en) return false; const p=ROWCTL[row].prob; return Math.random()<=p; }
+  function trig(row,vel){ if(!activeVoices.length) return; const bar=ROWCTL[row]; const send=bar.send; const width=(bar.width-0.5)*2; const shape=bar.shape; const octAdj=Math.round((bar.octave*2)-2);
+    laneFX[row].laneWet.gain.setTargetAtTime(send, AC.currentTime, 0.05);
+    laneFX[row].laneDry.gain.setTargetAtTime(1-send, AC.currentTime, 0.05);
+    laneFX[row].pan.pan.setTargetAtTime((row-3.5)/3.5 * width, AC.currentTime, 0.05);
+    const V=Math.max(0,Math.min(3,vel))/3; const velGain=0.2+0.8*V; const rowGain=0.15+0.85*bar.lvl; const vfinal=velGain*rowGain;
+    const cell=GRID.cells[row][step]; cell.userData.pulse(V);
+    const degShift = (bar.sync? 0 : Math.round(bar.swing*2));
+    switch(row){
+      case 0: activeVoices[0].start(1+V*2); break;
+      case 1: activeVoices[1].start(1+V*2); break;
+      case 2: activeVoices[2].start(1+V*2); break;
+      case 3: { const deg=(step%4)*2 + (progression[progressionIdx%progression.length]) + degShift; const f=degreeToFreq(deg, -1+octAdj); activeVoices[3].start(f*(1+bar.chorus*0.02), vfinal, 0.18+0.04*V, shape); } break;
+      case 4: { const deg=progression[progressionIdx%progression.length] + degShift; const f=degreeToFreq(deg, 0+octAdj); activeVoices[4].start(f, vfinal, shape); } break;
+      case 5: { const deg=(step%7) + degShift; const f=degreeToFreq(deg, 1+octAdj); activeVoices[5].start(f*(1-bar.chorus*0.02), vfinal, 0.16+0.05*V, shape); } break;
+      case 6: { const deg=((step*3)%5) + degShift; const f=degreeToFreq(deg, 0+octAdj); activeVoices[6].start(f, vfinal, 0.1+0.05*V, shape); } break;
+      case 7: { const f=degreeToFreq((step%5) + degShift, 2+octAdj); activeVoices[7].start(f, vfinal, 0.2, shape); } break;
+    }
+  }
+
+  function tick(){ step=(step+1)%GRID.cols; if(step%4===0) progressionIdx=(progressionIdx+1)%progression.length; moveCursor(); for(let r=0;r<GRID.rows;r++){ evolveRow(r); const v=pattern[r][step]; if(v>0 && shouldFire(r)) trig(r,v); } }
+
+  /* ===== Picking ===== */
+  const ray=new THREE.Raycaster(); const v2=new THREE.Vector2();
+  function pickAt(x,y){ v2.x=(x/innerWidth)*2-1; v2.y=-(y/innerHeight)*2+1; ray.setFromCamera(v2,camera); const objs=[]; GRID.cells.forEach(row=>row.forEach(s=>objs.push(...s.children))); return ray.intersectObjects(objs); }
+
+  let pressTimer=null, pressedCell=null, draggingCam=null, pinch=null;
+  canvas.addEventListener('pointerdown',e=>{
+    const hits=pickAt(e.clientX,e.clientY); if(!hits.length){ draggingCam={x:e.clientX,y:e.clientY, yaw:Math.atan2(camera.position.z,camera.position.x), pitch:Math.asin((camera.position.y-50)/dist)}; return; }
+    const parent=hits[0].object.parent; if(parent.userData.rc){ pressedCell=parent; const [r,c]=parent.userData.rc; buzz(8); pressTimer=setTimeout(()=>{ pattern[r][c]=3; parent.userData.active=3; parent.userData.pulse(1); camTarget.copy(parent.position); look(); toast(`R${r+1}@${c+1} vel3`); },420); }
+  });
+  addEventListener('pointermove',e=>{ if(draggingCam){ const dx=e.clientX-draggingCam.x; const dy=e.clientY-draggingCam.y; const yaw=draggingCam.yaw - dx*0.005; const pitch=Math.max(-1.15,Math.min(1.15, draggingCam.pitch - dy*0.003)); const cx=Math.cos(yaw)*dist, cz=Math.sin(yaw)*dist, cy=50+Math.sin(pitch)*70; camera.position.set(cx,cy,cz); look(); }});
+  addEventListener('pointerup',()=>{ if(pressedCell){ clearTimeout(pressTimer); const [r,c]=pressedCell.userData.rc; if(pattern[r][c]===0){ pattern[r][c]=1; } else if(pattern[r][c]===1){ pattern[r][c]=2; } else if(pattern[r][c]===2){ pattern[r][c]=0; } pressedCell.userData.active=pattern[r][c]; pressedCell.userData.pulse(pattern[r][c]/3); pressedCell=null; }
+    draggingCam=null; });
+  addEventListener('touchstart',e=>{ if(e.touches.length===2){ const dx=e.touches[0].clientX-e.touches[1].clientX; const dy=e.touches[0].clientY-e.touches[1].clientY; pinch={d:Math.hypot(dx,dy)}; } },{passive:false});
+  addEventListener('touchmove',e=>{ if(pinch && e.touches.length===2){ const dx=e.touches[0].clientX-e.touches[1].clientX; const dy=e.touches[0].clientY-e.touches[1].clientY; const nd=Math.hypot(dx,dy); const k=nd/(pinch.d||1); pinch.d=nd; dist=Math.max(90,Math.min(460, dist/(k||1))); e.preventDefault(); } },{passive:false});
+  addEventListener('touchend',()=>{ pinch=null; });
+
+  /* ===== DENSITY SWITCH (always symmetric) ===== */
+  function setDensity(n){
+    const map={16:[8,16],8:[8,8],4:[4,4],2:[2,2],1:[1,1]}; const [r,c]=map[n]||[8,16]; GRID.rows=r; GRID.cols=c; buildGrid(); refreshLayout(); toast(`${r}×${c}`); }
+
+  document.querySelectorAll('#densityStack .mini').forEach(el=>{
+    el.addEventListener('click',()=>{ setDensity(parseInt(el.dataset.density,10)); buzz(6); });
+  });
+
+  /* ===== PACKS / PRESETS ===== */
+  document.querySelectorAll('#packStack .mini').forEach(el=>{
+    el.addEventListener('click',()=>{ if(el.dataset.pack==='prev') applyPack(--packIdx); else applyPack(++packIdx); buzz(6); });
+  });
+  document.querySelectorAll('#presetStack .mini').forEach(el=>{
+    el.addEventListener('click',()=>{ loadPreset(el.dataset.pre); buzz(6); });
+  });
+
+  /* ===== TRANSPORT / CAMERA ===== */
+  const viewHUD=document.getElementById('viewHUD');
+  const VIEWS=[{name:'FRONT',pos:[0,60,dist]},{name:'ISO L',pos:[-dist*0.8,80,dist*0.6]},{name:'ISO R',pos:[dist*0.8,80,dist*0.6]},{name:'TOP',pos:[0,240,0.01]},{name:'WIDE',pos:[dist*1.3,90,0]}];
+  function applyView(i){ const v=VIEWS[(i%VIEWS.length+VIEWS.length)%VIEWS.length]; camera.position.set(...v.pos); look(); viewHUD.textContent=v.name; }
+
+  document.getElementById('btnStart').addEventListener('click', async ()=>{
+    if(!AC){ const ok=await audioInit(); if(!ok) return; try{ if(AC.state==='suspended') await AC.resume(); }catch{} buildVoices(); startClock(); loadPreset('BASIC'); }
+    playing=!playing; (document.getElementById('btnStart')).setAttribute('aria-pressed', String(playing)); toast(playing?'Play':'Pause'); buzz(10);
+  });
+  document.getElementById('btnOrbit').addEventListener('click',()=>{ orbit=!orbit; document.getElementById('btnOrbit').textContent=orbit?'●':'○'; buzz(6); });
+  document.getElementById('btnFit').addEventListener('click',()=>{ fitCameraToGrid(); buzz(6); });
+  document.getElementById('btnZoomIn').addEventListener('click',()=>{ dist=Math.max(80,dist-15); const yaw=Math.atan2(camera.position.z,camera.position.x); camera.position.set(Math.cos(yaw)*dist, camera.position.y, Math.sin(yaw)*dist); look(); buzz(6); });
+  document.getElementById('btnZoomOut').addEventListener('click',()=>{ dist=Math.min(460,dist+15); const yaw=Math.atan2(camera.position.z,camera.position.x); camera.position.set(Math.cos(yaw)*dist, camera.position.y, Math.sin(yaw)*dist); look(); buzz(6); });
+  document.getElementById('btnPaper').addEventListener('click',()=>{ document.body.classList.toggle('mono'); buzz(4); });
+  document.querySelectorAll('#viewStack .mini').forEach(el=> el.addEventListener('click',()=>{ applyView(parseInt(el.dataset.view,10)); buzz(6); }));
+
+  /* ===== ROW DOCK (split; clear alley) ===== */
+  const rowDock=document.getElementById('rowDock'); let popupRow=-1; function openRow(r){ popupRow=r; rowDock.style.opacity=1; toast('Row '+(r+1)); }
+  GRID.labels.forEach(lbl=>{ lbl.onpointerdown=(e)=>{ const now=performance.now(); if(lbl._t && now-lbl._t<300){ openRow(lbl.userData?.row ?? GRID.labels.indexOf(lbl)); } lbl._t=now; } });
+
+  let dialStartY=0, dialKey=null; function setRowParam(key, v){ const b=ROWCTL[popupRow]; if(!b) return; if(key==='sync'){ b.sync = !b.sync; toast('Sync '+(b.sync?'ON':'OFF')); return; } if(key==='evo'){ b.evo = !b.evo; toast('Evo '+(b.evo?'ON':'OFF')); return; } const clamp=(x)=>Math.max(0,Math.min(1,x)); const val=clamp(v); if(key==='swing') b.swing = val*2-1; if(key==='oct') b.octave = val; if(key==='chor') b.chorus = val; }
+  document.querySelectorAll('#rowDock .chip').forEach(ch=>{
+    ch.addEventListener('pointerdown',(e)=>{ if(popupRow<0){ toast('Double‑tap a row label to select'); return; } const k=ch.dataset.act; if(ch.dataset.type==='dial'){ dialStartY=e.clientY; dialKey=k; ch.setPointerCapture(e.pointerId); } else { setRowParam(k); buzz(6); }});
+    ch.addEventListener('pointermove',(e)=>{ if(dialKey){ const dy=dialStartY-e.clientY; const v=Math.max(0,Math.min(1, (ROWCTL[popupRow][dialKey] ?? .5) + dy/240)); setRowParam(dialKey, v); }});
+    ch.addEventListener('pointerup',()=>{ dialKey=null; });
+  });
+
+  /* ===== Resize ===== */
+  addEventListener('resize',()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); autoSpacing(); refreshLayout(); });
+
+  /* ===== Animation loop ===== */
+  function animate(){ requestAnimationFrame(animate); if(orbit){ const yaw=Math.atan2(camera.position.z,camera.position.x)+0.004; camera.position.x=Math.cos(yaw)*dist; camera.position.z=Math.sin(yaw)*dist; camera.position.y=60+Math.sin(yaw*0.6)*20; look(); } renderer.render(scene,camera); }
+  animate();
+
+  /* ===== Quick QA toggles (debug keys) ===== */
+  addEventListener('keydown',(e)=>{
+    if(e.key==='g'){ // toggle labels (legibility without text)
+      GRID.labels.forEach(s=> s.visible=!s.visible); toast('Labels: '+(GRID.labels[0].visible?'ON':'OFF')); }
+    if(e.key==='c'){ GRID.cursor.visible=!GRID.cursor.visible; toast('Cursor: '+(GRID.cursor.visible?'ON':'OFF')); }
+    if(e.key==='a'){ // toggle alley viz
+      const A=document.getElementById('alley'); A.style.display = (A.style.display==='none'?'block':'none'); }
+  });
+})();
+</script>
+</body>
+</html>

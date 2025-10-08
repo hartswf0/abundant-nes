@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>SEA SEQUENCER — Curve Editor + Symmetric Endzones (Fix: roundRect)</title>
+<style>
+:root{
+  --abyss:#03080f; --ink:#e9f6ff; --muted:#94b8cc; --blue:#7fdcff; --cyan:#58e0ff; --foam:#dff4ff;
+  --glass:rgba(180,230,255,.06); --rail:rgba(10,22,36,.82); --rail-line:rgba(160,210,255,.2);
+  --shadow:0 16px 38px rgba(0,0,0,.55), 0 2px 12px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0;overflow:hidden}
+body{background:radial-gradient(1200px 800px at 50% 38%, #071726 0%, var(--abyss) 60%);color:var(--ink);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;touch-action:none}
+
+#stage{position:fixed;inset:0}
+#scene{position:absolute;inset:0;display:block;cursor:crosshair}
+.hud{position:fixed;inset:0;pointer-events:none}
+
+/* PERFECTLY SYMMETRIC ENDZONES */
+:root{ --railW:68px; }
+.rail{position:absolute;top:0;bottom:0;width:var(--railW);backdrop-filter:blur(10px);background:linear-gradient(90deg,transparent,var(--rail));border-left:1px solid var(--rail-line);display:flex;flex-direction:column;justify-content:center;align-items:center;gap:18px;padding:16px 6px;pointer-events:none;z-index:10}
+.rail.left{left:0;background:linear-gradient(270deg,transparent,var(--rail));border-left:none;border-right:1px solid var(--rail-line)}
+.rail .stack{width:46px;height:184px;border-radius:18px;border:1px solid var(--rail-line);background:var(--glass);box-shadow:var(--shadow);position:relative;overflow:hidden;pointer-events:auto}
+.rail .cap{position:absolute;inset:auto 0 6px 0;text-align:center;font-size:10px;letter-spacing:.16em;color:var(--muted);writing-mode:vertical-rl;transform:rotate(180deg);right:-4px;top:6px}
+.rail .col{position:absolute;inset:8px;display:grid;grid-template-rows:repeat(10,1fr);row-gap:4px}
+.rail .tile{border-radius:8px;background:linear-gradient(180deg,rgba(127,220,255,.18),rgba(255,255,255,.06))}
+.rail .tile.lit{background:linear-gradient(180deg,rgba(127,220,255,.5),rgba(127,220,255,.26));box-shadow:0 0 0 1px rgba(127,220,255,.35), inset 0 0 14px rgba(127,220,255,.35)}
+
+/* FABs */
+.fabWrap{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);display:flex;gap:14px;pointer-events:none;z-index:20}
+.fab{width:56px;height:56px;border-radius:50%;border:1px solid var(--rail-line);background:linear-gradient(180deg,rgba(8,16,24,.75),rgba(8,16,24,.95));box-shadow:0 12px 28px rgba(0,0,0,.5);display:grid;place-items:center;font-weight:800;pointer-events:auto}
+.fab[aria-pressed="true"]{outline:2px solid rgba(99,255,199,.5)}
+
+.instructions{position:fixed;top:12px;left:12px;background:rgba(3,8,15,.75);backdrop-filter:blur(10px);padding:10px 12px;border-radius:12px;border:1px solid var(--rail-line);max-width:320px;font-size:12px;color:var(--muted);z-index:9}
+.instructions strong{color:var(--cyan);display:block;margin-bottom:4px}
+
+#veil{position:fixed;inset:0;background:radial-gradient(1200px 800px at 50% 40%, rgba(12,32,52,.85), rgba(3,8,15,.96));display:flex;align-items:center;justify-content:center;flex-direction:column;gap:20px;z-index:200;padding:20px;text-align:center}
+#veil p{max-width:520px;color:var(--foam);font-size:18px;line-height:1.6;margin:0 20px}
+#veil button{padding:16px 28px;border-radius:14px;border:1px solid rgba(127,220,255,.4);background:linear-gradient(135deg, rgba(127,220,255,.22), rgba(88,224,255,.18));color:var(--foam);font-weight:800;letter-spacing:.06em;box-shadow:0 12px 32px rgba(0,0,0,.5)}
+
+@media (prefers-reduced-motion:reduce){#scene{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+  <div id="stage"><canvas id="scene" aria-label="Sequencer grid with curves"></canvas></div>
+  <div class="hud" aria-hidden="true">
+    <div class="rail left" id="leftRail">
+      <div class="stack" data-control="tempo"><div class="col"></div><div class="cap">Tempo</div></div>
+      <div class="stack" data-control="depth"><div class="col"></div><div class="cap">Reverb</div></div>
+      <div class="stack" data-control="swing"><div class="col"></div><div class="cap">Swing</div></div>
+    </div>
+    <div class="rail" style="right:0;left:auto" id="rightRail">
+      <div class="stack" data-control="echo"><div class="col"></div><div class="cap">Echo</div></div>
+      <div class="stack" data-control="mix"><div class="col"></div><div class="cap">Mix</div></div>
+      <div class="stack" data-control="damp"><div class="col"></div><div class="cap">Damp</div></div>
+    </div>
+
+    <div class="fabWrap" id="fabWrap">
+      <button class="fab" id="playFab" aria-label="Play/Pause" aria-pressed="false">▶</button>
+      <button class="fab" id="randFab" aria-label="Randomize" title="Randomize">✦</button>
+      <button class="fab" id="clearFab" aria-label="Clear" title="Clear">□</button>
+    </div>
+  </div>
+
+  <div class="instructions" id="hint">
+    <strong>Curve Mode:</strong>
+    Drag the <em>curve</em> in each row (5 control points). Only the area under the curve sounds. Playhead sweeps with a gentle resonance.
+  </div>
+
+  <div id="veil">
+    <p>🌊 SEA SEQUENCER — Draw sound. Each row has a curve; what’s under it plays. Tap and drag points to sculpt. Use side rails for global feel.</p>
+    <button id="enter">Start Playing</button>
+  </div>
+
+<script>
+"use strict";
+(function(){
+  // ---------- Dimensions & layout ----------
+  const DPR=Math.max(1, window.devicePixelRatio||1);
+  const canvas=document.getElementById('scene');
+  const ctx=canvas.getContext('2d');
+  let W=0,H=0;
+  function resize(){ W=innerWidth; H=innerHeight; canvas.width=W*DPR; canvas.height=H*DPR; canvas.style.width=W+'px'; canvas.style.height=H+'px'; ctx.setTransform(DPR,0,0,DPR,0,0);} window.addEventListener('resize', resize, {passive:true}); resize();
+
+  // ---------- Layout (rails perfectly match grid height) ----------
+  const RAIL_W = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--railW'))||68;
+  function worldRect(){ const pad=16; const left=RAIL_W+pad; const right=W-(RAIL_W+pad); const top=pad; const bottom=H-pad-12; return {x:left,y:top,w:Math.max(120,right-left),h:Math.max(120,bottom-top)}; }
+
+  // ---------- Helper: rounded rect (FIX) ----------
+  function roundRect(x,y,w,h,r){
+    // clamp radius to half of the smallest dimension
+    const rr = Math.max(0, Math.min(r||0, Math.min(w,h)/2));
+    ctx.beginPath();
+    ctx.moveTo(x + rr, y);
+    ctx.lineTo(x + w - rr, y);
+    ctx.arcTo(x + w, y, x + w, y + h, rr);
+    ctx.lineTo(x + w, y + h - rr);
+    ctx.arcTo(x + w, y + h, x + w - rr, y + h, rr);
+    ctx.lineTo(x + rr, y + h);
+    ctx.arcTo(x, y + h, x, y + h - rr, rr);
+    ctx.lineTo(x, y + rr);
+    ctx.arcTo(x, y, x + rr, y, rr);
+    ctx.closePath();
+  }
+
+  // ---------- Curve model (per row) ----------
+  const ROWS=3, COLS=16; const PTS=5; // control points per row
+  const curves = new Array(ROWS).fill(0).map((_,r)=>{
+    const xs=[0, 0.25, 0.5, 0.75, 1];
+    const base = r===0? 0.35 : r===1? 0.55 : 0.45;
+    return xs.map(x=>({x, y: Math.max(0.1, Math.min(0.9, base + (Math.random()*0.2-0.1)))}));
+  });
+
+  // Catmull-Rom spline sampling (clamped ends)
+  function sampleCurve(row, t){ // t in [0..1]
+    const pts=curves[row]; const n=pts.length;
+    const u = Math.max(0, Math.min(1, t));
+    const s = u*(n-1); const i=Math.floor(s);
+    const p0=pts[Math.max(0,i-1)], p1=pts[Math.min(n-1,i)], p2=pts[Math.min(n-1,i+1)], p3=pts[Math.min(n-1,i+2)];
+    const local = s - i;
+    function cr(a,b,c,d,t){ const t2=t*t, t3=t2*t; return 0.5*((2*b) + (-a + c)*t + (2*a - 5*b + 4*c - d)*t2 + (-a + 3*b - 3*c + d)*t3); }
+    return Math.max(0, Math.min(1, cr(p0.y, p1.y, p2.y, p3.y, local)));
+  }
+
+  // ---------- Audio ----------
+  const AC=window.AudioContext||window.webkitAudioContext; let audioCtx=null;
+  let master, busLow, busMid, busHigh, busVerb, delayNode, fbNode, verbLP;
+  const state={ playing:false, bpm:120, echoTime:.32, echoFeedback:.28, swing:0.18, now:0, playCol:0 };
+  function ensureAudio(){ if(audioCtx) return; audioCtx=new AC({latencyHint:'interactive'});
+    master=audioCtx.createGain(); master.gain.value=.75; master.connect(audioCtx.destination);
+    busLow=audioCtx.createGain(); busMid=audioCtx.createGain(); busHigh=audioCtx.createGain(); busVerb=audioCtx.createGain();
+    busLow.gain.value=.35; busMid.gain.value=.24; busHigh.gain.value=.22; busVerb.gain.value=.34;
+    delayNode=audioCtx.createDelay(2.0); fbNode=audioCtx.createGain(); verbLP=audioCtx.createBiquadFilter();
+    delayNode.delayTime.value=state.echoTime; fbNode.gain.value=state.echoFeedback; verbLP.type='lowpass'; verbLP.frequency.value=1800;
+    busVerb.connect(delayNode); delayNode.connect(fbNode); fbNode.connect(delayNode); delayNode.connect(verbLP); verbLP.connect(master);
+    busLow.connect(master); busMid.connect(master); busHigh.connect(master); makeInstruments(); }
+
+  function brownNoise(){ const b=audioCtx.createBuffer(1, audioCtx.sampleRate*2, audioCtx.sampleRate); const d=b.getChannelData(0); let last=0; for(let i=0;i<d.length;i++){ const w=Math.random()*2-1; d[i]=(last+0.02*w)/1.02; last=d[i]; } const src=audioCtx.createBufferSource(); src.buffer=b; src.loop=true; return src; }
+  let L,M,Hh; function makeInstruments(){ L=brownNoise(); const lBP=audioCtx.createBiquadFilter(); lBP.type='bandpass'; lBP.frequency.value=40; lBP.Q.value=3; const lG=audioCtx.createGain(); lG.gain.value=0; L.connect(lBP); lBP.connect(lG); lG.connect(busLow); lG.connect(busVerb); L.start(); L._bp=lBP; L._g=lG;
+    const o=audioCtx.createOscillator(); o.type='sine'; o.frequency.value=440; const mBP=audioCtx.createBiquadFilter(); mBP.type='bandpass'; mBP.frequency.value=520; mBP.Q.value=12; const mG=audioCtx.createGain(); mG.gain.value=0; o.connect(mBP); mBP.connect(mG); mG.connect(busMid); mG.connect(busVerb); o.start(); M={o,_bp:mBP,_g:mG};
+    const s=brownNoise(); const hHP=audioCtx.createBiquadFilter(); hHP.type='highpass'; hHP.frequency.value=1200; const hG=audioCtx.createGain(); hG.gain.value=0; s.connect(hHP); hHP.connect(hG); hG.connect(busHigh); hG.connect(busVerb); s.start(); Hh={src:s,_hp:hHP,_g:hG}; }
+  function env(g,a,d,peak){ if(!audioCtx) return; const t=audioCtx.currentTime; try{ g.gain.cancelScheduledValues(t);}catch(e){} g.gain.setValueAtTime(0.0001,t); g.gain.linearRampToValueAtTime(peak, t+(a||.01)); g.gain.exponentialRampToValueAtTime(0.0001, t+(a||.01)+(d||.35)); }
+  function whenSafe(t){ if(!audioCtx) return 0; return (!isFinite(t)||t<0)? audioCtx.currentTime : t; }
+  function trigger(row, amp, when){ if(!audioCtx) return; const tt=whenSafe(when||audioCtx.currentTime); const v=Math.max(0,Math.min(1,amp)); if(row===0){ L._bp.frequency.setTargetAtTime(36+v*22, tt, .25); env(L._g,.02,1.0, .16+.42*v); } else if(row===1){ M._bp.frequency.setTargetAtTime(380+v*320, tt, .02); env(M._g,.008,.25, .15+.45*v); } else { Hh._hp.frequency.setTargetAtTime(1100+v*480, tt, .03); env(Hh._g,.006,.22, .12+.40*v); } }
+
+  // ---------- Scheduler with resonance sweep ----------
+  let scheduleTimer=null; const lookahead=0.1; let nextNoteTime=0; let schedCol=0; let sweepPhase=0;
+  function scheduleStep(col, when){
+    for(let r=0;r<ROWS;r++){
+      const amp = sampleCurve(r, col/(COLS-1));
+      trigger(r, amp, when);
+      const pts=curves[r]; const idx=Math.round((pts.length-1)*col/(COLS-1)); const p=pts[idx]; p.y += (amp - p.y)*0.08;
+    }
+    state.playCol = col;
+  }
+  function startScheduler(){ if(!audioCtx) ensureAudio(); if(scheduleTimer) return; nextNoteTime = audioCtx.currentTime + 0.02; schedCol=state.playCol; sweepPhase=0; scheduleTimer=setInterval(()=>{ const now=audioCtx.currentTime; const base=(60/state.bpm)/4; while(nextNoteTime < now+lookahead){
+        const wobble = Math.sin(sweepPhase)*0.03*base; // ±3%
+        const swing = (schedCol%2===1) ? state.swing*base*0.5 : 0;
+        scheduleStep(schedCol%COLS, nextNoteTime + swing + wobble);
+        nextNoteTime += base; schedCol=(schedCol+1)%COLS; sweepPhase += 0.6; }
+    },25); }
+  function stopScheduler(){ if(scheduleTimer){ clearInterval(scheduleTimer); scheduleTimer=null; } }
+
+  // ---------- Interaction: curve editing (easy tap/drag) ----------
+  function rowFromY(y){ const R=worldRect(); const ch=R.h/ROWS; return Math.max(0, Math.min(ROWS-1, Math.floor((y-R.y)/ch))); }
+  function xToT(x){ const R=worldRect(); return Math.max(0, Math.min(1, (x - R.x)/R.w)); }
+  let dragging=false, target={row:0, idx:0}, startY=0, startVal=0;
+  canvas.addEventListener('pointerdown', (e)=>{ const rect=canvas.getBoundingClientRect(); const mx=e.clientX-rect.left, my=e.clientY-rect.top; const r=rowFromY(my); const t=xToT(mx); const pts=curves[r]; let best=0,bd=1e9; for(let i=0;i<pts.length;i++){ const dx=Math.abs(pts[i].x - t); if(dx<bd){ bd=dx; best=i; } } dragging=true; target={row:r, idx:best}; startY=my; startVal=pts[best].y; canvas.setPointerCapture(e.pointerId); });
+  canvas.addEventListener('pointermove', (e)=>{ if(!dragging) return; const my=e.clientY-canvas.getBoundingClientRect().top; const R=worldRect(); const ch=R.h/ROWS; const dy=(startY - my)/ch; const pts=curves[target.row]; pts[target.idx].y = Math.max(0.02, Math.min(0.98, startVal + dy)); });
+  window.addEventListener('pointerup', ()=>{ dragging=false; }); window.addEventListener('pointercancel', ()=>{ dragging=false; });
+
+  // ---------- Rendering ----------
+  function cellRect(c,r){ const R=worldRect(); const cw=R.w/COLS, ch=R.h/ROWS; return {x:R.x+c*cw+cw*.02, y:R.y+r*ch+ch*.06, w:cw*.96, h:ch*.88}; }
+  function draw(){ ctx.clearRect(0,0,W,H); const R=worldRect();
+    for(let r=0;r<ROWS;r++){ const rowTop=cellRect(0,r).y; const rowBot=rowTop+cellRect(0,r).h; const g=ctx.createLinearGradient(0,rowTop,0,rowBot); g.addColorStop(0,'rgba(120,200,255,.05)'); g.addColorStop(1,'rgba(120,200,255,0)'); ctx.fillStyle=g; ctx.fillRect(R.x,rowTop,R.w,rowBot-rowTop); }
+    const phX = cellRect(state.playCol,0).x + cellRect(state.playCol,0).w*0.5;
+    ctx.save(); ctx.globalAlpha=.25; ctx.fillStyle='#7fdcff'; ctx.fillRect(phX-1, R.y, 3, R.h); ctx.restore();
+
+    for(let r=0;r<ROWS;r++){
+      for(let c=0;c<COLS;c++){
+        const amp = sampleCurve(r, c/(COLS-1));
+        const CR=cellRect(c,r); const litTiles=Math.round(amp*10); const color=['#31bbff','#7fdcff','#cfe9ff'][r];
+        ctx.save(); ctx.translate(CR.x, CR.y);
+        ctx.globalAlpha=.22; ctx.fillStyle=color; roundRect(0,0,CR.w,CR.h, Math.min(14, CR.h*.25)); ctx.fill();
+        const steps=10, gap=4, tileH=(CR.h-gap*(steps-1))/steps;
+        for(let i=0;i<steps;i++){ const ty=CR.h-(i+1)*tileH - i*gap; ctx.globalAlpha = (i<litTiles)? 1 : .08; ctx.fillStyle=color; roundRect(5,ty, CR.w-10, tileH, 8); ctx.fill(); }
+        ctx.restore();
+      }
+      const color=['#31bbff','#7fdcff','#cfe9ff'][r];
+      ctx.save(); const ch=cellRect(0,r).h; const top=cellRect(0,r).y; ctx.beginPath(); for(let c=0;c<COLS;c++){ const t=c/(COLS-1); const y = top + (1-sampleCurve(r,t))*ch; const x = cellRect(c,r).x + cellRect(c,r).w*0.5; if(c===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); }
+      ctx.lineWidth=2; ctx.strokeStyle=color; ctx.globalAlpha=.85; ctx.stroke();
+      const firstX=cellRect(0,r).x + cellRect(0,r).w*0.5; const lastX=cellRect(COLS-1,r).x + cellRect(COLS-1,r).w*0.5; const base=top+ch;
+      ctx.lineTo(lastX, base); ctx.lineTo(firstX, base); ctx.closePath(); ctx.globalAlpha=.10; ctx.fillStyle=color; ctx.fill();
+      const pts=curves[r]; for(const p of pts){ const x=R.x + p.x*R.w; const y= top + (1-p.y)*ch; ctx.globalAlpha=.95; ctx.beginPath(); ctx.arc(x,y,5,0,Math.PI*2); ctx.fillStyle='#ffffff'; ctx.fill(); ctx.strokeStyle=color; ctx.lineWidth=2; ctx.stroke(); }
+      ctx.restore();
+    }
+  }
+
+  // RAF loop
+  let last=performance.now(); function loop(now){ const dt=Math.min(.05,(now-last)/1000); last=now; state.now+=dt; draw(); requestAnimationFrame(loop);} requestAnimationFrame(loop);
+
+  // ---------- Rails ----------
+  function buildStack(el, v0){ const col=el.querySelector('.col'); col.innerHTML=''; const T=10; for(let i=0;i<T;i++){ const d=document.createElement('div'); d.className='tile'; col.appendChild(d); }
+    let v=v0; function render(){ const tiles=col.children; const lit=Math.round(v*T); for(let i=0;i<T;i++){ tiles[T-1-i].classList.toggle('lit', i<lit);} } render();
+    let grabbing=false, sy=0, sv=v; el.addEventListener('pointerdown', (e)=>{ e.stopPropagation(); grabbing=true; sy=e.clientY; sv=v; el.setPointerCapture(e.pointerId);});
+    el.addEventListener('pointermove', (e)=>{ if(!grabbing) return; const dy=(sy-e.clientY)/140; v=Math.max(0,Math.min(1, sv+dy)); apply(el.dataset.control, v); render();});
+    el.addEventListener('pointerup', ()=>{ grabbing=false;}); el.addEventListener('pointercancel', ()=>{ grabbing=false;});}
+
+  const leftRail=document.getElementById('leftRail'); const rightRail=document.getElementById('rightRail');
+  [...leftRail.querySelectorAll('.stack'), ...rightRail.querySelectorAll('.stack')].forEach(el=>{ const ctl=el.dataset.control; const init=(ctl==='tempo')?.5:(ctl==='depth')?.3:(ctl==='echo')?.22:(ctl==='swing')?.18:(ctl==='damp')?.5:.5; buildStack(el, init); });
+  function apply(ctl,v){ if(ctl==='tempo'){ state.bpm = Math.round(40 + v*160); }
+    else if(ctl==='depth'){ if(busVerb&&audioCtx){ busVerb.gain.setTargetAtTime(v*.6, audioCtx.currentTime,.05);} }
+    else if(ctl==='echo'){ state.echoTime=0.1+v*.9; if(delayNode&&audioCtx){ delayNode.delayTime.setTargetAtTime(state.echoTime, audioCtx.currentTime,.05);} }
+    else if(ctl==='mix'){ if(busLow&&busHigh&&audioCtx){ busLow.gain.setTargetAtTime(v<.33?.5:.32, audioCtx.currentTime,.06); busHigh.gain.setTargetAtTime(v>.66?.4:.22, audioCtx.currentTime,.06);} }
+    else if(ctl==='swing'){ state.swing=v*.4; }
+    else if(ctl==='damp'){ const hz=500+v*3500; if(verbLP&&audioCtx){ verbLP.frequency.setTargetAtTime(hz, audioCtx.currentTime,.05);} } }
+
+  // ---------- FABs ----------
+  const playFab=document.getElementById('playFab'); const randFab=document.getElementById('randFab'); const clearFab=document.getElementById('clearFab');
+  playFab.addEventListener('pointerdown', (e)=>{ e.stopPropagation(); ensureAudio(); if(audioCtx.state==='suspended') audioCtx.resume(); state.playing=!state.playing; playFab.setAttribute('aria-pressed', state.playing?'true':'false'); playFab.textContent= state.playing? '❚❚':'▶'; if(state.playing){ startScheduler(); try{navigator.vibrate&&navigator.vibrate(12);}catch(_){} } else { stopScheduler(); } });
+  randFab.addEventListener('pointerdown', (e)=>{ e.stopPropagation(); for(let r=0;r<ROWS;r++){ for(let i=0;i<curves[r].length;i++){ curves[r][i].y = Math.max(0.08, Math.min(0.92, Math.random())); } } });
+  clearFab.addEventListener('pointerdown', (e)=>{ e.stopPropagation(); for(let r=0;r<ROWS;r++){ for(let i=0;i<curves[r].length;i++){ curves[r][i].y = 0.0; } } });
+
+  // Onboarding
+  const veil=document.getElementById('veil'); document.getElementById('enter').addEventListener('pointerdown', (e)=>{ e.preventDefault(); ensureAudio(); if(audioCtx && audioCtx.state==='suspended'){ audioCtx.resume().then(()=>{ state.playing=true; }).catch(()=>{ state.playing=true; }); } else { state.playing=true; } veil.style.display='none'; playFab.setAttribute('aria-pressed','true'); playFab.textContent='❚❚'; startScheduler(); });
+
+  // ---------- Self-tests ----------
+  function runTimingTests(){ if(!audioCtx) return; console.groupCollapsed('%cSEA — timing tests','color:#58e0ff'); const t0=audioCtx.currentTime; console.assert(isFinite(t0)&&t0>=0,'currentTime >= 0'); const probe=t0+(60/Math.max(40,Math.min(200,state.bpm)))/4; console.assert(isFinite(probe)&&probe>=0,'probe >=0'); console.groupEnd(); }
+  function runRenderTests(){ console.groupCollapsed('%cSEA — render tests','color:#31bbff'); console.assert(typeof roundRect==='function','roundRect is defined'); ctx.save(); ctx.beginPath(); roundRect(10,10,40,20,6); const ok = ctx.isPointInPath(20,20); console.assert(!!ok,'roundRect produced a valid path'); ctx.restore(); console.groupEnd(); }
+  window.addEventListener('click', ()=>{ runRenderTests(); if(audioCtx) runTimingTests(); }, {once:true});
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+<title>VOL‑MEDIA DECKS v19 — Musical Banks: Coin Ontology (POML‑aware)</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;touch-action:none;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{background:#000;color:#fff;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;overflow:hidden}
+  #canvas{width:100vw;height:100vh;display:block}
+  #hud{position:fixed;inset:0;pointer-events:none;z-index:10}
+  .alley{position:fixed;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:.5rem;z-index:11;pointer-events:auto}
+  .alley.left{left:.5rem}
+  .alley.right{right:.5rem}
+  .icon{width:48px;height:48px;border-radius:12px;border:1px solid rgba(255,255,255,.16);background:rgba(8,8,8,.7);display:grid;place-items:center;cursor:pointer}
+  .icon.active{background:rgba(20,60,40,.85);border-color:#2b5}
+  .icon svg{width:22px;height:22px;opacity:.9}
+  #viewHUD{position:absolute;top:10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.6);padding:6px 12px;border-radius:10px;font-weight:800;font-size:13px;border:1px solid rgba(255,255,255,.18)}
+  #bottomPad{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);display:grid;grid-template-columns:repeat(12,32px);gap:6px;pointer-events:auto}
+  .mini{width:32px;height:32px;border-radius:7px;border:1px solid rgba(255,255,255,.22);background:rgba(0,0,0,.55);font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center;cursor:pointer}
+  .mini:active{transform:translateY(1px)}
+  /* Docks */
+  .dock{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0) + 8px);width:min(1200px,96vw);height:58vh;border-radius:14px;overflow:hidden;border:1px solid #214233;background:linear-gradient(180deg,rgba(10,16,14,.94),rgba(6,10,9,.94));box-shadow:0 24px 70px rgba(0,0,0,.45);display:none;z-index:12}
+  .dock.open{display:block}
+  .dock header{display:flex;gap:.6rem;align-items:center;padding:.55rem .75rem;border-bottom:1px solid #1a2d23;background:rgba(14,22,19,.9)}
+  .ttl{font-weight:800;font-size:12px}
+  .spacer{flex:1}
+  .btn{appearance:none;border:1px solid #1b352a;background:#0d1613;color:#e8f3ec;padding:.38rem .6rem;border-radius:10px;cursor:pointer}
+  .tabs{display:flex;gap:.4rem}
+  .tab{font:700 11px/1 ui-monospace,Menlo,monospace;background:#0b1512;border:1px solid #173328;border-radius:8px;padding:.35rem .5rem;cursor:pointer}
+  .tab.active{background:#123326}
+  .pane{display:none;width:100%;height:calc(100% - 42px)}
+  .pane.active{display:block}
+  #ledger,#exportJSON,#exportDOT,#exportMD{display:block;width:100%;height:100%;background:#070a09;color:#dfe9e3;font:600 12px/1.35 ui-monospace,Menlo,monospace;padding:10px;overflow:auto;white-space:pre}
+  /* Modal */
+  #modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;z-index:13}
+  #modal .sheet{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(1100px,96vw);height:min(78vh,900px);background:#0a1210;border:1px solid #1a2d23;border-radius:14px;box-shadow:0 24px 70px rgba(0,0,0,.55);display:flex;flex-direction:column}
+  #modal header{display:flex;gap:.6rem;align-items:center;padding:.6rem .8rem;border-bottom:1px solid #1a2d23}
+  #pomlIn{flex:1;margin:.6rem;border-radius:10px;background:#06110e;color:#cfeadf;border:1px solid #143027;padding:.6rem;font:500 12px/1.35 ui-monospace,Menlo,monospace}
+  #modal footer{display:flex;gap:.6rem;justify-content:flex-end;padding:.6rem .8rem;border-top:1px solid #1a2d23}
+  /* Tooltip */
+  #tip{position:fixed;pointer-events:none;background:rgba(8,12,10,.95);border:1px solid #204034;border-radius:10px;padding:.45rem .55rem;font:600 11px/1.25 ui-monospace,Menlo,monospace;max-width:min(60ch,70vw);display:none;z-index:15}
+  #tip .k{color:#9ad8bf} #tip .v{color:#ffdca8}
+  #toast{position:fixed;bottom:10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.86);border:1px solid rgba(255,255,255,.2);padding:6px 10px;border-radius:10px;font-size:12px;display:none;z-index:16}
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+<div id="hud">
+  <div id="viewHUD">COIN ONTOLOGY — BANKED LEDGERS</div>
+  <div class="alley left">
+    <button class="icon" id="camFront" title="Front"><svg viewBox="0 0 24 24" fill="none" stroke="#9fd9c3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18v10H3z"/></svg></button>
+    <button class="icon active" id="camIso" title="ISO"><svg viewBox="0 0 24 24" fill="none" stroke="#9fd9c3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 13 9 5 9-5"/></svg></button>
+    <button class="icon" id="camTop" title="Top"><svg viewBox="0 0 24 24" fill="none" stroke="#9fd9c3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/></svg></button>
+    <button class="icon" id="toggleOrbit" title="Orbit"><svg viewBox="0 0 24 24" fill="none" stroke="#9fd9c3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 1 0 16 0"/><path d="M2 12h20"/></svg></button>
+  </div>
+  <div class="alley right">
+    <button class="icon active" id="layoutBanks" title="Banks Grid"><svg viewBox="0 0 24 24" fill="none" stroke="#9fd9c3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="6" height="16"/><rect x="15" y="4" width="6" height="16"/></svg></button>
+    <button class="icon" id="layoutFan" title="Fan Wall"><svg viewBox="0 0 24 24" fill="none" stroke="#9fd9c3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l16-8L4 4z"/></svg></button>
+    <button class="icon" id="openDock" title="Open Ledger"><svg viewBox="0 0 24 24" fill="none" stroke="#9fd9c3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="m15 3 6 6"/><path d="M21 3v6h-6"/></svg></button>
+    <button class="icon" id="importPOML" title="Import POML"><svg viewBox="0 0 24 24" fill="none" stroke="#9fd9c3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg></button>
+    <button class="icon" id="exportBtn" title="Export JSON/DOT/MD"><svg viewBox="0 0 24 24" fill="none" stroke="#9fd9c3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m8 11 4 4 4-4"/><path d="M3 21h18"/></svg></button>
+  </div>
+  <div id="bottomPad">
+    <div class="mini" data-btn="play">▶</div>
+    <div class="mini" data-btn="stop">■</div>
+    <div class="mini" data-btn="tempo">⏱</div>
+    <div class="mini" data-btn="fit">□</div>
+    <div class="mini" data-btn="zoomIn">＋</div>
+    <div class="mini" data-btn="zoomOut">－</div>
+    <div class="mini" data-btn="packPrev">◀</div>
+    <div class="mini" data-btn="packNext">▶</div>
+    <div class="mini" data-btn="resolve">℞</div>
+    <div class="mini" data-btn="bank">₿</div>
+    <div class="mini" data-btn="voice">♫</div>
+    <div class="mini" data-btn="group">☰</div>
+  </div>
+</div>
+<div id="dock" class="dock" aria-hidden="true">
+  <header>
+    <div id="dockTitle" class="ttl">Ledger: Musical Bank Accounts</div>
+    <div class="spacer"></div>
+    <div class="tabs">
+      <button id="tabLedger" class="tab active">Ledger</button>
+      <button id="tabJSON" class="tab">JSON</button>
+      <button id="tabDOT" class="tab">Graphviz</button>
+      <button id="tabMD" class="tab">Markdown</button>
+    </div>
+    <button id="dockClose" class="btn" aria-label="Close">Close</button>
+  </header>
+  <pre id="ledger" class="pane active"></pre>
+  <pre id="exportJSON" class="pane"></pre>
+  <pre id="exportDOT" class="pane"></pre>
+  <pre id="exportMD" class="pane"></pre>
+</div>
+<div id="modal" aria-hidden="true">
+  <div class="sheet">
+    <header><div class="ttl">Import POML 1.2</div><div class="spacer"></div><button id="modalClose" class="btn">Close</button></header>
+    <textarea id="pomlIn" placeholder="Paste your <poml>…</poml> here"></textarea>
+    <footer>
+      <button id="loadPomlBtn" class="btn">Parse & Load</button>
+    </footer>
+  </div>
+</div>
+<div id="tip"></div>
+<div id="toast"></div>
+<script>
+(async function(){
+  // ===== Load THREE (fallback)
+  if(!window.THREE){
+    const CDNs=['https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js','https://unpkg.com/three@0.152.2/build/three.min.js'];
+    for(const src of CDNs){try{await new Promise((res,rej)=>{const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=rej;document.head.appendChild(s)}); if(window.THREE) break;}catch(e){}}
+  }
+
+  /* ===================
+     POML PARSER (minimal, client-side, offline)
+     - Extract entities, relations, provenance
+     - Respect schema types in <schema>
+  ==================== */
+  function text(t){return (t||'').trim()}
+  function nodeText(el,sel){const n=el.querySelector(sel);return n?text(n.textContent):''}
+  function parsePOML(xmlString){ try{
+    const doc=new DOMParser().parseFromString(xmlString,'text/xml');
+    const ents=[...doc.querySelectorAll('entities > entity')].map(el=>{
+      const id=el.getAttribute('id'); const type=el.getAttribute('type');
+      const attrs={}; ['name','description','range','sanctions'].forEach(k=>{ const v=nodeText(el,`attributes > ${k}`); if(v) attrs[k]=v; });
+      const prov=[...el.querySelectorAll('provenance')].map(p=>({ quote:nodeText(p,'quote'), locator:nodeText(p,'locator'), confidence:nodeText(p,'confidence')||'medium', status:nodeText(p,'status')||'EXPLICIT', voice:nodeText(p,'voice')||'NARRATOR' })).filter(p=>p.quote&&p.locator);
+      return {id,type,attributes:attrs,provenance:prov};
+    });
+    const rels=[...doc.querySelectorAll('morphisms > relation')].map(el=>{
+      const id=el.getAttribute('id'); const type=el.getAttribute('type'); const from=el.getAttribute('from'); const to=el.getAttribute('to');
+      const description=nodeText(el,'description');
+      const prov=[...el.querySelectorAll('provenance')].map(p=>({ quote:nodeText(p,'quote'), locator:nodeText(p,'locator'), confidence:nodeText(p,'confidence')||'medium', status:nodeText(p,'status')||'EXPLICIT', voice:nodeText(p,'voice')||'NARRATOR' })).filter(p=>p.quote&&p.locator);
+      return {id,type,from,to,description,provenance:prov};
+    });
+    return {entities:Object.fromEntries(ents.map(e=>[e.id,e])), relations:Object.fromEntries(rels.map(r=>[r.id,r])), metadata:{source:nodeText(doc,'document\\[role="primary"\\]')||'POML import', schema_version:'POML 1.2'}};
+  }catch(e){ console.error(e); toast('POML parse failed'); return null; }
+  }
+
+  /* =============================
+     DEFAULT GRAPH (seed) — thin
+  ==============================*/
+  const DEFAULT_GRAPH={entities:{},relations:{},metadata:{source:'Seed',schema_version:'POML 1.2'}};
+
+  let GRAPH=DEFAULT_GRAPH;
+
+  /* =============================
+     SCENE
+  ==============================*/
+  const canvas=document.getElementById('canvas');
+  const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
+  renderer.setSize(innerWidth,innerHeight);
+  renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
+  const scene=new THREE.Scene(); scene.background=new THREE.Color(0x000000);
+  const camera=new THREE.PerspectiveCamera(58, innerWidth/innerHeight, .1, 4000); camera.position.set(160,110,180);
+  const camTarget=new THREE.Vector3(0,18,0); const fitLook=()=>camera.lookAt(camTarget); fitLook();
+  addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight)});
+
+  scene.add(new THREE.AmbientLight(0xffffff,.26));
+  const key=new THREE.PointLight(0x66ddff,1.15,900); key.position.set(0,160,240); scene.add(key);
+  const warm=new THREE.PointLight(0xffaa66,.95,800); warm.position.set(160,90,-140); scene.add(warm);
+  const rim=new THREE.DirectionalLight(0xffffff,.55); rim.position.set(-160,180,-40); scene.add(rim);
+
+  const MAT={ coin:new THREE.MeshStandardMaterial({color:0xffd27a,metalness:.7,roughness:.35}), coinCer:new THREE.MeshStandardMaterial({color:0x9fe8c9,metalness:.65,roughness:.4}), base:new THREE.MeshStandardMaterial({color:0x0f1513,metalness:.1,roughness:.9}), glow:new THREE.MeshBasicMaterial({color:0x21ff86,transparent:true,opacity:.14}), cap:new THREE.MeshStandardMaterial({color:0x111,metalness:.2,roughness:.95}) };
+  const coinGeo=new THREE.CylinderGeometry(1.6,1.6,0.48, 36,1,false);
+  const capGeo=new THREE.CylinderGeometry(1.7,1.7,0.06, 36,1,false);
+  const baseGeo=new THREE.BoxGeometry(10,0.6,10);
+  const haloGeo=new THREE.RingGeometry(2.6,4.2,48);
+
+  const BANKS=[{id:'CEREMONIAL', mat:MAT.coinCer},{id:'COMMERCIAL', mat:MAT.coin},{id:'ARCHIVE', mat:MAT.cap}];
+  const CATS=[{id:'place', col:0xffffff},{id:'institution', col:0x21ff86},{id:'concept', col:0x7de3ff},{id:'process', col:0x77c1ff},{id:'law', col:0xffb167},{id:'agent', col:0xff6688},{id:'text_section', col:0xccccff},{id:'relation', col:0xc47dff}];
+
+  const GRID={ group:new THREE.Group(), gapX:9, gapZ:9.5, rows:BANKS.length, cols:CATS.length, cells:[], labelSprites:[] };
+  scene.add(GRID.group);
+
+  function mkLabel(text){ const cvs=document.createElement('canvas'); const s=256; cvs.width=cvs.height=s; const ctx=cvs.getContext('2d'); ctx.clearRect(0,0,s,s); ctx.fillStyle='rgba(0,0,0,0)'; ctx.fillRect(0,0,s,s); ctx.fillStyle='white'; ctx.font='900 48px Inter, system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.shadowColor='rgba(0,0,0,0.6)'; ctx.shadowBlur=12; ctx.fillText(text,s/2,s/2); const tex=new THREE.CanvasTexture(cvs); const mat=new THREE.SpriteMaterial({map:tex,transparent:true,depthWrite:false}); const spr=new THREE.Sprite(mat); spr.scale.set(6,6,1); return spr; }
+
+  function buildGrid(){
+    GRID.cells.length=0; while(GRID.group.children.length) GRID.group.remove(GRID.group.children[0]);
+    const startX=-(GRID.cols-1)*GRID.gapX/2, startZ=-(GRID.rows-1)*GRID.gapZ/2;
+    for(let r=0;r<GRID.rows;r++){
+      for(let c=0;c<GRID.cols;c++){
+        const base=new THREE.Mesh(baseGeo, MAT.base);
+        base.position.set(startX + c*GRID.gapX, 0, startZ + r*GRID.gapZ);
+        base.userData={r,c,coins:[],bank:BANKS[r].id,cat:CATS[c].id};
+        const halo=new THREE.Mesh(haloGeo, MAT.glow); halo.rotation.x=-Math.PI/2; halo.position.copy(base.position); halo.position.y=0.31;
+        GRID.group.add(base); GRID.group.add(halo); GRID.cells.push(base);
+      }
+    }
+    for(let r=0;r<GRID.rows;r++){ const L=mkLabel(BANKS[r].id); L.position.set(startX-9.5,5, startZ + r*GRID.gapZ); GRID.group.add(L); }
+    for(let c=0;c<GRID.cols;c++){ const L=mkLabel(CATS[c].id.toUpperCase()); L.position.set(startX + c*GRID.gapX, 12.5, startZ- GRID.gapZ*1.08); GRID.group.add(L); }
+  }
+  buildGrid();
+
+  function coinBankAssignment(coin){ const t=coin.type; if(t==='law'||t==='institution') return 'CEREMONIAL'; if(t==='relation'||t==='agent') return 'COMMERCIAL'; if(t==='text_section'||t==='process') return 'ARCHIVE'; return Math.random()<0.5?'CEREMONIAL':'COMMERCIAL'; }
+  function coinCategory(coin){ const t=coin.type; if(CATS.some(x=>x.id===t)) return t; return (coin.kind==='relation')?'relation':'concept'; }
+
+  // Sub‑stacks inside a cell: group by provenance.voice (or 'UNKNOWN')
+  function groupKeyFor(coin){ const p=(coin.provenance&&coin.provenance[0])||{}; return (p.voice||'UNKNOWN')+':' + (p.status||'EXPLICIT'); }
+
+  const coinMeshes=new Map();
+
+  function seedCoins(){
+    // Build structure piles["r:c"][groupKey] = [coin...]
+    const piles={};
+    const E=GRAPH.entities||{}; const R=GRAPH.relations||{}; const coins=[];
+    for(const id in E){ const e=E[id]; coins.push({kind:'entity', id, type:e.type, name:(e.attributes?.name||id), provenance:e.provenance||[], attributes:e.attributes||{}}); }
+    for(const id in R){ const r=R[id]; coins.push({kind:'relation', id, type:'relation', name:(r.description||id), provenance:r.provenance||[], from:r.from, to:r.to}); }
+
+    for(const coin of coins){ const bank=coinBankAssignment(coin); const cat=coinCategory(coin); const r=BANKS.findIndex(b=>b.id===bank); const c=CATS.findIndex(x=>x.id===cat); const key=`${r}:${c}`; piles[key] ||= {}; const gk=groupKeyFor(coin); piles[key][gk] ||= []; piles[key][gk].push(coin); }
+
+    const startX=-(GRID.cols-1)*GRID.gapX/2, startZ=-(GRID.rows-1)*GRID.gapZ/2;
+    const offsets=[[ -2.2, -2.2],[0,-2.2],[2.2,-2.2],[ -2.2,0],[0,0],[2.2,0],[ -2.2,2.2],[0,2.2],[2.2,2.2]]; // 3x3 subgrid
+
+    for(const key in piles){ const [r,c]=key.split(':').map(Number); const cell=GRID.cells.find(x=>x.userData.r===r && x.userData.c===c); const matBase=(BANKS[r].id==='CEREMONIAL')?MAT.coinCer: (BANKS[r].id==='ARCHIVE'?MAT.cap:MAT.coin); const groups=piles[key]; const gkeys=Object.keys(groups);
+      gkeys.slice(0,offsets.length).forEach((gk,idx)=>{ const off=offsets[idx]; const pile=groups[gk]; const tint=CATS[c].col; pile.forEach((coin,i)=>{
+          const m=new THREE.Mesh(coinGeo, matBase.clone()); m.position.set(cell.position.x+off[0], 0.48 + i*0.52, cell.position.z+off[1]); m.material.color=new THREE.Color(tint);
+          const cap=new THREE.Mesh(capGeo, MAT.cap); cap.position.set(m.position.x, m.position.y+0.27, m.position.z); GRID.group.add(m); GRID.group.add(cap);
+          m.userData.coin=coin; cap.userData.coin=coin; coinMeshes.set(m.uuid, m); coinMeshes.set(cap.uuid, m); cell.userData.coins.push(m);
+      }); });
+    }
+  }
+
+  function rebuild(){ // clear and reseed
+    buildGrid(); seedCoins(); updateLedger(); updateExports(); }
+
+  /* =============================
+     INTERACTION: camera, orbit, tooltip, picking
+  ==============================*/
+  function setCam(name){ if(name==='front'){ camera.position.set(0,60,240); } else if(name==='top'){ camera.position.set(0,280,0.01); } else { camera.position.set(160,110,200); } fitLook(); toast(name.toUpperCase()); }
+  let orbit=false, lastX=0, lastY=0, dragging=false; canvas.addEventListener('pointerdown',e=>{ if(!orbit) return; dragging=true; lastX=e.clientX; lastY=e.clientY; canvas.setPointerCapture(e.pointerId); });
+  addEventListener('pointermove',e=>{ if(!orbit||!dragging) return; const dx=e.clientX-lastX, dy=e.clientY-lastY; lastX=e.clientX; lastY=e.clientY; const off=new THREE.Vector3(); off.copy(camera.position).sub(camTarget); const sph=new THREE.Spherical().setFromVector3(off); sph.theta -= dx*0.005; sph.phi = Math.max(0.25, Math.min(Math.PI-0.25, sph.phi + dy*0.005)); off.setFromSpherical(sph); camera.position.copy(camTarget).add(off); fitLook(); });
+  addEventListener('pointerup',()=> dragging=false);
+
+  const ray=new THREE.Raycaster(); const v2=new THREE.Vector2(); const tip=document.getElementById('tip');
+  function pick(e){ v2.x=(e.clientX/innerWidth)*2-1; v2.y=-(e.clientY/innerHeight)*2+1; ray.setFromCamera(v2,camera); const objs=[]; GRID.cells.forEach(cell=>{ cell.userData.coins.forEach(m=>objs.push(m)); }); const hits=ray.intersectObjects(objs); if(!hits.length) { tip.style.display='none'; return; } const m=hits[0].object; const coin=m.userData.coin; if(!coin) return; const p=coin.provenance&&coin.provenance[0]; const name=(coin.name||coin.id); const q=p?.quote?('“'+p.quote.replace(/\s+/g,' ').slice(0,160)+(p.quote.length>160?'…':'')+'”'):'(no quote)'; const loc=p?.locator||''; const full=`<span class='k'>id</span>: <span class='v'>${coin.id}</span>\n<span class='k'>type</span>: <span class='v'>${coin.type}</span>\n<span class='k'>name</span>: <span class='v'>${name}</span>\n<span class='k'>quote</span>: <span class='v'>${q}</span>\n<span class='k'>locator</span>: <span class='v'>${loc}</span>`; tip.innerHTML=full; tip.style.display='block'; tip.style.left=(e.clientX+12)+'px'; tip.style.top=(e.clientY+12)+'px'; }
+  addEventListener('pointermove', pick);
+
+  /* =============================
+     AUDIO — category lanes w/ voice & status mapping
+  ==============================*/
+  let AC=null, master=null, wet=null, dry=null, convolver=null;
+  async function audioInit(){ if(AC) return true; const C=window.AudioContext||window.webkitAudioContext; if(!C){ toast('No AudioContext'); return false; } AC=new C(); master=AC.createGain(); master.gain.value=.18; master.connect(AC.destination); convolver=AC.createConvolver(); convolver.buffer=(function IR(sec=2.2,decay=3){const rate=AC.sampleRate,len=rate*sec,buf=AC.createBuffer(2,len,rate);for(let ch=0;ch<2;ch++){const d=buf.getChannelData(ch);for(let i=0;i<len;i++){d[i]=(Math.random()*2-1)*Math.pow(1-i/len,decay);}}return buf;})(); wet=AC.createGain(); dry=AC.createGain(); wet.gain.value=.24; dry.gain.value=.76; wet.connect(convolver).connect(master); dry.connect(master); return true; }
+  function mkEnv(){ const g=AC.createGain(); g.gain.value=0; return g; }
+  function mkFilter(type='lowpass'){ const f=AC.createBiquadFilter(); f.type=type; f.frequency.value=1200; f.Q.value=0.8; return f; }
+  function noiseBuf(){ const b=AC.createBuffer(1, AC.sampleRate*1, AC.sampleRate); const d=b.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1; return b; }
+  function voiceTemplate(dest,type){ const o=AC.createOscillator(); o.type=type; const f=mkFilter('lowpass'); const g=mkEnv(); o.connect(f).connect(g).connect(dest); o.start(); return {start(freq,vel=0.55,dec=0.22,bright=1500){ const t=AC.currentTime; o.frequency.setTargetAtTime(freq,t,0.02); f.frequency.setTargetAtTime(bright,t,0.03); g.gain.cancelScheduledValues(t); g.gain.linearRampToValueAtTime(vel,t+0.015); g.gain.exponentialRampToValueAtTime(0.0001,t+dec); }} }
+  function voiceNoise(dest){ const n=AC.createBufferSource(); n.buffer=noiseBuf(); n.loop=true; const g=mkEnv(); const hp=mkFilter('highpass'); hp.frequency.value=5500; n.connect(hp).connect(g).connect(dest); n.start(); return {start(_,vel=0.35){ const t=AC.currentTime; g.gain.cancelScheduledValues(t); g.gain.linearRampToValueAtTime(vel,t+0.005); g.gain.exponentialRampToValueAtTime(0.0001,t+0.08); }} }
+  function mkLane(){ const sat=AC.createWaveShaper(); const curve=new Float32Array(512); for(let j=0;j<512;j++){ const x=j/511*2-1; curve[j]=Math.tanh(2.2*x);} sat.curve=curve; const laneWet=AC.createGain(); const laneDry=AC.createGain(); laneWet.gain.value=.22; laneDry.gain.value=.78; const pan=AC.createStereoPanner(); pan.pan.value=0; sat.connect(laneDry).connect(dry).connect(master); sat.connect(laneWet).connect(wet).connect(master); laneDry.connect(pan).connect(master); laneWet.connect(pan).connect(master); return {sat, laneWet, laneDry, pan}; }
+  const LANES={};
+  function buildVoices(){ if(!AC) return; const catToVoice={ law:dest=>voiceTemplate(dest,'sine'), institution:dest=>voiceTemplate(dest,'triangle'), concept:dest=>voiceTemplate(dest,'sawtooth'), agent:dest=>voiceTemplate(dest,'square'), relation:dest=>voiceNoise(dest), place:dest=>voiceTemplate(dest,'sine'), process:dest=>voiceTemplate(dest,'triangle'), text_section:dest=>voiceTemplate(dest,'sine') };
+    for(const c of CATS){ const lane=mkLane(); LANES[c.id]={ lane, voice:catToVoice[c.id](lane.sat) }; }
+  }
+  const SCALE=[0,2,3,5,7,9,10]; function hzFor(step,oct=0,root=50){ const deg=SCALE[step % SCALE.length]; const semi=deg + 12*oct; return 440*Math.pow(2,((root-69)+semi)/12); }
+
+  let bpm=112, playing=false, step=0, pack=0; const packs=['TAPE','FMISH','GRAN','BIT','WAVE'];
+  function auditAtStep(s){ GRID.cells.forEach(cell=>{ const pile=cell.userData.coins; if(!pile||!pile.length||!AC) return; const bank=cell.userData.bank; const cat=cell.userData.cat; const chance=(cat==='relation')?(s%2?0.9:0.15):(cat==='law'?(bank==='CEREMONIAL'?0.6:0.2):0.35); if(Math.random()<chance){ const m=pile[Math.floor(Math.random()*pile.length)]; const y=m.position.y; m.position.y=y+0.7; setTimeout(()=>m.position.y=y,90); const L=LANES[cat]; if(L){ const p=m.userData.coin?.provenance?.[0]; const vel=0.45 + (p?.confidence==='high'?0.25: p?.confidence==='low'?0.05:0.12); const panVal = (p?.voice==='NARRATOR'? -0.2 : p?.voice==='EREWHONIAN_OFFICIAL'? 0.2 : 0); L.lane.pan?.pan?.setTargetAtTime(panVal, AC.currentTime, 0.05); const freq=hzFor(s + (bank==='CEREMONIAL'?0:2), bank==='CEREMONIAL'?0:1); L.voice.start(freq, vel, 0.22, 1200 + (p?.status==='EXPLICIT'?900:400)); } } }); }
+  function start(){ playing=true; audioInit().then(()=>{ buildVoices(); }); let last=performance.now(); (function loop(){ const beat=60000/bpm; const stepDur=beat/2; const now=performance.now(); if(playing && AC){ if(now-last>=stepDur){ last=now; step=(step+1)%16; auditAtStep(step); } } renderer.render(scene,camera); requestAnimationFrame(loop); })(); }
+  function stop(){ playing=false; }
+  function zoom(delta){ const v=new THREE.Vector3(); v.copy(camera.position).sub(camTarget); v.multiplyScalar(1+delta); camera.position.copy(camTarget).add(v); fitLook(); }
+
+  /* =============================
+     LEDGER + EXPORTS
+  ==============================*/
+  const dock=document.getElementById('dock'); const ledger=document.getElementById('ledger'); const dockClose=document.getElementById('dockClose');
+  const tabLedger=document.getElementById('tabLedger'); const tabJSON=document.getElementById('tabJSON'); const tabDOT=document.getElementById('tabDOT'); const tabMD=document.getElementById('tabMD');
+  const paneJSON=document.getElementById('exportJSON'); const paneDOT=document.getElementById('exportDOT'); const paneMD=document.getElementById('exportMD');
+  function openDock(){ dock.classList.add('open'); selectTab('ledger'); updateLedger(); updateExports(); }
+  function closeDock(){ dock.classList.remove('open'); }
+  function selectTab(which){ document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active')); document.querySelectorAll('.pane').forEach(p=>p.classList.remove('active')); if(which==='json'){ tabJSON.classList.add('active'); paneJSON.classList.add('active'); } else if(which==='dot'){ tabDOT.classList.add('active'); paneDOT.classList.add('active'); } else if(which==='md'){ tabMD.classList.add('active'); paneMD.classList.add('active'); } else { tabLedger.classList.add('active'); ledger.classList.add('active'); } }
+  tabLedger.onclick=()=>selectTab('ledger'); tabJSON.onclick=()=>selectTab('json'); tabDOT.onclick=()=>selectTab('dot'); tabMD.onclick=()=>selectTab('md');
+
+  function updateLedger(){ const rows = GRID.cells.map(c=>({bank:c.userData.bank, cat:c.userData.cat, count:c.userData.coins.length})) .reduce((acc,x)=>{ const k=x.bank+':'+x.cat; acc[k]=(acc[k]||0)+x.count; return acc; },{}); const out = Object.entries(rows).map(([k,v])=>`\n  ${k} : ${v}`).join(''); const meta = JSON.stringify(GRAPH.metadata,null,2); ledger.textContent = meta+"\n\nCOIN COUNTS BY CELL:"+out; }
+  function exportJSON(){ return JSON.stringify(GRAPH,null,2); }
+  function exportDOT(){ const ents=GRAPH.entities||{}; const rels=GRAPH.relations||{}; const lines=[ 'digraph Erewhon {', 'rankdir=LR;','node [shape=box, style=rounded];' ]; for(const id in ents){ const e=ents[id]; lines.push(`"${id}" [label="${(e.attributes?.name||id).replace(/"/g,'\"')}\n(${e.type})"];`); } for(const id in rels){ const r=rels[id]; if(r.from && r.to){ lines.push(`"${r.from}" -> "${r.to}" [label="${(r.type||id).replace(/"/g,'\"')}"];`); } } lines.push('}'); return lines.join('\n'); }
+  function exportMD(){ const ents=GRAPH.entities||{}; const rels=GRAPH.relations||{}; const entRows=['| id | type | name | 1-line quote | locator |','|---|---|---|---|---|']; for(const id in ents){ const e=ents[id]; const p=e.provenance?.[0]||{}; const q=(p.quote||'').replace(/\s+/g,' ').slice(0,80); entRows.push(`| ${id} | ${e.type} | ${(e.attributes?.name||'—').replace(/\|/g,'/')} | ${q} | ${(p.locator||'').replace(/\|/g,'/')} |`); } const relRows=['','| id | type | from→to | 1-line quote | locator |','|---|---|---|---|---|']; for(const id in rels){ const r=rels[id]; const p=r.provenance?.[0]||{}; const q=(p.quote||'').replace(/\s+/g,' ').slice(0,80); relRows.push(`| ${id} | ${r.type} | ${r.from}→${r.to} | ${q} | ${(p.locator||'').replace(/\|/g,'/')} |`); }
+    return entRows.concat(relRows).join('\n'); }
+  function updateExports(){ paneJSON.textContent=exportJSON(); paneDOT.textContent=exportDOT(); paneMD.textContent=exportMD(); }
+  dockClose.addEventListener('click', closeDock);
+
+  /* =============================
+     POML Import Modal
+  ==============================*/
+  const modal=document.getElementById('modal'); const pomlIn=document.getElementById('pomlIn'); const loadPomlBtn=document.getElementById('loadPomlBtn'); const modalClose=document.getElementById('modalClose');
+  function openModal(){ modal.style.display='block'; pomlIn.focus(); }
+  function closeModal(){ modal.style.display='none'; }
+  loadPomlBtn.onclick=()=>{ const txt=pomlIn.value.trim(); if(!txt){ toast('Paste POML first'); return; } const g=parsePOML(txt); if(g){ GRAPH=g; rebuild(); toast('POML loaded'); closeModal(); } };
+  modalClose.onclick=closeModal;
+
+  /* =============================
+     CONTROLS
+  ==============================*/
+  const pad=document.getElementById('bottomPad');
+  pad.addEventListener('click', (e)=>{ const b=e.target.closest('.mini'); if(!b) return; const k=b.dataset.btn; if(k==='play'){ start(); toast('PLAY'); } else if(k==='stop'){ stop(); toast('STOP'); } else if(k==='tempo'){ bpm = (bpm===112?124:112); toast('BPM '+bpm); } else if(k==='fit'){ camera.position.set(160,110,200); fitLook(); toast('FIT'); } else if(k==='zoomIn'){ zoom(-0.12); } else if(k==='zoomOut'){ zoom(+0.12); } else if(k==='packPrev'){ pack=(pack-1+packs.length)%packs.length; toast('PACK '+packs[pack]); } else if(k==='packNext'){ pack=(pack+1)%packs.length; toast('PACK '+packs[pack]); } else if(k==='resolve'){ for(let i=0;i<6;i++) setTimeout(()=>auditAtStep((step+i)%16), i*90); toast('RESOLVE'); } else if(k==='bank'){ GRID.group.rotation.y += Math.PI/8; toast('BANK ROT'); } else if(k==='voice'){ orbit=!orbit; document.getElementById('toggleOrbit').classList.toggle('active',orbit); toast('ORBIT '+(orbit?'ON':'OFF')); } else if(k==='group'){ toast('GROUP BY voice/status'); rebuild(); } });
+
+  document.getElementById('openDock').onclick=openDock;
+  document.getElementById('camFront').onclick=()=>setCam('front');
+  document.getElementById('camIso').onclick=()=>setCam('iso');
+  document.getElementById('camTop').onclick=()=>setCam('top');
+  const toggleOrbitBtn=document.getElementById('toggleOrbit'); toggleOrbitBtn.onclick=()=>{ orbit=!orbit; toggleOrbitBtn.classList.toggle('active',orbit); toast('ORBIT '+(orbit?'ON':'OFF')); };
+  document.getElementById('layoutBanks').onclick=()=>{ GRID.group.rotation.y=0; toast('BANKS GRID'); };
+  document.getElementById('layoutFan').onclick=()=>{ GRID.group.rotation.y=Math.PI/3; toast('FAN WALL'); };
+  document.getElementById('importPOML').onclick=openModal;
+  document.getElementById('exportBtn').onclick=()=>{ openDock(); selectTab('json'); };
+
+  (function idle(){ renderer.render(scene,camera); requestAnimationFrame(idle); })();
+
+  const toastEl=document.getElementById('toast'); function toast(t){ toastEl.textContent=t; toastEl.style.display='block'; clearTimeout(toast._id); toast._id=setTimeout(()=>toastEl.style.display='none',1100); }
+
+  // Autoload: if window.__POML_PRELOAD exists (optional), load it
+  if(window.__POML_PRELOAD){ const g=parsePOML(window.__POML_PRELOAD); if(g){ GRAPH=g; rebuild(); }}
+})();
+</script>
+</body>
+</html>

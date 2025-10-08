@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>VOL‑MEDIA DECKS v18 — Musical Banks: Stacks of Coins (Erewhon Fusion)</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;touch-action:none;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{background:#000;color:#fff;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;overflow:hidden}
+  #canvas{width:100vw;height:100vh;display:block}
+  #hud{position:fixed;inset:0;pointer-events:none;z-index:10}
+  /* Alley edges only (never block center) */
+  .alley{position:fixed;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:.5rem;z-index:11;pointer-events:auto}
+  .alley.left{left:.5rem}
+  .alley.right{right:.5rem}
+  .icon{width:48px;height:48px;border-radius:12px;border:1px solid rgba(255,255,255,.16);background:rgba(8,8,8,.7);display:grid;place-items:center;cursor:pointer}
+  .icon.active{background:rgba(20,60,40,.85);border-color:#2b5}
+  .icon svg{width:22px;height:22px;opacity:.9}
+
+  /* Top micro HUD */
+  #viewHUD{position:absolute;top:10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.6);padding:6px 12px;border-radius:10px;font-weight:800;font-size:13px;border:1px solid rgba(255,255,255,.18)}
+
+  /* Bottom pad — tiny buttons */
+  #bottomPad{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);display:grid;grid-template-columns:repeat(9,32px);gap:6px;pointer-events:auto}
+  .mini{width:32px;height:32px;border-radius:7px;border:1px solid rgba(255,255,255,.22);background:rgba(0,0,0,.55);font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center;cursor:pointer}
+  .mini:active{transform:translateY(1px)}
+
+  /* Glass dock at bottom (preview / ledger) */
+  #dock{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0) + 8px);width:min(1100px,96vw);height:54vh;border-radius:14px;overflow:hidden;border:1px solid #214233;background:linear-gradient(180deg,rgba(10,16,14,.92),rgba(6,10,9,.92));box-shadow:0 24px 70px rgba(0,0,0,.45);display:none;z-index:12}
+  #dock.open{display:block}
+  #dock header{display:flex;gap:.6rem;align-items:center;padding:.55rem .75rem;border-bottom:1px solid #1a2d23;background:rgba(14,22,19,.85)}
+  #dock .ttl{font-weight:800;font-size:12px}
+  #dock .spacer{flex:1}
+  #dock .btn{appearance:none;border:1px solid #1b352a;background:#0d1613;color:#e8f3ec;padding:.38rem .6rem;border-radius:10px;cursor:pointer}
+  #ledger{display:block;width:100%;height:calc(100% - 42px);background:#070a09;color:#dfe9e3;font:600 12px/1.35 ui-monospace,Menlo,monospace;padding:10px;overflow:auto}
+  .k{color:#9ad8bf} .v{color:#ffdca8}
+
+  #toast{position:fixed;bottom:10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.86);border:1px solid rgba(255,255,255,.2);padding:6px 10px;border-radius:10px;font-size:12px;display:none;z-index:14}
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+<div id="hud">
+  <div id="viewHUD">MUSICAL BANKS — COIN STACKS</div>
+  <div class="alley left">
+    <button class="icon" id="camFront" title="Front">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#9fd9c3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18v10H3z"/></svg>
+    </button>
+    <button class="icon active" id="camIso" title="ISO">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#9fd9c3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 13 9 5 9-5"/></svg>
+    </button>
+    <button class="icon" id="camTop" title="Top">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#9fd9c3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/></svg>
+    </button>
+    <button class="icon" id="toggleOrbit" title="Orbit">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#9fd9c3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 1 0 16 0"/><path d="M2 12h20"/></svg>
+    </button>
+  </div>
+  <div class="alley right">
+    <button class="icon active" id="layoutBanks" title="Banks Grid">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#9fd9c3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="6" height="16"/><rect x="15" y="4" width="6" height="16"/></svg>
+    </button>
+    <button class="icon" id="layoutFan" title="Fan Wall">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#9fd9c3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l16-8L4 4z"/></svg>
+    </button>
+    <button class="icon" id="openDock" title="Open Ledger">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#9fd9c3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="m15 3 6 6"/><path d="M21 3v6h-6"/></svg>
+    </button>
+  </div>
+  <div id="bottomPad">
+    <div class="mini" data-btn="play">▶</div>
+    <div class="mini" data-btn="stop">■</div>
+    <div class="mini" data-btn="tempo">⏱</div>
+    <div class="mini" data-btn="fit">□</div>
+    <div class="mini" data-btn="zoomIn">＋</div>
+    <div class="mini" data-btn="zoomOut">－</div>
+    <div class="mini" data-btn="packPrev">◀</div>
+    <div class="mini" data-btn="packNext">▶</div>
+    <div class="mini" data-btn="resolve">℞</div>
+  </div>
+</div>
+<div id="dock" aria-hidden="true">
+  <header>
+    <div id="dockTitle" class="ttl">Ledger: Musical Bank Accounts</div>
+    <div class="spacer"></div>
+    <button id="dockClose" class="btn" aria-label="Close">Close</button>
+  </header>
+  <pre id="ledger"></pre>
+</div>
+<div id="toast"></div>
+<script>
+(async function(){
+  // ===== Load THREE (fallback)
+  if(!window.THREE){
+    const CDNs=['https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js','https://unpkg.com/three@0.152.2/build/three.min.js'];
+    for(const src of CDNs){try{await new Promise((res,rej)=>{const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=rej;document.head.appendChild(s)}); if(window.THREE) break;}catch(e){}}
+  }
+
+  /* ===================
+     DATA: Erewhon graph
+     "Coins" = entities & relations. Banks = two ledgers.
+  ==================== */
+  const GRAPH = /* pasteable */ (function(){ return (
+  {"entities":{"TS1":{"id":"TS1","type":"text_section","attributes":{"name":"Book of the Machines","description":"Three chapters within Erewhon advancing speculations on machines, their evolution, and dangers to humanity.","range":"Chapters XXIII-XXV"},"provenance":{"quote":"The Book of the Machines","locator":"Chapter XXIII heading","confidence":"high","status":"EXPLICIT","voice":"NARRATOR"}},"E1":{"id":"E1","type":"place","attributes":{"name":"Erewhon","description":"Country whose institutions invert common Victorian norms; machines proscribed, illness criminalized."},"provenance":{"quote":"Erewhon is pronounced as a word of three syllables, all short—thus, Ĕ-rĕ-whŏn.","locator":"Preface note","confidence":"high","status":"EXPLICIT","voice":"NARRATOR"}},"E2":{"id":"E2","type":"institution","attributes":{"name":"Erewhonian Justice System","description":"Body that prosecutes physical disease as legal offense; treats theft/fraud as sickness.","practices":["Trial and punishment for illness","Medical treatment for conventional crimes","Courts for Personal Bereavement, illness trials"]},"provenance":{"quote":"if a man falls into ill health...","locator":"Chapter X - Current Opinions","confidence":"high","status":"EXPLICIT","voice":"NARRATOR"}},"E3":{"id":"E3","type":"institution","attributes":{"name":"Musical Banks","description":"Religious-financial institutions with dual currency system, representing Erewhonian spiritual practices.","practices":["Dual currency (ceremonial vs commercial)","Religious ceremonies with music","Social respectability"]},"provenance":{"quote":"These institutions represent the professed religion of Erewhon.","locator":"Chapter XV - The Musical Banks","confidence":"high","status":"EXPLICIT","voice":"NARRATOR"}},"E4":{"id":"E4","type":"institution","attributes":{"name":"Straighteners","description":"Moral physicians who treat conventional crimes as illnesses through harsh physical punishments.","practices":["Diagnose and treat moral ailments","Floggings & penances","Practice vices to understand them"]},"provenance":{"quote":"bend back the crooked","locator":"(Straighteners)","confidence":"high","status":"EXPLICIT","voice":"NARRATOR"}},"MC1":{"id":"MC1","type":"concept","attributes":{"name":"Machine evolution","description":"Speculation that machines might evolve through cumulative improvements and reproduction via human industry."}},"MC2":{"id":"MC2","type":"concept","attributes":{"name":"Machine reproduction","description":"Theory that machines reproduce systematically through human intervention."}},"MC3":{"id":"MC3","type":"concept","attributes":{"name":"Human dependency on machines","description":"Argument that human survival is entangled with machines."}},"L1":{"id":"L1","type":"law","attributes":{"name":"Machine proscription","description":"Prohibit machines to prevent dangerous evolution.","sanctions":"Destroy inventions from preceding 271 years"}},"L2":{"id":"L2","type":"law","attributes":{"name":"Illness as crime","description":"Bodily failure is a legal offense."}},"L3":{"id":"L3","type":"law","attributes":{"name":"Crime as illness","description":"Conventional crimes as sickness (medicalized)."}},"N1":{"id":"N1","type":"agent","attributes":{"name":"Narrator (George Higgs)","description":"Explorer / observer."}},"A1":{"id":"A1","type":"agent","attributes":{"name":"Machine Theorist","description":"Philosopher warning against machine evolution."}}},"relations":{"R_inv_illness_crime":{"from":"L2","to":"L3","type":"inversion"},"R_theory_machines":{"from":"MC1","to":"TS1","type":"theoretical"},"R_normative_proscription":{"from":"L1","to":"E1","type":"normative"},"R_frame_satire":{"from":"N1","to":"E1","type":"frame"},"R_causal_dependency":{"from":"MC3","to":"L1","type":"causal"},"R_func_straighteners":{"from":"E4","to":"E2","type":"functional"},"R_hier_banks":{"from":"E3","to":"E1","type":"hierarchical"}},"metadata":{"source":"Samuel Butler's Erewhon (1872)","schema_version":"POML 1.2"}} ); })();
+
+  /* =============================
+     SCENE (Three.js) — Coins Grid
+     Each row = a Bank (CEREMONIAL / COMMERCIAL) + Categories
+     Each coin stack = an entity (or relation) with value-driven height
+  ==============================*/
+  const canvas=document.getElementById('canvas');
+  const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
+  renderer.setSize(innerWidth,innerHeight);
+  renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
+  const scene=new THREE.Scene(); scene.background=new THREE.Color(0x000000);
+  const camera=new THREE.PerspectiveCamera(58, innerWidth/innerHeight, .1, 4000);
+  camera.position.set(140,100,180);
+  const camTarget=new THREE.Vector3(0,18,0);
+  const fitLook=()=>camera.lookAt(camTarget); fitLook();
+  addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight)});
+
+  // Lights with contrast for clarity
+  scene.add(new THREE.AmbientLight(0xffffff,.26));
+  const key=new THREE.PointLight(0x66ddff,1.15,900); key.position.set(0,160,240); scene.add(key);
+  const warm=new THREE.PointLight(0xffaa66,.95,800); warm.position.set(160,90,-140); scene.add(warm);
+  const rim=new THREE.DirectionalLight(0xffffff,.55); rim.position.set(-160,180,-40); scene.add(rim);
+
+  // Materials
+  const MAT = {
+    coin: new THREE.MeshStandardMaterial({color:0xffd27a, metalness:.7, roughness:.35, emissive:0x000000}),
+    coinCer: new THREE.MeshStandardMaterial({color:0x9fe8c9, metalness:.65, roughness:.4}),
+    base: new THREE.MeshStandardMaterial({color:0x0f1513, metalness:.1, roughness:.9}),
+    glow: new THREE.MeshBasicMaterial({color:0x21ff86, transparent:true, opacity:.14})
+  };
+
+  // Geometries
+  const coinGeo=new THREE.CylinderGeometry(1.8,1.8,0.6, 36, 1, false);
+  const baseGeo=new THREE.BoxGeometry(8,0.6,8);
+  const haloGeo=new THREE.RingGeometry(2.4,3.8,48);
+
+  // BANKS & CATEGORIES
+  const BANKS=[{id:'CEREMONIAL', mat:MAT.coinCer},{id:'COMMERCIAL', mat:MAT.coin}];
+  const CATS=[
+    {id:'place', col:0xffffff},
+    {id:'institution', col:0x21ff86},
+    {id:'concept', col:0x7de3ff},
+    {id:'law', col:0xffb167},
+    {id:'agent', col:0xff6688},
+    {id:'relation', col:0xc47dff}
+  ];
+
+  // Map graph to coin stacks
+  function collectCoins(){
+    const coins=[]; const E=GRAPH.entities; const R=GRAPH.relations||{};
+    for(const id in E){ const e=E[id]; coins.push({kind:'entity', id, type:e.type, name:(e.attributes?.name||id)}); }
+    for(const id in R){ const r=R[id]; coins.push({kind:'relation', id, type:'relation', name:id, from:r.from, to:r.to}); }
+    return coins;
+  }
+
+  const COINS=collectCoins();
+
+  const GRID={ group:new THREE.Group(), gapX:9, gapZ:10, rows:BANKS.length, cols:CATS.length, cells:[], labels:[] };
+  scene.add(GRID.group);
+
+  // Label sprite helper
+  function mkLabel(text){ const cvs=document.createElement('canvas'); const s=256; cvs.width=cvs.height=s; const ctx=cvs.getContext('2d'); ctx.clearRect(0,0,s,s); ctx.fillStyle='rgba(0,0,0,0)'; ctx.fillRect(0,0,s,s); ctx.fillStyle='white'; ctx.font='900 48px Inter, system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.shadowColor='rgba(0,0,0,0.6)'; ctx.shadowBlur=12; ctx.fillText(text,s/2,s/2); const tex=new THREE.CanvasTexture(cvs); const mat=new THREE.SpriteMaterial({map:tex,transparent:true,depthWrite:false}); const spr=new THREE.Sprite(mat); spr.scale.set(6,6,1); return spr; }
+
+  // Build banks grid (bases + halos)
+  function buildGrid(){
+    const startX=-(GRID.cols-1)*GRID.gapX/2, startZ=-(GRID.rows-1)*GRID.gapZ/2;
+    for(let r=0;r<GRID.rows;r++){
+      for(let c=0;c<GRID.cols;c++){
+        const base=new THREE.Mesh(baseGeo, MAT.base);
+        base.position.set(startX + c*GRID.gapX, 0, startZ + r*GRID.gapZ);
+        base.userData={r,c,coins:[],bank:BANKS[r].id,cat:CATS[c].id};
+        const halo=new THREE.Mesh(haloGeo, MAT.glow); halo.rotation.x=-Math.PI/2; halo.position.copy(base.position); halo.position.y=0.31;
+        GRID.group.add(base); GRID.group.add(halo);
+        GRID.cells.push(base);
+      }
+    }
+    // Bank labels on left
+    for(let r=0;r<GRID.rows;r++){ const L=mkLabel(BANKS[r].id); L.position.set(startX-8.5,5, startZ + r*GRID.gapZ); GRID.group.add(L); }
+    // Category labels at top
+    for(let c=0;c<GRID.cols;c++){ const L=mkLabel(CATS[c].id.toUpperCase()); L.position.set(startX + c*GRID.gapX, 12.5, startZ- GRID.gapZ*1.1); GRID.group.add(L); }
+  }
+  buildGrid();
+
+  // Distribute coins deterministically: ceremonial ledger favors laws+institutions; commercial favors relations+agents
+  function coinBankAssignment(coin){
+    const t=coin.type; if(t==='law'||t==='institution') return 'CEREMONIAL'; if(t==='relation'||t==='agent') return 'COMMERCIAL'; return Math.random()<0.5?'CEREMONIAL':'COMMERCIAL';
+  }
+  function coinCategory(coin){
+    const t=coin.type; if(CATS.some(x=>x.id===t)) return t; return (coin.kind==='relation')?'relation':'concept';
+  }
+
+  // Build coin stacks inside each cell
+  function seedCoins(){
+    const startX=-(GRID.cols-1)*GRID.gapX/2, startZ=-(GRID.rows-1)*GRID.gapZ/2;
+    const piles={};
+    for(const coin of COINS){
+      const bank=coinBankAssignment(coin); const cat=coinCategory(coin);
+      const r=BANKS.findIndex(b=>b.id===bank); const c=CATS.findIndex(x=>x.id===cat);
+      const key=`${r}:${c}`; piles[key] ||= []; piles[key].push(coin);
+    }
+    // render
+    for(const key in piles){
+      const [r,c]=key.split(':').map(Number); const cell = GRID.cells.find(x=>x.userData.r===r && x.userData.c===c);
+      const pile=piles[key]; const mat=(BANKS[r].id==='CEREMONIAL')?MAT.coinCer:MAT.coin;
+      pile.forEach((coin,i)=>{
+        const m=new THREE.Mesh(coinGeo, mat.clone());
+        m.position.set(cell.position.x, 0.6 + i*0.62, cell.position.z);
+        // Tint per category
+        const col=CATS[c].col; m.material.color=new THREE.Color(col);
+        m.userData.coin=coin; GRID.group.add(m); cell.userData.coins.push(m);
+      });
+    }
+  }
+  seedCoins();
+
+  // ===== Camera Presets & Orbit =====
+  function setCam(name){
+    if(name==='front'){ camera.position.set(0,60,210); }
+    else if(name==='top'){ camera.position.set(0,260,0.01); }
+    else { camera.position.set(160,110,180); }
+    fitLook(); toast(name.toUpperCase());
+  }
+  let orbit=false, lastX=0, lastY=0, dragging=false; canvas.addEventListener('pointerdown',e=>{ if(!orbit) return; dragging=true; lastX=e.clientX; lastY=e.clientY; canvas.setPointerCapture(e.pointerId); });
+  addEventListener('pointermove',e=>{ if(!orbit||!dragging) return; const dx=e.clientX-lastX, dy=e.clientY-lastY; lastX=e.clientX; lastY=e.clientY; const off=new THREE.Vector3(); off.copy(camera.position).sub(camTarget); const sph=new THREE.Spherical().setFromVector3(off); sph.theta -= dx*0.005; sph.phi = Math.max(0.25, Math.min(Math.PI-0.25, sph.phi + dy*0.005)); off.setFromSpherical(sph); camera.position.copy(camTarget).add(off); fitLook(); });
+  addEventListener('pointerup',()=> dragging=false);
+
+  // ===== Audio: Musical Bank Engine =====
+  let AC=null, master=null, wet=null, dry=null, convolver=null;
+  async function audioInit(){ if(AC) return true; const C=window.AudioContext||window.webkitAudioContext; if(!C){ toast('No AudioContext'); return false; } AC=new C(); master=AC.createGain(); master.gain.value=.18; master.connect(AC.destination); convolver=AC.createConvolver(); convolver.buffer=(function IR(sec=2.2,decay=3){const rate=AC.sampleRate,len=rate*sec,buf=AC.createBuffer(2,len,rate);for(let ch=0;ch<2;ch++){const d=buf.getChannelData(ch);for(let i=0;i<len;i++){d[i]=(Math.random()*2-1)*Math.pow(1-i/len,decay);}}return buf;})(); wet=AC.createGain(); dry=AC.createGain(); wet.gain.value=.24; dry.gain.value=.76; wet.connect(convolver).connect(master); dry.connect(master); return true; }
+
+  function mkEnv(){ const g=AC.createGain(); g.gain.value=0; return g; }
+  function mkFilter(type='lowpass'){ const f=AC.createBiquadFilter(); f.type=type; f.frequency.value=1200; f.Q.value=0.8; return f; }
+  function noiseBuf(){ const b=AC.createBuffer(1, AC.sampleRate*1, AC.sampleRate); const d=b.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1; return b; }
+
+  // Voice kits per category
+  function voiceLaw(dest){ const o=AC.createOscillator(); o.type='sine'; const f=mkFilter('lowpass'); const g=mkEnv(); o.connect(f).connect(g).connect(dest); o.start(); return {start(freq,vel=0.6,dec=0.18){ const t=AC.currentTime; o.frequency.setTargetAtTime(freq,t,0.01); f.frequency.setTargetAtTime(800,t,0.02); g.gain.cancelScheduledValues(t); g.gain.linearRampToValueAtTime(vel,t+0.01); g.gain.exponentialRampToValueAtTime(0.0001,t+dec); }} }
+  function voiceInstitution(dest){ const o=AC.createOscillator(); o.type='triangle'; const f=mkFilter('lowpass'); const g=mkEnv(); o.connect(f).connect(g).connect(dest); o.start(); return {start(freq,vel=0.55,dec=0.28){ const t=AC.currentTime; o.frequency.setTargetAtTime(freq,t,0.02); f.frequency.setTargetAtTime(1200,t,0.03); g.gain.cancelScheduledValues(t); g.gain.linearRampToValueAtTime(vel,t+0.02); g.gain.exponentialRampToValueAtTime(0.0001,t+dec); }} }
+  function voiceConcept(dest){ const o=AC.createOscillator(); o.type='sawtooth'; const f=mkFilter('lowpass'); const g=mkEnv(); o.connect(f).connect(g).connect(dest); o.start(); return {start(freq,vel=0.5,dec=0.22){ const t=AC.currentTime; o.frequency.setTargetAtTime(freq,t,0.02); f.frequency.setTargetAtTime(1600,t,0.05); g.gain.cancelScheduledValues(t); g.gain.linearRampToValueAtTime(vel,t+0.015); g.gain.exponentialRampToValueAtTime(0.0001,t+dec); }} }
+  function voiceAgent(dest){ const o=AC.createOscillator(); o.type='square'; const f=mkFilter('lowpass'); const g=mkEnv(); o.connect(f).connect(g).connect(dest); o.start(); return {start(freq,vel=0.55,dec=0.18){ const t=AC.currentTime; o.frequency.setTargetAtTime(freq,t,0.01); f.frequency.setTargetAtTime(1400,t,0.02); g.gain.cancelScheduledValues(t); g.gain.linearRampToValueAtTime(vel,t+0.01); g.gain.exponentialRampToValueAtTime(0.0001,t+dec); }} }
+  function voiceRelation(dest){ const n=AC.createBufferSource(); n.buffer=noiseBuf(); n.loop=true; const g=mkEnv(); const hp=mkFilter('highpass'); hp.frequency.value=5000; n.connect(hp).connect(g).connect(dest); n.start(); return {start(_,vel=0.35){ const t=AC.currentTime; g.gain.cancelScheduledValues(t); g.gain.linearRampToValueAtTime(vel,t+0.005); g.gain.exponentialRampToValueAtTime(0.0001,t+0.08); }} }
+  function voicePlace(dest){ const o=AC.createOscillator(); o.type='sine'; const g=mkEnv(); o.connect(g).connect(dest); o.start(); return {start(freq,vel=0.4,dec=0.4){ const t=AC.currentTime; o.frequency.setTargetAtTime(freq*0.5,t,0.02); g.gain.cancelScheduledValues(t); g.gain.linearRampToValueAtTime(vel,t+0.02); g.gain.exponentialRampToValueAtTime(0.0001,t+dec); }} }
+
+  function mkLane(){ const sat=AC.createWaveShaper(); const curve=new Float32Array(512); for(let j=0;j<512;j++){ const x=j/511*2-1; curve[j]=Math.tanh(2.2*x);} sat.curve=curve; const laneWet=AC.createGain(); const laneDry=AC.createGain(); laneWet.gain.value=.22; laneDry.gain.value=.78; const pan=AC.createStereoPanner(); pan.pan.value=0; sat.connect(laneDry).connect(dry).connect(master); sat.connect(laneWet).connect(wet).connect(master); laneDry.connect(pan).connect(master); laneWet.connect(pan).connect(master); return {sat, laneWet, laneDry, pan}; }
+
+  const LANES={}; // per category
+  function buildVoices(){ if(!AC) return; const catToVoice={ law:voiceLaw, institution:voiceInstitution, concept:voiceConcept, agent:voiceAgent, relation:voiceRelation, place:voicePlace };
+    for(const c of CATS){ const lane=mkLane(); LANES[c.id]={ lane, voice:catToVoice[c.id](lane.sat) }; }
+  }
+
+  // Scale mapping (Dorian-ish)
+  const SCALE=[0,2,3,5,7,9,10];
+  function hzFor(step, octave=0, root=50){ const deg=SCALE[step % SCALE.length]; const semi=deg + 12*octave; return 440*Math.pow(2,((root-69)+semi)/12); }
+
+  // ===== Sequencer — each column across time = audit of a bank's coin pile
+  let bpm=108, playing=false, step=0, pack=0; const packs=['TAPE','FMISH','GRAN','BIT','WAVE'];
+
+  function auditAtStep(s){
+    // determine which coins pulse: relations always pulse on offbeats; others by simple rules
+    GRID.cells.forEach(cell=>{
+      const pile=cell.userData.coins; if(!pile||!pile.length||!AC) return;
+      const bank=cell.userData.bank; const cat=cell.userData.cat;
+      const chance = (cat==='relation')? (s%2?0.9:0.2) : (cat==='law'? (bank==='CEREMONIAL'?0.55:0.15) : 0.35);
+      if(Math.random() < chance){
+        // Visual pulse: lift top coin a bit
+        const top=pile[Math.min(pile.length-1, Math.floor(Math.random()*pile.length))];
+        const y=top.position.y; top.position.y=y+0.8; setTimeout(()=>top.position.y=y, 90);
+        // Sonic: trigger lane voice
+        const L=LANES[cat]; if(L){ const freq=hzFor(s + (bank==='CEREMONIAL'?0:2), bank==='CEREMONIAL'?0:1); const vel=0.45 + 0.15*Math.random(); L.voice.start(freq, vel); }
+      }
+    });
+  }
+
+  function start(){ playing=true; audioInit().then(()=>{ buildVoices(); });
+    let last=performance.now(); (function loop(){ const beat=60000/bpm; const stepDur=beat/2; const now=performance.now(); if(playing && AC){ if(now-last>=stepDur){ last=now; step=(step+1)%16; auditAtStep(step); } } renderer.render(scene,camera); requestAnimationFrame(loop); })();
+  }
+  function stop(){ playing=false; }
+
+  // ===== Fit / Zoom (just move camera radius)
+  function zoom(delta){ const v=new THREE.Vector3(); v.copy(camera.position).sub(camTarget); v.multiplyScalar(1+delta); camera.position.copy(camTarget).add(v); fitLook(); }
+
+  // ===== Dock / Ledger =====
+  const dock=document.getElementById('dock'); const ledger=document.getElementById('ledger'); const dockClose=document.getElementById('dockClose');
+  function openDock(){ dock.classList.add('open'); updateLedger(); }
+  function closeDock(){ dock.classList.remove('open'); }
+  function updateLedger(){
+    const rows = GRID.cells.map(c=>({bank:c.userData.bank, cat:c.userData.cat, count:c.userData.coins.length}))
+      .reduce((acc,x)=>{ const k=x.bank+':'+x.cat; acc[k]=(acc[k]||0)+x.count; return acc; },{});
+    const out = Object.entries(rows).map(([k,v])=>`\n  \x1b[36m${k}\x1b[0m : ${v}`).join('');
+    const pretty = JSON.stringify(GRAPH.metadata,null,2)
+      +"\n\nCOIN COUNTS BY CELL:" + out.replace(/\x1b\[[0-9;]*m/g,'');
+    ledger.textContent = pretty;
+  }
+  dockClose.addEventListener('click', closeDock);
+
+  // ===== Controls
+  const pad=document.getElementById('bottomPad');
+  pad.addEventListener('click', (e)=>{
+    const b=e.target.closest('.mini'); if(!b) return; const k=b.dataset.btn; if(k==='play'){ start(); toast('PLAY'); }
+    else if(k==='stop'){ stop(); toast('STOP'); }
+    else if(k==='tempo'){ bpm = (bpm===108?124:108); toast('BPM '+bpm); }
+    else if(k==='fit'){ camera.position.set(160,110,180); fitLook(); toast('FIT'); }
+    else if(k==='zoomIn'){ zoom(-0.12); }
+    else if(k==='zoomOut'){ zoom(+0.12); }
+    else if(k==='packPrev'){ pack=(pack-1+packs.length)%packs.length; toast('PACK '+packs[pack]); }
+    else if(k==='packNext'){ pack=(pack+1)%packs.length; toast('PACK '+packs[pack]); }
+    else if(k==='resolve'){ // quick cadence burst
+      for(let i=0;i<6;i++) setTimeout(()=>auditAtStep((step+i)%16), i*90);
+      toast('RESOLVE');
+    }
+  });
+
+  // Edge buttons
+  document.getElementById('openDock').onclick=openDock;
+  document.getElementById('camFront').onclick=()=>setCam('front');
+  document.getElementById('camIso').onclick=()=>setCam('iso');
+  document.getElementById('camTop').onclick=()=>setCam('top');
+  const toggleOrbitBtn=document.getElementById('toggleOrbit');
+  toggleOrbitBtn.onclick=()=>{ orbit=!orbit; toggleOrbitBtn.classList.toggle('active',orbit); toast('ORBIT '+(orbit?'ON':'OFF')); };
+
+  // Alt layouts (keep center clean)
+  document.getElementById('layoutBanks').onclick=()=>{ GRID.group.rotation.y=0; toast('BANKS GRID'); };
+  document.getElementById('layoutFan').onclick=()=>{ GRID.group.rotation.y=Math.PI/3; toast('FAN WALL'); };
+
+  // Render loop (continues even when not playing, for orbit)
+  (function idle(){ renderer.render(scene,camera); requestAnimationFrame(idle); })();
+
+  // ===== Helpers
+  const toastEl=document.getElementById('toast'); function toast(t){ toastEl.textContent=t; toastEl.style.display='block'; clearTimeout(toast._id); toast._id=setTimeout(()=>toastEl.style.display='none',1100); }
+})();
+</script>
+</body>
+</html>

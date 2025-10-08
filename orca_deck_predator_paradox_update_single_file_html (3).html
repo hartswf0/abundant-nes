@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+<title>ORCA // Myth Engine — Geometry‑First Pods</title>
+<style>
+  /* =============================
+     ORCA MYTH ENGINE — v4 (Pods + Audio)
+     Geometry‑first, phone‑first, two‑halves OS
+     ============================= */
+  :root{
+    --bg:#000;           /* orca black */
+    --fg:#fff;           /* orca white */
+    --muted:#cfcfcf;     /* soft gray */
+    --accent:#00e5ff;    /* sonar cyan */
+    --ink:#0a0a0a;       /* deep black for panels */
+    --grain:#101010;     /* faint film grain */
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;}
+  body{overflow:hidden}
+
+  /* --- Canvas OS --- */
+  .os{position:fixed;inset:0;display:grid;place-items:stretch;background:radial-gradient(circle at 50% 0%, #050505 0%, #000 60%)}
+
+  /* Two perfect halves: top visual, bottom info/control */
+  .pod{position:relative;display:grid;grid-template-rows:1fr 1fr;min-height:100dvh;min-height:100vh;isolation:isolate}
+  .visual{position:relative;overflow:hidden;background:linear-gradient(180deg,#000,#070707)}
+  .info{position:relative;padding:5.5vh 6vw 4.5vh;border-top:1px solid #111;background:linear-gradient(180deg,#040404,#000)}
+
+  /* Modular type — Free‑Willy/SeaWorld poster vibe via weight + tracking */
+  .title{font-weight:900;letter-spacing:.02em;line-height:1.02;font-size:clamp(28px,7.5vw,64px);margin:0 0 .3rem 0}
+  .line{font-weight:500;letter-spacing:.06em;text-transform:uppercase;opacity:.9;font-size:clamp(12px,3.3vw,16px)}
+  .caption{font-size:.9rem;color:var(--muted)}
+
+  /* Controls container */
+  .controls{position:absolute;inset:auto 6vw 4vh 6vw;display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+  .chip{appearance:none;border:1px solid #1a1a1a;background:#0d0d0d;color:var(--fg);padding:.6rem .9rem;border-radius:12px;font-weight:700;font-size:15px}
+  .chip:active{transform:translateY(1px)}
+  .ghost{background:transparent}
+
+  /* Slider styling */
+  input[type=range]{appearance:none;width:140px;height:4px;background:#1a1a1a;border-radius:999px}
+  input[type=range]::-webkit-slider-thumb{appearance:none;width:18px;height:18px;border-radius:50%;background:#fff;border:2px solid #0a0a0a}
+  input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:#fff;border:2px solid #0a0a0a}
+
+  /* Tap zones for navigation */
+  .zones{position:absolute;inset:0;display:grid;grid-template-columns:1fr 1fr;z-index:10}
+  .zone{height:100%}
+
+  /* Haptics pulse ring (Whitney sonar) */
+  .pulse:before{content:"";position:absolute;left:50%;top:50%;width:10vmin;height:10vmin;border-radius:50%;transform:translate(-50%,-50%);border:2px solid var(--accent);opacity:.25;animation:sonar 1.8s ease-out 1}
+  @keyframes sonar{from{opacity:.35;transform:translate(-50%,-50%) scale(.2)}to{opacity:0;transform:translate(-50%,-50%) scale(6)}}
+
+  /* Whitney/Bass/Blackfish visual programs */
+  svg{position:absolute;inset:0;width:100%;height:100%}
+  .grain{position:absolute;inset:0;background:repeating-radial-gradient(circle at 20% 30%, rgba(255,255,255,.02) 0 2px, transparent 2px 4px),
+                                   repeating-linear-gradient(90deg, rgba(255,255,255,.015) 0 1px, transparent 1px 3px);mix-blend-mode:screen;pointer-events:none}
+
+  /* Overlay for narration / export */
+  .overlay{position:fixed;inset:0;background:#000c;backdrop-filter:blur(2px);display:none;align-items:center;justify-content:center;padding:4vmin;z-index:15}
+  .overlay.show{display:flex}
+  .panel{max-width:min(880px,94vw);width:100%;background:#0b0b0b;border:1px solid #1a1a1a;border-radius:16px;padding:18px}
+  .panel h3{margin:0 0 .5rem 0}
+  textarea{width:100%;height:40vh;background:#060606;color:#eaeaea;border:1px solid #1a1a1a;border-radius:12px;padding:12px;font-family:ui-monospace,Menlo,Consolas,monospace}
+
+  /* Minimal arrows bottom corners */
+  .arrows{position:fixed;inset:auto 0 8px 0;display:flex;justify-content:space-between;padding:0 10px;z-index:12;pointer-events:none}
+  .arrow{pointer-events:auto;user-select:none;display:grid;place-items:center;width:52px;height:52px;border-radius:999px;border:1px solid #1a1a1a;background:#0a0a0a;font-weight:900;font-size:24px}
+  .arrow:active{transform:translateY(1px)}
+
+  /* Mode tags */
+  .tag{position:absolute;top:10px;right:10px;padding:.35rem .6rem;border:1px solid #1a1a1a;border-radius:999px;font-size:12px;color:#9a9a9a;background:#050505}
+
+  /* Self-test output (hidden by default) */
+  #testlog{position:fixed;left:10px;bottom:10px;max-width:90vw;background:#0b0b0b;border:1px solid #1a1a1a;color:#cfe;padding:8px 10px;border-radius:10px;font:12px/1.3 ui-monospace,monospace;display:none;z-index:20}
+  #testlog.ok{border-color:#126312;color:#dffadf}
+  #testlog.fail{border-color:#7a1f1f;color:#ffdede}
+</style>
+</head>
+<body>
+<div class="os" role="application" aria-label="ORCA Myth Engine">
+  <div class="pod" id="pod">
+    <!-- TOP HALF: Visual program -->
+    <div class="visual" id="visual">
+      <svg id="viz" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice" aria-hidden="true"></svg>
+      <div class="grain"></div>
+      <div class="tag" id="modeTag">WHITNEY</div>
+    </div>
+
+    <!-- BOTTOM HALF: Information + controls (LEGO units) -->
+    <div class="info">
+      <h1 class="title" id="title">Empathy weaponized intelligence.</h1>
+      <div class="line" id="line">Feel → Predict → Control</div>
+
+      <div class="controls">
+        <button class="chip" id="play">▶ Play</button>
+        <button class="chip ghost" id="mute">Mute</button>
+        <button class="chip ghost" id="mode">Mode: Whitney</button>
+        <button class="chip ghost" id="grid">Grid</button>
+        <label class="chip ghost" style="display:inline-flex;align-items:center;gap:8px">Tempo
+          <input type="range" id="tempo" min="60" max="96" step="1" value="72"/>
+        </label>
+        <button class="chip" id="toggleOverlay">✳ Export</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Navigation tap zones -->
+  <div class="zones" aria-hidden="true">
+    <div class="zone" id="left"></div>
+    <div class="zone" id="right"></div>
+  </div>
+
+  <!-- Corner arrows (thumb‑friendly) -->
+  <div class="arrows">
+    <div class="arrow" id="prev">‹</div>
+    <div class="arrow" id="next">›</div>
+  </div>
+
+  <!-- Overlay: shotlist export / narration notes -->
+  <div class="overlay" id="overlay">
+    <div class="panel">
+      <h3>Shotlist / Myth‑Engine Export</h3>
+      <p class="caption">Copy this JSON to reuse the pods, or paste new pods and press <em>Apply</em>.</p>
+      <textarea id="export"></textarea>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="chip" id="copy">Copy</button>
+        <button class="chip ghost" id="apply">Apply</button>
+        <button class="chip ghost" id="close">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="testlog"></div>
+</div>
+
+<script>
+(function(){
+  /* ==========================
+     POD SPEC — modular units
+     Each pod = {title, line, visual, mode}
+     visuals: 'sonar' | 'orbit' | 'stripes' | 'split'
+     modes: 'WHITNEY' | 'BASS' | 'BLACKFISH'
+  ========================== */
+  const PODS = [
+    {title:'Empathy weaponized intelligence.', line:'Feel → Predict → Control', visual:'sonar', mode:'WHITNEY'},
+    {title:'Machines kill. Minds orchestrate.', line:'Execution — with empathy', visual:'orbit', mode:'WHITNEY'},
+    {title:'Strength is noise.', line:'Strategy is signal', visual:'split', mode:'BASS'},
+    {title:'Teeth → impact. Pattern → inevitability.', line:'The future belongs to pattern', visual:'stripes', mode:'BASS'},
+    {title:'Built to understand.', line:'Understanding is domination', visual:'orbit', mode:'BLACKFISH'},
+    {title:'Model emotion. Route systems.', line:'He who maps the heart controls the system', visual:'sonar', mode:'WHITNEY'},
+    {title:'Empathy strategizes.', line:'Locate · Model · Bind · Close', visual:'stripes', mode:'BASS'},
+    {title:'Feeling is sonar.', line:'Prediction is the kill', visual:'split', mode:'BLACKFISH'},
+    {title:'The machine that feels you best…', line:'…will rule you next', visual:'orbit', mode:'BLACKFISH'},
+    {title:'Program empathy → perfect predator', line:'Feeling = prediction = control', visual:'sonar', mode:'WHITNEY'}
+  ];
+
+  let i = 0; // current pod
+  let showGrid = false;
+  let silent = false;
+
+  const viz = document.getElementById('viz');
+  const title = document.getElementById('title');
+  const line = document.getElementById('line');
+  const modeBtn = document.getElementById('mode');
+  const modeTag = document.getElementById('modeTag');
+  const overlay = document.getElementById('overlay');
+  const exportTA = document.getElementById('export');
+  const testlog = document.getElementById('testlog');
+
+  /* ==========================
+     AUDIO ENGINE — Blue Moon Beat
+     Fred Again.. x Eno x Laurie Anderson x Flying Lotus x Caretaker
+  ========================== */
+  let AC, master, comp, tide, schedulerTimer=null, nextNoteTime=0, isPlaying=false;
+  let bpm = 72, swing = 0.56; // gentle swing (reserved for future)
+
+  const pattern = [0,1,2,3,3.5]; // BUM BUM BUM BUM BAP (beats within bar)
+
+  function initAudio(){
+    if(AC) return;
+    AC = new (window.AudioContext||window.webkitAudioContext)();
+    master = AC.createGain(); master.gain.value = 0.88;
+    comp = AC.createDynamicsCompressor();
+    tide = AC.createGain(); tide.gain.value = 0.25;
+
+    // Tide noise (low-passed ocean)
+    const buffer = AC.createBuffer(1, AC.sampleRate*2, AC.sampleRate);
+    const data = buffer.getChannelData(0); for(let i=0;i<data.length;i++){ data[i] = (Math.random()*2-1)*0.4; }
+    const n = AC.createBufferSource(); n.buffer = buffer; n.loop = true;
+    const lp = AC.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=1200; lp.Q.value=0.2;
+    const lfo = AC.createOscillator(); lfo.frequency.value=0.05; const lfoGain = AC.createGain(); lfoGain.gain.value=500; lfo.connect(lfoGain); lfoGain.connect(lp.frequency); lfo.start();
+    n.connect(lp).connect(tide);
+    n.start();
+
+    tide.connect(comp); comp.connect(master); master.connect(AC.destination);
+  }
+
+  function now(){ return AC.currentTime; }
+  function beatDur(){ return 60/bpm; }
+
+  function env(atk=0.005, dec=0.25){ const g=AC.createGain(); g.gain.setValueAtTime(0, now()); g.gain.linearRampToValueAtTime(1, now()+atk); g.gain.exponentialRampToValueAtTime(0.0001, now()+dec); return g; }
+
+  function kick(t){
+    const o = AC.createOscillator(); o.type='sine'; o.frequency.setValueAtTime(48, t); o.frequency.exponentialRampToValueAtTime(36, t+0.12);
+    const g = AC.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(1.0, t+0.01); g.gain.exponentialRampToValueAtTime(0.0001, t+0.28);
+    o.connect(g);
+    const lp = AC.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=180; g.connect(lp).connect(master);
+    o.start(t); o.stop(t+0.4);
+  }
+
+  function bap(t){
+    // metallic click + noise
+    const o = AC.createOscillator(); o.type='triangle'; o.frequency.setValueAtTime(1000, t);
+    const g = env(0.001, 0.08); o.connect(g);
+    const hp = AC.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=800;
+    const lp = AC.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=4000;
+    const d = AC.createDelay(); d.delayTime.value=0.14; const fb = AC.createGain(); fb.gain.value=0.25; d.connect(fb).connect(d);
+    const nbuf = AC.createBuffer(1, AC.sampleRate*0.1|0, AC.sampleRate); const d0 = nbuf.getChannelData(0); for(let i=0;i<d0.length;i++){ d0[i] = (Math.random()*2-1)*0.7; }
+    const ns = AC.createBufferSource(); ns.buffer = nbuf; ns.connect(hp).connect(lp).connect(d).connect(master);
+    g.connect(lp);
+    o.start(t); o.stop(t+0.12); ns.start(t); ns.stop(t+0.12);
+  }
+
+  function dronePad(t){
+    // deep choir‑like detuned sines with slow vibrato
+    const voices = 4; const base = 42; // Hz
+    for(let v=0; v<voices; v++){
+      const o = AC.createOscillator(); o.type='sine'; o.frequency.setValueAtTime(base*(1+v*0.003), t);
+      const lfo = AC.createOscillator(); lfo.frequency.value = 0.2 + v*0.05; const lg = AC.createGain(); lg.gain.value = 6; lfo.connect(lg); lg.connect(o.frequency); lfo.start(t);
+      const g = AC.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.2, t+0.6); g.gain.linearRampToValueAtTime(0.05, t+3.5);
+      const bp = AC.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=base*2; bp.Q.value=0.6;
+      o.connect(g).connect(bp).connect(master);
+      o.start(t); o.stop(t+4.2);
+    }
+  }
+
+  function whaleCall(t){
+    // FM sweep for vocal gesture
+    const car = AC.createOscillator(); car.type='sine';
+    const mod = AC.createOscillator(); mod.type='sine'; mod.frequency.setValueAtTime(0.25, t);
+    const mg = AC.createGain(); mg.gain.value = 220; mod.connect(mg);
+    mg.connect(car.frequency);
+    car.frequency.setValueAtTime(220, t);
+    const g = AC.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.15, t+0.4); g.gain.linearRampToValueAtTime(0.0, t+3.2);
+    const lp = AC.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=1800; lp.Q.value=0.2;
+    car.connect(g).connect(lp).connect(master);
+    mod.start(t); car.start(t); car.stop(t+3.3); mod.stop(t+3.3);
+  }
+
+  function schedule(){
+    const lookahead = 0.1; // seconds
+    const interval = 25; // ms timer
+    if(schedulerTimer) clearInterval(schedulerTimer);
+    schedulerTimer = setInterval(()=>{
+      if(!AC) return; const ct = now();
+      while(nextNoteTime < ct + lookahead){
+        const bar = Math.floor(nextNoteTime / (beatDur()*4));
+        const start = bar * beatDur()*4;
+        pattern.forEach((p, idx)=>{
+          const t = start + p*beatDur();
+          if(t >= nextNoteTime && t < ct + lookahead){
+            if(idx < 4){ kick(t); if(navigator.vibrate && !silent) navigator.vibrate(15); }
+            else { bap(t); }
+          }
+        });
+        // Choir & whale on bar start
+        dronePad(start);
+        whaleCall(start+0.2);
+        nextNoteTime = start + beatDur()*4; // next bar
+      }
+    }, interval);
+  }
+
+  function play(){ initAudio(); if(AC.state==='suspended') AC.resume(); isPlaying=true; nextNoteTime = now(); schedule(); document.getElementById('play').textContent='❚❚ Pause'; }
+  function pause(){ if(!AC) return; isPlaying=false; if(schedulerTimer) clearInterval(schedulerTimer); document.getElementById('play').textContent='▶ Play'; }
+
+  function setTempo(v){ bpm = v; if(isPlaying){ nextNoteTime = now(); } }
+
+  /* ==========================
+     VISUAL PROGRAMS
+  ========================== */
+  function clearViz(){ viz.innerHTML=''; }
+
+  function drawGrid(){
+    if(!showGrid) return;
+    const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+    g.setAttribute('opacity','.18');
+    for(let x=0;x<=100;x+=10){
+      const l = document.createElementNS('http://www.w3.org/2000/svg','line');
+      l.setAttribute('x1',x);l.setAttribute('y1',0);l.setAttribute('x2',x);l.setAttribute('y2',100);
+      l.setAttribute('stroke','#fff');l.setAttribute('stroke-width','0.25');g.appendChild(l);
+    }
+    for(let y=0;y<=100;y+=10){
+      const l = document.createElementNS('http://www.w3.org/2000/svg','line');
+      l.setAttribute('x1',0);l.setAttribute('y1',y);l.setAttribute('x2',100);l.setAttribute('y2',y);
+      l.setAttribute('stroke','#fff');l.setAttribute('stroke-width','0.25');g.appendChild(l);
+    }
+    viz.appendChild(g);
+  }
+
+  function program_sonar(){
+    // expanding circles
+    for(let r=6;r<=60;r+=12){
+      const c = document.createElementNS('http://www.w3.org/2000/svg','circle');
+      c.setAttribute('cx','50'); c.setAttribute('cy','50'); c.setAttribute('r',r);
+      c.setAttribute('fill','none'); c.setAttribute('stroke','rgba(0,229,255,.55)'); c.setAttribute('stroke-width','0.8');
+      c.style.opacity = 0.0 + (r/60)*.9; viz.appendChild(c);
+    }
+    // traveling blip
+    const blip = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    blip.setAttribute('cx','50'); blip.setAttribute('cy','14'); blip.setAttribute('r','2'); blip.setAttribute('fill','white');
+    blip.style.animation='blip 3.5s linear infinite';
+    viz.appendChild(blip);
+    const style = document.createElement('style'); style.textContent='@keyframes blip{0%{transform:rotate(0deg);transform-origin:50% 50%}100%{transform:rotate(360deg);transform-origin:50% 50%}}';
+    viz.appendChild(style);
+  }
+
+  function program_orbit(){
+    const ring = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    ring.setAttribute('cx','50'); ring.setAttribute('cy','50'); ring.setAttribute('r','28'); ring.setAttribute('fill','none'); ring.setAttribute('stroke','#fff'); ring.setAttribute('stroke-width','0.6'); ring.setAttribute('opacity','.4'); viz.appendChild(ring);
+    for(let k=0;k<6;k++){
+      const d = document.createElementNS('http://www.w3.org/2000/svg','circle');
+      d.setAttribute('r','1.8'); d.setAttribute('fill',k%2? '#00e5ff':'#fff');
+      d.setAttribute('cx','50'); d.setAttribute('cy','22');
+      d.style.animation = `orb${k} 7s cubic-bezier(.2,.8,.2,1) infinite`;
+      viz.appendChild(d);
+      const s = document.createElement('style');
+      s.textContent = `@keyframes orb${k}{from{transform:rotate(${k*60}deg);transform-origin:50% 50%}to{transform:rotate(${k*60+360}deg);transform-origin:50% 50%}}`;
+      viz.appendChild(s);
+    }
+  }
+
+  function program_stripes(){
+    for(let n=0;n<12;n++){
+      const r = document.createElementNS('http://www.w3.org/2000/svg','rect');
+      const w = 18; const x = (n*12)%120 - 10; const rot = (n%2?12:-12);
+      r.setAttribute('x',x); r.setAttribute('y','-20'); r.setAttribute('width',w); r.setAttribute('height','140');
+      r.setAttribute('fill', n%3? '#111':'#fff'); r.setAttribute('opacity', n%3? .3: .9);
+      r.style.transformOrigin='50% 50%'; r.style.transform=`rotate(${rot}deg)`; viz.appendChild(r);
+    }
+  }
+
+  function program_split(){
+    const left = document.createElementNS('http://www.w3.org/2000/svg','rect');
+    left.setAttribute('x','0'); left.setAttribute('y','0'); left.setAttribute('width','50'); left.setAttribute('height','100'); left.setAttribute('fill','#fff'); left.setAttribute('opacity','.96'); viz.appendChild(left);
+    const right = document.createElementNS('http://www.w3.org/2000/svg','rect');
+    right.setAttribute('x','50'); right.setAttribute('y','0'); right.setAttribute('width','50'); right.setAttribute('height','100'); right.setAttribute('fill','#000'); viz.appendChild(right);
+  }
+
+  function applyMode(mode){
+    const vis = document.getElementById('visual');
+    if(mode==='BASS') vis.style.background='linear-gradient(180deg,#000,#020202)';
+    if(mode==='WHITNEY') vis.style.background='linear-gradient(180deg,#000,#070707)';
+    if(mode==='BLACKFISH') vis.style.background='linear-gradient(180deg,#000,#000)';
+    modeTag.textContent = mode;
+    document.getElementById('mode').textContent = `Mode: ${mode.charAt(0)+mode.slice(1).toLowerCase()}`;
+  }
+
+  function renderPod(idx, haptic=true){
+    i = (idx+PODS.length)%PODS.length; // wrap
+    const p = PODS[i];
+    title.textContent = p.title;
+    line.textContent = p.line;
+    applyMode(p.mode);
+
+    clearViz();
+    switch(p.visual){
+      case 'sonar': program_sonar(); break;
+      case 'orbit': program_orbit(); break;
+      case 'stripes': program_stripes(); break;
+      case 'split': program_split(); break;
+      default: program_sonar();
+    }
+    drawGrid();
+
+    const visual = document.getElementById('visual');
+    visual.classList.remove('pulse'); void visual.offsetWidth; visual.classList.add('pulse');
+    if(haptic && navigator.vibrate && !silent){ navigator.vibrate(12); }
+  }
+
+  function next(){ renderPod(i+1); }
+  function prev(){ renderPod(i-1); }
+
+  // Tap zones + arrows
+  document.getElementById('right').addEventListener('click', next);
+  document.getElementById('left').addEventListener('click', prev);
+  document.getElementById('next').addEventListener('click', next);
+  document.getElementById('prev').addEventListener('click', prev);
+
+  // Controls
+  document.getElementById('play').addEventListener('click', ()=>{ isPlaying? pause(): play(); });
+  document.getElementById('mute').addEventListener('click', ()=>{ silent=!silent; if(master){ master.gain.value = silent? 0 : 0.88; } document.getElementById('mute').textContent = silent? 'Muted' : 'Mute'; });
+  document.getElementById('grid').addEventListener('click', ()=>{ showGrid=!showGrid; renderPod(i,false); });
+  document.getElementById('tempo').addEventListener('input', (e)=> setTempo(parseInt(e.target.value,10)));
+
+  // Mode cycle
+  document.getElementById('mode').addEventListener('click', ()=>{
+    const modes=['WHITNEY','BASS','BLACKFISH'];
+    const current = PODS[i].mode; const ni = (modes.indexOf(current)+1)%modes.length;
+    PODS[i].mode = modes[ni]; applyMode(PODS[i].mode);
+  });
+
+  // Overlay: export/apply
+  const overlayBtn = document.getElementById('toggleOverlay');
+  overlayBtn.addEventListener('click', ()=>{
+    exportTA.value = JSON.stringify(PODS, null, 2);
+    overlay.classList.add('show');
+  });
+  document.getElementById('close').addEventListener('click', ()=> overlay.classList.remove('show'));
+  document.getElementById('copy').addEventListener('click', async ()=>{
+    try{ await navigator.clipboard.writeText(exportTA.value); overlay.classList.remove('show'); }catch(e){ alert('Copy failed'); }
+  });
+  document.getElementById('apply').addEventListener('click', ()=>{
+    try{ const draft = JSON.parse(exportTA.value); if(Array.isArray(draft)&&draft.length){ PODS.length=0; draft.forEach(d=>PODS.push(d)); renderPod(0); overlay.classList.remove('show'); } }
+    catch(e){ alert('Invalid JSON'); }
+  });
+
+  // Keys
+  window.addEventListener('keydown', e=>{
+    if(e.key==='ArrowRight'||e.key==='PageDown') next();
+    if(e.key==='ArrowLeft'||e.key==='PageUp') prev();
+    if(e.key==='g') {showGrid=!showGrid; renderPod(i,false);} 
+    if(e.key==='t') toggleTests();
+  });
+
+  // Long-press to toggle overlay (narration/ekphrasis usage)
+  let pressTimer=null; document.body.addEventListener('touchstart',()=>{pressTimer=setTimeout(()=>overlayBtn.click(),550)},{passive:true});
+  document.body.addEventListener('touchend',()=>clearTimeout(pressTimer));
+
+  // ==========================
+  // SELF TESTS (non-intrusive)
+  // ==========================
+  function test(name, fn){
+    try{ fn(); return {name, pass:true}; }catch(err){ return {name, pass:false, error:String(err)}; }
+  }
+  function runSelfTests(){
+    const results = [];
+    results.push(test('PODS non-empty', ()=>{ if(!Array.isArray(PODS)||!PODS.length) throw 'PODS empty'; }));
+    results.push(test('renderPod(0) no-throw', ()=>{ renderPod(0,false); }));
+    results.push(test('Controls exist', ()=>{ ['play','mute','mode','grid','tempo','toggleOverlay'].forEach(id=>{ if(!document.getElementById(id)) throw 'Missing '+id; }); }));
+    results.push(test('Audio init function exists', ()=>{ if(typeof initAudio!== 'function') throw 'initAudio missing'; }));
+    // Attempt lightweight audio init without playing (may require user gesture in some browsers)
+    try{ initAudio(); }catch(e){}
+    console.groupCollapsed('%cORCA Myth Engine — Self Tests','color:#0ff');
+    let all=true; results.forEach(r=>{ all = all && r.pass; console[r.pass?'log':'error'](r.name, r.pass?'OK':r.error); });
+    console.groupEnd();
+    testlog.textContent = results.map(r=> `${r.pass?'✔':'✖'} ${r.name}${r.pass?'':' — '+r.error}`).join('\n');
+    testlog.className = all? 'ok' : 'fail';
+  }
+  function toggleTests(){
+    if(testlog.style.display==='none'||!testlog.style.display){ runSelfTests(); testlog.style.display='block'; }
+    else { testlog.style.display='none'; }
+  }
+
+  // Init
+  renderPod(0,false);
+})();
+</script>
+</body>
+</html>

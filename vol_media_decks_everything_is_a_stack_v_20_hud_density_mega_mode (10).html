@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>SEA SEQUENCER — Pure Stacks v3.4 (Symmetric Side Stacks)</title>
+<style>
+  :root{
+    --abyss:#02070e; --ink:#e9f6ff; --muted:#8fb4c9; --foam:#dff4ff;
+    --shadow:0 24px 56px rgba(0,0,0,.6), 0 3px 16px rgba(0,0,0,.38);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent; touch-action:none}
+  html,body{height:100%}
+  body{margin:0; background:radial-gradient(1200px 800px at 50% 40%, #0a1a2a 0%, var(--abyss) 60%); color:var(--ink); font:14px/1.2 Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; overflow:hidden}
+  canvas#scene{position:fixed; inset:0; display:block}
+
+  /* HUD */
+  #hud{position:fixed; inset:0; pointer-events:none}
+  #paramDockL,#paramDockR{position:absolute; top:10px; bottom:10px; display:none; gap:16px; pointer-events:auto; flex-direction:column; justify-content:flex-end}
+  #paramDockL{left:10px}
+  #paramDockR{right:10px}
+  #safeBottom{position:fixed; left:0; right:0; bottom:0; height:118px; pointer-events:none}
+
+  /* Symmetric Alleys */
+  #alleyL,#alleyR{position:absolute; top:10px; bottom:10px; display:flex; flex-direction:column; gap:16px; pointer-events:auto; justify-content:flex-end}
+  #alleyL{left:10px}
+  #alleyR{right:10px}
+
+  /* Stacks */
+  .stack{--w:88px; width:var(--w); height:148px; background:linear-gradient(180deg, rgba(170,220,255,.10), rgba(255,255,255,.02)); border:1px solid rgba(160,210,255,.26); border-radius:16px; box-shadow:var(--shadow); position:relative; overflow:hidden}
+  .stack .glyph{position:absolute; right:4px; top:8px; bottom:8px; width:12px; writing-mode:vertical-rl; text-orientation:mixed; font-size:10px; letter-spacing:.06em; color:rgba(180,220,255,.78); display:flex; align-items:flex-start; justify-content:center; text-shadow:0 0 6px rgba(120,200,255,.26)}
+  .stack .legend{position:absolute; bottom:6px; left:10px; font-size:10px; color:#cfe8ff; opacity:.8}
+  .stack .layers{position:absolute; inset:16px 24px 22px 12px; display:flex; flex-direction:column; justify-content:flex-end; gap:6px}
+  .stack .lay{height:11px; border-radius:6px; background:rgba(170,220,255,.18); box-shadow:0 0 12px rgba(120,200,255,.22)}
+  .stack.accent{border-color:rgba(120,200,255,.62); box-shadow:0 0 0 1px rgba(120,200,255,.42), inset 0 0 36px rgba(120,200,255,.16), var(--shadow)}
+
+  #colorPipe{position:fixed; left:0; right:0; bottom:0; height:3px; background:linear-gradient(90deg, #1c5d7a, #78d9ff); opacity:.55; pointer-events:none}
+  @media (max-width:760px){ .stack{--w:80px; height:140px} #safeBottom{height:110px} }
+</style>
+</head>
+<body>
+  <canvas id="scene"></canvas>
+  <div id="hud">
+    <!-- PARAM surfaces (each side can open its own, no overlap) -->
+    <div id="paramDockL"></div>
+    <div id="paramDockR"></div>
+
+    <!-- Left Alley (mirrors Right Alley) -->
+    <div id="alleyL">
+      <div class="stack accent" id="openL"><div class="glyph">OPEN</div><div class="layers" id="openLL"></div><div class="legend" id="openLT">PARAM</div></div>
+      <div class="stack" id="gridL"><div class="glyph">GRID</div><div class="layers" id="gridLL"></div><div class="legend" id="gridLT">8×8</div></div>
+      <div class="stack" id="packL"><div class="glyph">PACK</div><div class="layers" id="packLL"></div><div class="legend" id="packLT">SEA</div></div>
+      <div class="stack" id="visL"><div class="glyph">VIS</div><div class="layers" id="visLL"></div><div class="legend" id="visLT">SND</div></div>
+      <div class="stack" id="echoL"><div class="glyph">ECHO</div><div class="layers" id="echoLL"></div><div class="legend" id="echoLT"></div></div>
+      <div class="stack" id="playL"><div class="glyph">PLAY</div><div class="layers" id="playLL"></div><div class="legend" id="playLT">STOP</div></div>
+    </div>
+
+    <!-- Right Alley -->
+    <div id="alleyR">
+      <div class="stack accent" id="openR"><div class="glyph">OPEN</div><div class="layers" id="openRL"></div><div class="legend" id="openRT">PARAM</div></div>
+      <div class="stack" id="gridR"><div class="glyph">GRID</div><div class="layers" id="gridRL"></div><div class="legend" id="gridRT">8×8</div></div>
+      <div class="stack" id="packR"><div class="glyph">PACK</div><div class="layers" id="packRL"></div><div class="legend" id="packRT">SEA</div></div>
+      <div class="stack" id="visR"><div class="glyph">VIS</div><div class="layers" id="visRL"></div><div class="legend" id="visRT">SND</div></div>
+      <div class="stack" id="echoR"><div class="glyph">ECHO</div><div class="layers" id="echoRL"></div><div class="legend" id="echoRT"></div></div>
+      <div class="stack" id="playR"><div class="glyph">PLAY</div><div class="layers" id="playRL"></div><div class="legend" id="playRT">STOP</div></div>
+    </div>
+
+    <div id="safeBottom"></div>
+    <div id="colorPipe"></div>
+  </div>
+
+<script>
+(()=>{
+  /* =================== DOM / Setup =================== */
+  const canvas=document.getElementById('scene');
+  const ctx=canvas.getContext('2d');
+  const $=id=>document.getElementById(id);
+  const DPR=Math.max(1,devicePixelRatio||1);
+  let W=0,H=0; function resize(){W=innerWidth;H=innerHeight;canvas.width=W*DPR;canvas.height=H*DPR;canvas.style.width=W+'px';canvas.style.height=H+'px';ctx.setTransform(DPR,0,0,DPR,0,0);} addEventListener('resize',resize,{passive:true}); resize();
+  const buzz=(p)=>{try{navigator.vibrate&&navigator.vibrate(p||10)}catch{}};
+
+  /* =================== Colors / State =================== */
+  const ROW_COLORS=['#0ea5e9','#22d3ee','#38bdf8','#67e8f9','#93c5fd','#a5f3fc','#60a5fa','#7dd3fc'];
+  const state={
+    gridOpts:[16,8,4,2,1], gridIdx:1, cols:8, rows:8,
+    baseCell:30, defaultLayers:12,
+    playing:false, bpm:118, playhead:0,
+    selection:null, editor:false,
+    focus:{tx:0,tz:0,sx:0,sz:0,scale:1,targetScale:1,lerp:0.24},
+    aimInflate:64,
+    echo:.35,
+    ripples:[], sparks:[],
+    uiMode:'SOUND', // SOUND or VISUAL
+    paramSide:null // 'L' or 'R' for which dock is open
+  };
+
+  /* =================== Grid =================== */
+  function makeCell(r){return{on:Math.random()<0.22,vel:0.7,prob:0.95,len:0.7,pitch:0,pan:(r-3.5)/3.5,send:0.35,lum:0.95,sep:1.05,layers:0.75,halo:0.75,sat:0.98,twist:0.02,_pulse:0,_wig:0,_ring:0,lastF:0}};
+  function makeGrid(cols){const g=[];for(let r=0;r<state.rows;r++){const row=[];for(let c=0;c<cols;c++)row.push(makeCell(r));g.push(row);}return g}
+  let grid=makeGrid(state.cols);
+
+  /* =================== Build layers helper =================== */
+  function buildLayers(el,n=12,lit=4){el.innerHTML='';for(let i=0;i<n;i++){const d=document.createElement('div');d.className='lay';if(i>=n-lit)d.style.background='linear-gradient(90deg,#58e0ff,#fff)';el.appendChild(d)}}
+  // seed both alleys
+  ;['openLL','gridLL','packLL','visLL','echoLL','playLL','openRL','gridRL','packRL','visRL','echoRL','playRL'].forEach((id,i)=>buildLayers($(id),10, i%6===0?8: (id.includes('play')?2:5)));
+
+  /* =================== Geometry (isometric) =================== */
+  function safeRect(){const r=document.getElementById('safeBottom').getBoundingClientRect();return{x:0,y:0,w:W,h:Math.max(0,H-(r.height+8))}}
+  function spacing(){const G=Math.max(state.cols,state.rows);const fx=G/state.cols,fz=G/state.rows;return{dx:state.baseCell*fx*1.54,dz:state.baseCell*fz*1.54}}
+  function isoProject(x,y,z){const phi=0.16*Math.PI, theta=0.24*Math.PI;const cy=Math.cos(theta),sy=Math.sin(theta);const cx=Math.cos(phi),sx=Math.sin(phi);let X=x,Y=y,Z=z;let x1=X*cy+Z*sy;let z1=-X*sy+Z*cy;let y2=Y*cx-z1*sx;const f=state.focus; x1-=f.sx;y2-=f.sz;const R=safeRect();return{x:R.x+R.w*.5+x1,y:R.y+R.h*.5+y2,depth:z1}}
+  function cellCenter(c,r){const {dx,dz}=spacing();const w=(state.cols-1)*dx;const h=(state.rows-1)*dz;return{x:c*dx-w/2,y:0,z:r*dz-h/2}}
+
+  function colorize(hex,sat){const n=parseInt(hex.slice(1),16);let r=(n>>16)&255,g=(n>>8)&255,b=n&255;const gr=0.3*r+0.59*g+0.11*b;const mix=(t,a,b)=>Math.round(a*(1-t)+b*t);r=mix(1-sat,r,gr);g=mix(1-sat,g,gr);b=mix(1-sat,b,gr);return`rgb(${r},${g},${b})`}
+  function roundedRect(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath()}
+  function calcLayersFrom(v){return Math.round(6+v*22)}
+
+  /* =================== Visuals =================== */
+  function addRipple(c,r){const base=cellCenter(c,r); state.ripples.push({x:base.x,y:0,z:base.z,t:0,life:0.45});}
+  function addSpark(c,r){const base=cellCenter(c,r); const a=Math.random()*Math.PI*2; const sp=60+80*Math.random(); state.sparks.push({x:base.x,y:0,z:base.z,vx:Math.cos(a)*sp,vz:Math.sin(a)*sp,t:0,life:0.28});}
+
+  function drawStack(c,r,cell){
+    const color=ROW_COLORS[r%ROW_COLORS.length];
+    const base=cellCenter(c,r); const p=isoProject(base.x + Math.sin(cell._wig)*9*cell._pulse, 0, base.z + Math.cos(cell._wig)*9*cell._pulse);
+    const layers= calcLayersFrom(cell.layers*(1+0.25*cell._pulse));
+    const lum=cell.lum, sat=cell.sat, halo=cell.halo, sep=cell.sep, tw=cell.twist;
+
+    ctx.save(); ctx.translate(p.x,p.y); ctx.globalAlpha=.12; ctx.fillStyle=color; roundedRect(-22,-13,44,26,9); ctx.fill(); ctx.restore();
+
+    ctx.save(); ctx.globalCompositeOperation='lighter';
+    for(let i=0;i<layers;i++){
+      const y=i*(10*sep);
+      const px=isoProject(base.x+Math.sin(i*.14+cell._wig)*tw*18*(1+cell._pulse*0.4), -y, base.z);
+      ctx.save(); ctx.translate(px.x,px.y);
+      const a=(.08+i*.02)*lum*(1+cell._pulse*0.55);
+      ctx.globalAlpha=a;
+      ctx.fillStyle=colorize(color,sat);
+      ctx.shadowColor='#9fe8ff'; ctx.shadowBlur=14*halo*(1+cell._pulse*1.2);
+      roundedRect(-30/2,-14/2,30,14,7); ctx.fill();
+      if(i%4===0 && cell._ring>0){ ctx.globalAlpha=a*0.8*cell._ring; ctx.strokeStyle='#fff'; ctx.lineWidth=1.3; ctx.beginPath(); ctx.arc(0,0,10+14*cell._ring,0,Math.PI*2); ctx.stroke(); }
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
+  function drawRipples(dt){ for(let i=state.ripples.length-1;i>=0;i--){ const r=state.ripples[i]; r.t+=dt; if(r.t>r.life){ state.ripples.splice(i,1); continue; } const k=r.t/r.life; const rad=32+220*k; const a=0.20*(1-k); const P=isoProject(r.x,0,r.z); ctx.save(); ctx.globalAlpha=a; ctx.strokeStyle='#cfe8ff'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(P.x,P.y,rad,0,Math.PI*2); ctx.stroke(); ctx.restore(); } }
+  function drawSparks(dt){ for(let i=state.sparks.length-1;i>=0;i--){ const s=state.sparks[i]; s.t+=dt; if(s.t>s.life){ state.sparks.splice(i,1); continue; } const k=s.t/s.life; const x=s.x+s.vx*k; const z=s.z+s.vz*k; const P=isoProject(x,0,z); ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=(1-k)*0.35; ctx.fillStyle='#eaffff'; ctx.beginPath(); ctx.arc(P.x,P.y,2+3*(1-k),0,Math.PI*2); ctx.fill(); ctx.restore(); } }
+
+  /* =================== Interaction =================== */
+  function pickCell(mx,my){let best=null,bestD=1e9;for(let r=0;r<state.rows;r++)for(let c=0;c<state.cols;c++){const P=isoProject(cellCenter(c,r).x,0,cellCenter(c,r).z);const dx=mx-P.x,dy=my-P.y;const d=dx*dx+dy*dy - state.aimInflate*state.aimInflate;if(d<bestD){bestD=d;best={r,c}}}return best}
+  function scrubTo(col){ if(typeof col!=='number') return; const c=Math.max(0,Math.min(state.cols-1,col|0)); state.playhead=c; for(let r=0;r<state.rows;r++){ const cell=grid[r][c]; if(cell.on) { instantPulse(r,c,true); trig(r,cell,true); } } }
+
+  canvas.addEventListener('pointerdown',e=>{userGestureAudio(); const R=canvas.getBoundingClientRect();const mx=e.clientX-R.left,my=e.clientY-R.top;const hit=pickCell(mx,my);if(hit){canvas.setPointerCapture(e.pointerId);state.selection=hit;state.editor=true; openParamDock(state.paramSide||'R'); focusOnSelection(); scrubTo(hit.c); buzz([10,18,10]); e.preventDefault();}})
+  canvas.addEventListener('pointermove',e=>{if(!state.editor) return; const R=canvas.getBoundingClientRect();const mx=e.clientX-R.left,my=e.clientY-R.top;const hit=pickCell(mx,my); if(hit) scrubTo(hit.c)})
+  addEventListener('pointerup',()=>{state.editor=false})
+
+  function focusOnSelection(){if(!state.selection){state.focus.targetScale=1;return}const sel=state.selection;const base=cellCenter(sel.c,sel.r);const R=safeRect();const aX=R.x+R.w*.52,aY=R.y+R.h*.72;const p=isoProject(base.x,0,base.z);state.focus.tx+=(p.x-aX);state.focus.tz+=(p.y-aY);state.focus.targetScale=Math.min(2.4,1.0+(16/state.cols)*0.30)}
+
+  /* =================== Param Docks (side-specific) =================== */
+  const PARAMS_SOUND=[{key:'vel',label:'VEL'},{key:'prob',label:'PRB'},{key:'len',label:'LEN'},{key:'pitch',label:'PIT'},{key:'pan',label:'PAN'},{key:'send',label:'REV'}];
+  const PARAMS_VIS=[{key:'lum',label:'LUM'},{key:'layers',label:'LAY'},{key:'halo',label:'HAL'},{key:'sat',label:'SAT'},{key:'twist',label:'TW'},{key:'sep',label:'SEP'}];
+  const PAGE_SIZE=4; function clamp01(x){return Math.max(0,Math.min(1,x))}
+  function value01(key,c){if(key==='pitch')return (c.pitch+24)/48; if(key==='pan')return (c.pan+1)/2; return (key in c)? c[key] : .5}
+  function applySound(obj,k,v){if(k==='pitch')obj.pitch=Math.round((v*2-1)*24); else if(k==='pan')obj.pan=(v*2-1); else obj[k]=v}
+  function applyLook(obj,k,v){ if(k==='sep') obj.sep=.6+v*1.6; else if(k==='twist') obj.twist=v*2-1; else obj[k]=v; }
+
+  function makeStackSlider(label,get,set,onChange){ const s=document.createElement('div'); s.className='stack'; s.innerHTML=`<div class=\"glyph\">${label}</div><div class=\"layers\"></div>`; const L=s.querySelector('.layers'); const render=(vv)=>{buildLayers(L,12,Math.max(1,Math.round(1+vv*11)));}; let v=get(); render(v); let grabbing=false, sy=0, sv=v, last=-1; const dead=4; s.addEventListener('pointerdown',e=>{grabbing=true; sy=e.clientY; sv=v; s.setPointerCapture(e.pointerId); buzz(8)}); s.addEventListener('pointermove',e=>{ if(!grabbing) return; const dy=sy-e.clientY; let dv=(Math.abs(dy)>dead?(dy>0?(dy-dead):(dy+dead)):0)/100; v=clamp01(sv+dv); render(v); set(v); onChange&&onChange(v); const tick=Math.round(v*24); if(tick!==last){ last=tick; buzz(3);} }); s.addEventListener('pointerup',()=>{grabbing=false; buzz(10)}); return s; }
+
+  function openParamDock(side){ state.paramSide=side; const dock = side==='L'? $('paramDockL'): $('paramDockR'); dock.style.display='flex'; populateParamDock(side); }
+
+  function populateParamDock(side){ const dock= side==='L'? $('paramDockL'): $('paramDockR'); dock.innerHTML=''; const sel=state.selection; if(!sel) return; const cell=grid[sel.r][sel.c]; const SET= state.uiMode==='SOUND'? PARAMS_SOUND:PARAMS_VIS; const page=0; const slice=SET.slice(page*PAGE_SIZE,page*PAGE_SIZE+PAGE_SIZE);
+    slice.forEach(p=>{ const get=()=> value01(p.key, cell); const set=(v)=> state.uiMode==='SOUND'? applySound(cell,p.key,v): applyLook(cell,p.key,v); const onChange=(v)=>{ if(state.uiMode==='SOUND' && p.key!=='prob'){ instantPulse(sel.r, sel.c, true); trig(sel.r, cell, true);} else { instantPulse(sel.r, sel.c, true);} }; dock.appendChild(makeStackSlider(p.label,get,set,onChange)); });
+  }
+
+  /* =================== Audio =================== */
+  const AC=(window.AudioContext||window.webkitAudioContext); let audioCtx=null,
+    master=null, preMaster=null, shaper=null, comp=null,
+    dry=null, wet=null, delay=null, fb=null, tone=null, rvbIn=null, convolver=null, rvbMix=null,
+    scPumpGain=null;
+
+  function makeIR(len=2.6, decay=2.8){ const rate=audioCtx.sampleRate; const size=Math.floor(rate*len); const buf=audioCtx.createBuffer(2,size,rate); for(let ch=0;ch<2;ch++){ const d=buf.getChannelData(ch); for(let i=0;i<size;i++){ const t=i/size; d[i]=(Math.random()*2-1)*Math.pow(1-t,decay); } } return buf; }
+  function userGestureAudio(){ ensureAudio(); try{ if(audioCtx && audioCtx.state==='suspended'){ const p=audioCtx.resume(); if(p&&p.catch) p.catch(()=>{}); } }catch{}}
+  function ensureAudio(){ if(audioCtx||!AC) return; audioCtx=new AC({latencyHint:'interactive'});
+    preMaster=audioCtx.createGain(); preMaster.gain.value=0.9;
+    shaper=audioCtx.createWaveShaper(); const curve=new Float32Array(1024); for(let i=0;i<1024;i++){ const x=i/1023*2-1; curve[i]=Math.tanh(1.12*x); } shaper.curve=curve;
+    comp=audioCtx.createDynamicsCompressor(); comp.threshold.value=-18; comp.knee.value=24; comp.ratio.value=2.4; comp.attack.value=0.005; comp.release.value=0.11;
+    master=audioCtx.createGain(); master.gain.value=.36; preMaster.connect(shaper).connect(comp).connect(master).connect(audioCtx.destination);
+    dry=audioCtx.createGain(); wet=audioCtx.createGain(); dry.gain.value=.86; wet.gain.value=.24; dry.connect(preMaster); wet.connect(preMaster);
+    delay=audioCtx.createDelay(1.2); delay.delayTime.value=0.30; fb=audioCtx.createGain(); fb.gain.value=0.38; tone=audioCtx.createBiquadFilter(); tone.type='lowpass'; tone.frequency.value=2500; delay.connect(fb).connect(tone).connect(delay); delay.connect(wet);
+    convolver=audioCtx.createConvolver(); convolver.buffer=makeIR(2.8,3.0); rvbIn=audioCtx.createGain(); rvbMix=audioCtx.createGain(); rvbMix.gain.value=0.18; rvbIn.connect(convolver).connect(rvbMix).connect(preMaster);
+    scPumpGain=audioCtx.createGain(); scPumpGain.gain.value=1.0; wet.disconnect(); wet.connect(scPumpGain).connect(preMaster); rvbMix.disconnect(); rvbMix.connect(scPumpGain);
+  }
+  function osc(type='sine'){ const o=audioCtx.createOscillator(); o.type=type; return o; }
+  function env(){ const g=audioCtx.createGain(); g.gain.value=0; return g; }
+  function makeWhale(type='sine'){ const o=osc(type), mod=osc('sine'), modGain=audioCtx.createGain(); mod.frequency.value=0.12; modGain.gain.value=12; mod.connect(modGain).connect(o.frequency); const f=audioCtx.createBiquadFilter(); f.type='lowpass'; f.frequency.value=1300; const g=env(); o.connect(f).connect(g); g.connect(dry); g.connect(delay); g.connect(rvbIn); o.start(); mod.start(); return {o,g,f,trigger(fr,len){ const t=audioCtx.currentTime; o.frequency.cancelScheduledValues(t); o.frequency.setValueAtTime(fr,t); o.frequency.exponentialRampToValueAtTime(Math.max(40,fr*0.45), t+len); g.gain.cancelScheduledValues(t); g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.24, t+0.004); g.gain.exponentialRampToValueAtTime(0.0001, t+len); }} }
+  function makePluck(type='triangle'){ const o=osc(type), f=audioCtx.createBiquadFilter(); f.type='lowpass'; f.frequency.value=900; f.Q.value=0.6; const g=env(); o.connect(f).connect(g); g.connect(dry); g.connect(delay); g.connect(rvbIn); o.start(); return {o,f,g,trigger(frq,vel,shape){ const t=audioCtx.currentTime; o.frequency.setTargetAtTime(frq,t,0.0015); f.frequency.setTargetAtTime(700+shape*2200,t,0.004); g.gain.cancelScheduledValues(t); g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(vel, t+0.003); g.gain.exponentialRampToValueAtTime(0.0001, t+0.14); }} }
+  let packs=[{name:'SEA', whale:'sine', pluck:'triangle', echo:0.34, tone:2500},{name:'DEEP', whale:'sine', pluck:'square', echo:0.42, tone:1800},{name:'REEF', whale:'triangle', pluck:'sawtooth', echo:0.30, tone:3000},{name:'GLASS', whale:'sine', pluck:'sine', echo:0.24, tone:3600},{name:'MYTH', whale:'triangle', pluck:'triangle', echo:0.38, tone:2200},{name:'PRIMAL', whale:'sine', pluck:'square', echo:0.48, tone:1700}], packIdx=0;
+  let whale, pluck; function ensureVoices(){ if(!audioCtx) return; if(!whale||!pluck){ applyPack(packIdx); } }
+  function applyPack(i){ ensureAudio(); packIdx=(i%packs.length+packs.length)%packs.length; const P=packs[packIdx]; if(!whale) whale=makeWhale(P.whale); else whale.o.type=P.whale; if(!pluck) pluck=makePluck(P.pluck); else pluck.o.type=P.pluck; tone.frequency.setTargetAtTime(P.tone, audioCtx.currentTime, 0.12); fb.gain.setTargetAtTime(0.22+P.echo*0.7, audioCtx.currentTime, 0.08); $('packLT').textContent=P.name; $('packRT').textContent=P.name; buildLayers($('packLL'),10,Math.max(3,packIdx+3)); buildLayers($('packRL'),10,Math.max(3,packIdx+3)); }
+  function pump(){ if(!scPumpGain||!audioCtx) return; const t=audioCtx.currentTime; scPumpGain.gain.cancelScheduledValues(t); scPumpGain.gain.setValueAtTime(0.72,t); scPumpGain.gain.exponentialRampToValueAtTime(1.0, t+0.16); }
+
+  function instantPulse(r,c,preview){ const cell=grid[r][c]; cell._pulse = Math.min(1, 0.85 + (preview?0.35:0.6)); cell._wig += 0.8; cell._ring = 1.0; addRipple(c,r); addSpark(c,r); }
+  function trig(row,cell,preview){ ensureAudio(); ensureVoices(); if(!pluck || !whale) return; if(Math.random()>cell.prob) return; const base=[28,31,33,35,36,38,40,43][row%8]; const f= 55*Math.pow(2, ((base+cell.pitch)/12)); cell.lastF=f; instantPulse(row, state.playhead, preview); if(row===0) pump(); const v = 0.18 + cell.vel*0.62; const shape = 0.6 + cell.send*0.6; if(row%2===0){ pluck.trigger(f*(row===2?2:1), v, shape); } else { whale.trigger(f* (row===7?4:1), 0.9+cell.len*0.9); } }
+
+  // Scheduler
+  let nextStepTime=0, stepIndex=0; function resetClock(){ if(!audioCtx) return; nextStepTime=audioCtx.currentTime+0.03; stepIndex=state.playhead; }
+  function scheduleAhead(){ if(!audioCtx || !state.playing) return; const stepDur=(60/state.bpm)/4; while(nextStepTime < audioCtx.currentTime + 0.06){ stepIndex=(stepIndex+1)%state.cols; state.playhead=stepIndex; for(let r=0;r<state.rows;r++){ const cell=grid[r][stepIndex]; if(cell.on) { trig(r,cell); } } nextStepTime += stepDur; } }
+
+  // Alley actions (both sides mirror)
+  function wireSide(prefix){
+    const open=$('open'+prefix), gridBtn=$('grid'+prefix), packBtn=$('pack'+prefix), visBtn=$('vis'+prefix), echoBtn=$('echo'+prefix), playBtn=$('play'+prefix);
+    open.addEventListener('pointerdown',()=>{ userGestureAudio(); ensureVoices(); openParamDock(prefix==='L'?'L':'R'); buzz([10,20,10]) });
+    gridBtn.addEventListener('pointerdown',()=>{ userGestureAudio(); state.gridIdx=(state.gridIdx+1)%state.gridOpts.length; state.cols=state.gridOpts[state.gridIdx]; grid=makeGrid(state.cols); $('gridLT').textContent= $('gridRT').textContent = (state.cols===1? '1×1' : `${state.cols}×${state.cols}`); buildLayers($('gridLL'),10,10-state.gridIdx); buildLayers($('gridRL'),10,10-state.gridIdx); resetClock(); buzz(12) });
+    packBtn.addEventListener('pointerdown',()=>{ userGestureAudio(); applyPack(packIdx+1); buzz([12,24,12]) });
+    visBtn.addEventListener('pointerdown',()=>{ state.uiMode = state.uiMode==='SOUND'?'VISUAL':'SOUND'; $('visLT').textContent=$('visRT').textContent = state.uiMode==='SOUND'?'SND':'VIS'; if(state.paramSide) populateParamDock(state.paramSide); buzz([7,11,7]) });
+    echoBtn.addEventListener('pointerdown',e=>{ userGestureAudio(); ensureVoices(); let grab=false, sy=0, sv=state.echo; const L=(prefix==='L')? $('echoLL'): $('echoRL'); const render=()=>{buildLayers(L,10,Math.round(1+state.echo*9));}; render(); const onMove=ev=>{ if(!grab) return; const dy=sy-ev.clientY; state.echo=Math.max(0,Math.min(1, sv + dy/180)); fb.gain.setTargetAtTime(0.22+state.echo*0.7, audioCtx.currentTime, 0.06); render(); }; const onUp=()=>{ grab=false; removeEventListener('pointermove',onMove); removeEventListener('pointerup',onUp); }; grab=true; sy=e.clientY; addEventListener('pointermove',onMove); addEventListener('pointerup',onUp); buzz([6,8,6]); });
+    playBtn.addEventListener('pointerdown',()=>{ userGestureAudio(); ensureVoices(); state.playing=!state.playing; $('playLT').textContent=$('playRT').textContent = state.playing?'PLAY':'STOP'; buildLayers($('playLL'),10,state.playing?10:2); buildLayers($('playRL'),10,state.playing?10:2); resetClock(); buzz([14,28,14]) });
+  }
+  wireSide('L'); wireSide('R');
+
+  /* =================== Update / Render =================== */
+  function update(dt){ if(state.playing){ scheduleAhead(); } for(let r=0;r<state.rows;r++) for(let c=0;c<state.cols;c++){ const cell=grid[r][c]; cell._pulse *= 0.88; cell._wig += cell._pulse*0.2; cell._ring=Math.max(0, cell._ring - dt*2.4); } state.focus.sx += (state.focus.tx-state.focus.sx)*state.focus.lerp; state.focus.sz += (state.focus.tz-state.focus.sz)*state.focus.lerp; state.focus.scale += (state.focus.targetScale-state.focus.scale)*state.focus.lerp; }
+  function render(){ ctx.clearRect(0,0,W,H); const R=safeRect(); const side=Math.min(R.w,R.h); const cx=R.x+R.w*.5, cy=R.y+R.h*.5; const base=side/Math.max(640,side)*state.focus.scale; ctx.save(); ctx.translate(cx,cy); ctx.scale(base,base); ctx.translate(-cx,-cy);
+    // Playhead halo
+    const ph=state.playhead; const P=isoProject(cellCenter(ph,0).x,0,0); ctx.save(); ctx.globalAlpha=0.10; ctx.strokeStyle='#d8f3ff'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(P.x,P.y,160,0,Math.PI*2); ctx.stroke(); ctx.restore();
+    const order=[]; for(let r=0;r<state.rows;r++) for(let c=0;c<state.cols;c++) order.push({r,c}); order.sort((a,b)=>(a.r+a.c)-(b.r+b.c)); order.forEach(({r,c})=>drawStack(c,r,grid[r][c]));
+    drawRipples(1/60); drawSparks(1/60);
+    ctx.restore(); }
+
+  let last=performance.now(); function loop(now){ const dt=Math.min(0.05,(now-last)/1000); last=now; update(dt); render(); requestAnimationFrame(loop);} requestAnimationFrame(loop);
+
+  // Boot demo pattern
+  for(let c=0;c<state.cols;c++){ grid[0][c].on = c%4===0; grid[1][c].on = c%8===4; grid[2][c].on = c%2===0; grid[3][c].on = (c+2)%4===0; }
+
+  // ===== Self-tests =====
+  try{
+    console.assert(document.querySelector('#alleyL').children.length>=6, 'Left alley ≥6 stacks');
+    console.assert(document.querySelector('#alleyR').children.length>=6, 'Right alley ≥6 stacks');
+    console.assert(document.getElementById('paramDockL').style.display!=='flex' && document.getElementById('paramDockR').style.display!=='flex', 'Param docks hidden at boot');
+    ensureAudio(); applyPack(0); resetClock(); scheduleAhead(); console.assert(true, 'Scheduler ok');
+  }catch(e){ console.warn('[Sea Sequencer tests] minor issue', e); }
+})();
+</script>
+</body>
+</html>

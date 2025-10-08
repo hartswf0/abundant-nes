@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
+<title>Venn‑32 · Gully Cam Ultra · Mobile First</title>
+<style>
+  :root{
+    --bg:#070a09; --ink:#eaf2ec; --muted:#aab5ae;
+    --ui:#21ff86; --amber:#ffdca8; --orange:#ffb167; --cyan:#7de3ff; --neutral:#b8c4bd;
+    --r:14px; --glow:.7;
+    /* camera */
+    --pitch: 35deg;   /* iso tilt */
+    --yaw: 210deg;    /* west iso yaw (default) */
+    --camZ: -900px;   /* distance */
+    --scale: 1;       /* world scale (auto fit) */
+    --ox: 0px;        /* stage x offset (auto center) */
+    --oy: 0px;        /* stage y offset (auto center) */
+    --panX: 0px;      /* user pan */
+    --panY: 0px;      /* user pan */
+    /* geometry (auto-scale with distance) */
+    --gapZ: 26px;     /* layer spacing */
+    --stackX: 320px;  /* inter-stack spacing */
+    --knob-angle: 0deg; /* scrub knob visual */
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:radial-gradient(1400px 780px at 10% -10%,#0e1613 0%,#0a0d0f 45%,#07090a 100%);color:var(--ink);font:600 14px/1.45 system-ui,-apple-system,Segoe UI,Inter,Roboto,"Helvetica Neue",Arial;-webkit-tap-highlight-color:transparent}
+
+  header{position:sticky;top:0;z-index:99;backdrop-filter:saturate(120%) blur(8px);background:rgba(8,12,11,.78);border-bottom:1px solid #12231c}
+  .bar{display:flex;align-items:center;justify-content:space-between;padding:.5rem .8rem}
+  .brand{font-weight:900;letter-spacing:.2px;font-size:13px;opacity:.9}
+  .hint{opacity:.65;font:800 10px/1 ui-monospace,Menlo,monospace}
+
+  main{height:100dvh;position:relative;overflow:hidden}
+  .stageWrap{position:absolute;inset:0;perspective:1200px;touch-action:none}
+  .stage{position:absolute;left:50%;top:50%;transform-style:preserve-3d;will-change:transform;
+    transform:translate3d(calc(-50% + var(--ox) + var(--panX)),calc(-50% + var(--oy) + var(--panY)),var(--camZ)) rotateX(var(--pitch)) rotateY(var(--yaw)) scale(var(--scale));}
+
+  /* ===== Stacks & Layers ===== */
+  .stackObj{position:absolute;transform-style:preserve-3d}
+  .spine{position:absolute;left:-12px;top:-4px;height:220px;width:10px;border-radius:8px;background:#0e1714;border:1px solid #1b3328;box-shadow:inset -2px 0 0 rgba(255,255,255,.04)}
+  .cap{position:absolute;top:-20px;left:-6px;padding:.24rem .5rem;border-radius:10px;border:1px solid #1b352a;background:#0d1613;font:900 11px/1 ui-monospace,Menlo,monospace;color:#b8c4bd;transform:translateZ(60px)}
+  .layer{position:absolute;width:268px;height:168px;border-radius:var(--r);background:linear-gradient(180deg,#0f1513,#091110);border:1px solid #132219;overflow:hidden;transform-style:preserve-3d;cursor:pointer}
+  .layer::after{content:"";position:absolute;inset:-30%;filter:blur(calc(18px * var(--glow)));opacity:.5;pointer-events:none}
+  .g::after{background:radial-gradient(40% 35% at 50% 40%,rgba(33,255,134,.18),transparent),radial-gradient(65% 55% at 50% 60%,rgba(33,255,134,.12),transparent)}
+  .a::after{background:radial-gradient(40% 35% at 50% 40%,rgba(255,220,168,.20),transparent),radial-gradient(65% 55% at 50% 60%,rgba(255,210,140,.14),transparent)}
+  .o::after{background:radial-gradient(40% 35% at 50% 40%,rgba(255,177,103,.20),transparent),radial-gradient(65% 55% at 50% 60%,rgba(255,150,80,.16),transparent)}
+  .c::after{background:radial-gradient(40% 35% at 50% 40%,rgba(125,227,255,.22),transparent),radial-gradient(65% 55% at 50% 60%,rgba(110,210,250,.16),transparent)}
+  .n::after{background:radial-gradient(40% 35% at 50% 40%,rgba(184,196,189,.22),transparent),radial-gradient(65% 55% at 50% 60%,rgba(160,170,166,.16),transparent)}
+  .title{position:absolute;left:10px;bottom:10px;font-weight:900;font-size:11px;letter-spacing:.15px;transform:translateZ(30px)}
+  .sub{position:absolute;left:10px;bottom:28px;font:800 10px/1 ui-monospace,Menlo,monospace;color:#aab5ae;opacity:.9;transform:translateZ(22px)}
+  .layer.active{outline:1px solid #214233;box-shadow:0 14px 46px rgba(0,0,0,.45)}
+
+  /* Dock */
+  .previewDock{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0) + 8px);width:min(1100px,96vw);height:58vh;border-radius:14px;overflow:hidden;border:1px solid #21362c;background:linear-gradient(180deg,#0e1714,#0a1210);box-shadow:0 24px 70px rgba(0,0,0,.45);display:none;z-index:95}
+  .previewDock.open{display:block}
+  .previewDock header{display:flex;align-items:center;gap:.6rem;padding:.55rem .75rem;border-bottom:1px solid #1b2c23;background:#0f1915}
+  .previewDock .ttl{font-weight:800;font-size:12px}
+  .previewDock .spacer{flex:1}
+  .previewDock .btn{appearance:none;border:1px solid #1b352a;background:#0d1613;color:var(--ink);padding:.38rem .6rem;border-radius:10px;cursor:pointer}
+  .previewDock iframe{display:block;width:100%;height:calc(100% - 42px);border:0;background:#000}
+
+  /* Scrub */
+  .baseScrub{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0) + 60px);z-index:92;display:none;align-items:center;gap:.6rem;background:#0d1613;border:1px solid #163026;border-radius:12px;padding:.5rem .8rem}
+  .baseScrub.open{display:flex}
+  .baseScrub input{width:min(760px,78vw)}
+  .baseScrub .info{font:900 11px/1 ui-monospace,Menlo,monospace;color:#b6c1ba;min-width:140px;text-align:center}
+  .pbtn{min-width:60px;height:40px;border-radius:12px;border:1px solid #1b352a;background:#0d1613;color:var(--ink);font-weight:900}
+
+  /* Alleys */
+  .alley{position:fixed;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:.5rem;z-index:96;transition:all .20s ease}
+  .alley.left{left:.6rem}
+  .alley.right{right:.6rem}
+  .iconBtn{width:48px;height:48px;border-radius:12px;border:1px solid #1b352a;background:#0d1613;display:grid;place-items:center;cursor:pointer}
+  .iconBtn svg{width:22px;height:22px}
+  .iconBtn.active{background:#113024;border-color:#214233}
+
+  /* When dock is open, retract alleys so they don't steal iframe taps */
+  body.dock-open:not(.tools-pinned) .alley.left{left:-44px;opacity:.08;pointer-events:none}
+  body.dock-open:not(.tools-pinned) .alley.right{right:-44px;opacity:.08;pointer-events:none}
+
+  /* Tools button to pin alleys while dock is open */
+  .toolsBtn{position:fixed;top:56px;right:.6rem;z-index:120;display:none;border-radius:12px;border:1px solid #1b352a;background:#0d1613;color:var(--ink);font-weight:900;height:40px;padding:0 .7rem}
+  body.dock-open .toolsBtn{display:block}
+
+  /* Scrub Knob */
+  .knobWrap{position:fixed;right:.6rem;bottom:calc(env(safe-area-inset-bottom,0) + 120px);z-index:98;width:80px;height:80px;display:grid;place-items:center}
+  .knob{width:72px;height:72px;border-radius:999px;border:1px solid #1b352a;background:#0d1613;position:relative}
+  .knob::before{content:"";position:absolute;left:50%;top:50%;width:2px;height:26px;background:#9fd9c3;transform-origin:50% 100%;transform:translate(-50%,-100%) rotate(var(--knob-angle));border-radius:2px}
+  .knobLabel{position:absolute;bottom:-18px;left:50%;transform:translateX(-50%);font:800 10px/1 ui-monospace,Menlo,monospace;color:#9fc9b6}
+
+  /* Panel */
+  .panel{position:fixed;left:50%;transform:translateX(-50%);top:52px;z-index:97;background:#0d1613;border:1px solid #1b352a;border-radius:12px;padding:.45rem .6rem;display:flex;align-items:center;gap:.6rem}
+  .panel label{font:800 11px/1 ui-monospace,Menlo,monospace;color:#b6c1ba}
+  .panel input[type=range]{width:34vw;min-width:150px}
+  .seg{display:flex;border:1px solid #1b352a;border-radius:10px;overflow:hidden}
+  .seg button{padding:.3rem .5rem;border:0;background:#0d1613;color:#9fc9b6;font:800 11px/1 ui-monospace,Menlo,monospace}
+  .seg button.active{background:#113024;color:#dff6ec}
+
+  @media (max-width:380px){ .layer{width:276px;height:172px} }
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <div class="brand">V32 · Gully Cam Ultra</div>
+    <div class="hint">focus‑to‑bottom • edge‑scrub • knob • pinch zoom</div>
+  </div>
+</header>
+
+<main>
+  <div class="stageWrap" id="stageWrap">
+    <div class="stage" id="stage"></div>
+  </div>
+</main>
+
+<button id="toolsBtn" class="toolsBtn" title="Toggle tools">tools</button>
+
+<div class="panel" id="camPanel">
+  <label for="distRange">dist</label>
+  <input id="distRange" type="range" min="-1600" max="-580" step="10" value="-900"/>
+  <span id="distOut" style="opacity:.9" class="hint"></span>
+  <div class="seg" role="tablist" aria-label="Anchor">
+    <button id="anchorTop"    role="tab">TOP</button>
+    <button id="anchorCenter" role="tab" class="active">MID</button>
+    <button id="anchorBottom" role="tab">BOT</button>
+  </div>
+  <button id="focusBtn" class="pbtn" style="min-width:74px">focus</button>
+  <button id="autoFitBtn" class="pbtn" style="min-width:74px">fit</button>
+  <button id="orbitBtn" class="pbtn" style="min-width:86px">orbit: off</button>
+  <button id="resetPanBtn" class="pbtn" style="min-width:86px">reset pan</button>
+</div>
+
+<!-- Left Alley: CAMERA PRESETS -->
+<aside class="alley left" aria-label="Camera">
+  <button class="iconBtn cam active" data-cam="westIso" title="West ISO">
+    <svg viewBox="0 0 24 24" fill="none" stroke="#9fd9c3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 12h8"/><path d="M10 8l-4 4 4 4"/></svg>
+  </button>
+  <button class="iconBtn cam" data-cam="verticalIso" title="Vertical ISO">
+    <svg viewBox="0 0 24 24" fill="none" stroke="#9fd9c3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4v16m6-12v12m6-8v8"/></svg>
+  </button>
+  <button class="iconBtn cam" data-cam="isoClassic" title="ISO 45°">
+    <svg viewBox="0 0 24 24" fill="none" stroke="#9fd9c3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 13 9 5 9-5"/></svg>
+  </button>
+  <button class="iconBtn cam" data-cam="front" title="Front">
+    <svg viewBox="0 0 24 24" fill="none" stroke="#9fd9c3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18v10H3z"/></svg>
+  </button>
+  <button class="iconBtn cam" data-cam="top" title="Top">
+    <svg viewBox="0 0 24 24" fill="none" stroke="#9fd9c3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/></svg>
+  </button>
+</aside>
+
+<!-- Right Alley: STACK ARCHITECTURES -->
+<aside class="alley right" aria-label="Stacks">
+  <button class="iconBtn layout active" data-layout="singleVertical" title="Single Tall">
+    <svg viewBox="0 0 24 24" fill="none" stroke="#9fd9c3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4h8v16H8z"/></svg>
+  </button>
+  <button class="iconBtn layout" data-layout="familiesRow" title="Families Row">
+    <svg viewBox="0 0 24 24" fill="none" stroke="#9fd9c3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="6" height="16"/><rect x="15" y="4" width="6" height="16"/></svg>
+  </button>
+  <button class="iconBtn layout" data-layout="fanWall" title="Fan Wall">
+    <svg viewBox="0 0 24 24" fill="none" stroke="#9fd9c3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l16-8L4 4z"/></svg>
+  </button>
+  <a class="iconBtn" href="https://hartswf0.github.io/venn-32/" target="_blank" rel="noopener" title="Open site">
+    <svg viewBox="0 0 24 24" fill="none" stroke="#9fd9c3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="m15 3 6 6"/><path d="M21 3v6h-6"/></svg>
+  </a>
+</aside>
+
+<!-- Scrub Knob (drag to spin) -->
+<div class="knobWrap" id="knobWrap">
+  <div class="knob" id="scrubKnob"></div>
+  <div class="knobLabel" id="knobLabel">scrub</div>
+</div>
+
+<section id="dock" class="previewDock" aria-label="Preview" aria-hidden="true">
+  <header>
+    <div id="dockTitle" class="ttl"></div>
+    <div class="spacer"></div>
+    <a id="dockOpen" class="btn" target="_blank" rel="noopener">Open</a>
+    <button id="dockClose" class="btn" aria-label="Close">Close</button>
+  </header>
+  <iframe id="dockFrame" sandbox="allow-scripts allow-forms allow-same-origin allow-pointer-lock" referrerpolicy="no-referrer" loading="lazy"></iframe>
+</section>
+
+<div id="baseScrub" class="baseScrub" aria-label="Layer Scrub">
+  <button id="prevBtn" class="pbtn" title="Prev">‹</button>
+  <span class="info" id="scrubInfo">—</span>
+  <input id="stackRange" type="range" min="0" max="0" step="1" value="0"/>
+  <button id="nextBtn" class="pbtn" title="Next">›</button>
+</div>
+
+<script>
+/* ===== Data ===== */
+const DATA={families:[
+  {id:'general',color:'n',items:[
+    {title:'README',file:'README.md'},
+    {title:'Index',file:'index.html'},
+    {title:'RHM visible layers (data)',file:'RHM_visible_layers.json'}]},
+  {id:'rhm',color:'g',items:[
+    {title:'RHM · 32 Layer Instrument',file:'rhm_32_layer_instrument.html'},
+    {title:'RHM · Cards on Face',file:'rhm_cards_on_face.html'},
+    {title:'RHM · Cards on Face v3',file:'rhm_cards_on_face_v3.html'},
+    {title:'RHM · Cards on Face v4',file:'rhm_cards_on_face_v4.html'},
+    {title:'RHM · Cards on Face v4a',file:'rhm_cards_on_face_v4a.html'},
+    {title:'RHM · Cards on Face v5',file:'rhm_cards_on_face_v5.html'},
+    {title:'RHM · Deck Overlap',file:'rhm_deck_overlap.html'},
+    {title:'RHM · DOM v7b',file:'rhm_dom_v7b.html'},
+    {title:'RHM · DOM v7c (mobile)',file:'rhm_dom_v7c_mobile.html'},
+    {title:'RHM · DOM v7d (mobile pro)',file:'rhm_dom_v7d_mobile_pro.html'},
+    {title:'RHM · DOM v7e (mobile cards)',file:'rhm_dom_v7e_mobile_cards.html'},
+    {title:'RHM · DOM v7f (fix stacks colors overlay)',file:'rhm_dom_v7f_fix_stacks_colors_overlay.html'},
+    {title:'RHM · DOM v7g (auto fit)',file:'rhm_dom_v7g_auto_fit.html'},
+    {title:'RHM · DOM v7h (read guaranteed)',file:'rhm_dom_v7h_read_guaranteed.html'},
+    {title:'RHM · Faces Reader (orig)',file:'rhm_faces_reader.html'},
+    {title:'RHM · Faces Reader (1)',file:'rhm_faces_reader (1).html'},
+    {title:'RHM · Faces Reader v2',file:'rhm_faces_reader_v2.html'},
+    {title:'RHM · Post-its (orig)',file:'rhm_postits.html'},
+    {title:'RHM · Post-its (1)',file:'rhm_postits (1).html'},
+    {title:'RHM · Three v9',file:'rhm_three_v9.html'},
+    {title:'RHM · Ultralite v8',file:'rhm_ultralite_v8.html'}]},
+  {id:'volumetric',color:'a',items:[
+    {title:'Volumetric · Cube Stacks Overlap · Nexus (Gully)',file:'volumetric_cube_stacks_overlap_nexus_gully_edition.html'},
+    {title:'Volumetric · Cube Stacks Overlap · Nexus (Gully) (1)',file:'volumetric_cube_stacks_overlap_nexus_gully_edition (1).html'},
+    {title:'Volumetric · Media Nexus · Unthinkable Applied',file:'volumetric_media_nexus_unthinkable_applied.html'},
+    {title:'Volumetric · Media Nexus · Unthinkable Applied (1)',file:'volumetric_media_nexus_unthinkable_applied (1).html'},
+    {title:'Volumetric · Media Nexus · Unthinkable Applied (2)',file:'volumetric_media_nexus_unthinkable_applied (2).html'},
+    {title:'Volumetric · Media Nexus · Unthinkable Applied (3)',file:'volumetric_media_nexus_unthinkable_applied (3).html'},
+    {title:'Volumetric · Media Nexus · Unthinkable Applied (4)',file:'volumetric_media_nexus_unthinkable_applied (4).html'},
+    {title:'Volumetric · Venn Cubes · Mobile Draggable Dock',file:'volumetric_venn_cubes_mobile_draggable_dock.html'},
+    {title:'Volumetric · Venn Cubes · Mobile Draggable Dock (1)',file:'volumetric_venn_cubes_mobile_draggable_dock (1).html'},
+    {title:'Volumetric · Venn Cubes · Mobile Draggable Dock (2)',file:'volumetric_venn_cubes_mobile_draggable_dock (2).html'},
+    {title:'Volumetric · Venn Cubes · Mobile Draggable Dock (3)',file:'volumetric_venn_cubes_mobile_draggable_dock (3).html'},
+    {title:'Volumetric · Venn Cubes · Mobile Draggable Dock (4)',file:'volumetric_venn_cubes_mobile_draggable_dock (4).html'},
+    {title:'Volumetric · Venn Cubes · Mobile Draggable Dock (5)',file:'volumetric_venn_cubes_mobile_draggable_dock (5).html'},
+    {title:'Volumetric · Venn Cubes · Mobile Draggable Dock (6)',file:'volumetric_venn_cubes_mobile_draggable_dock (6).html'},
+    {title:'Volumetric · Venn Cubes · Mobile Draggable Dock (7)',file:'volumetric_venn_cubes_mobile_draggable_dock (7).html'},
+    {title:'Volumetric · Venn Cubes · Mobile Draggable Dock (8)',file:'volumetric_venn_cubes_mobile_draggable_dock (8).html'},
+    {title:'Volumetric · Venn Cubes · Mobile Draggable Dock (9)',file:'volumetric_venn_cubes_mobile_draggable_dock (9).html'},
+    {title:'Volumetric · Venn Cubes · Mobile Draggable Dock (10)',file:'volumetric_venn_cubes_mobile_draggable_dock (10).html'},
+    {title:'Volumetric · Venn Cubes · Mobile Draggable Dock (11)',file:'volumetric_venn_cubes_mobile_draggable_dock (11).html'},
+    {title:'Volumetric · Venn Cubes · Mobile Draggable Dock (12)',file:'volumetric_venn_cubes_mobile_draggable_dock (12).html'},
+    {title:'Volumetric · Venn Cubes · Mobile Draggable Dock (13)',file:'volumetric_venn_cubes_mobile_draggable_dock (13).html'}]},
+  {id:'vol_media',color:'o',items:[
+    {title:'VOL Media Decks v6',file:'vol_media_decks_v6.html'},
+    {title:'VOL Media Decks v7',file:'vol_media_decks_v7.html'},
+    {title:'VOL Media Decks v5 · Canvas Only Data Stacks',file:'vol_media_decks_v_5_canvas_only_data_stacks.html'},
+    {title:'VOL Media Decks v5 · Canvas Only Data Stacks (1)',file:'vol_media_decks_v_5_canvas_only_data_stacks (1).html'},
+    {title:'VOL Media Decks v5 · Canvas Only Data Stacks (2)',file:'vol_media_decks_v_5_canvas_only_data_stacks (2).html'},
+    {title:'VOL Media Decks v5 · Canvas Only Data Stacks (3)',file:'vol_media_decks_v_5_canvas_only_data_stacks (3).html'}]},
+  {id:'stack_index',color:'c',items:[
+    {title:'Stack Index · Minimal Preview',file:'stack_index_minimal_preview_single_file_html.html'},
+    {title:'Stack Index · Minimal Preview (1)',file:'stack_index_minimal_preview_single_file_html (1).html'},
+    {title:'Stack Index · Minimal Preview (2)',file:'stack_index_minimal_preview_single_file_html (2).html'},
+    {title:'Stack Index · Minimal Preview (3)',file:'stack_index_minimal_preview_single_file_html (3).html'},
+    {title:'Stack Index · Minimal Preview (4)',file:'stack_index_minimal_preview_single_file_html (4).html'},
+    {title:'Stack Index · Minimal Preview (5)',file:'stack_index_minimal_preview_single_file_html (5).html'}]}
+]};
+const PAGES_BASE='https://hartswf0.github.io/venn-32/';
+const SIMPLE='?simple';
+const urlFor=(file)=>PAGES_BASE+encodeURIComponent(file).replace(/%2F/g,'/')+SIMPLE;
+
+/* ===== DOM ===== */
+const stage=document.getElementById('stage');
+const stageWrap=document.getElementById('stageWrap');
+const dock=document.getElementById('dock');
+const dockTitle=document.getElementById('dockTitle');
+const dockOpen=document.getElementById('dockOpen');
+const dockFrame=document.getElementById('dockFrame');
+const baseScrub=document.getElementById('baseScrub');
+const stackRange=document.getElementById('stackRange');
+const scrubInfo=document.getElementById('scrubInfo');
+const prevBtn=document.getElementById('prevBtn');
+const nextBtn=document.getElementById('nextBtn');
+const distRange=document.getElementById('distRange');
+const distOut=document.getElementById('distOut');
+const autoFitBtn=document.getElementById('autoFitBtn');
+const focusBtn=document.getElementById('focusBtn');
+const resetPanBtn=document.getElementById('resetPanBtn');
+const orbitBtn=document.getElementById('orbitBtn');
+const anchorTop=document.getElementById('anchorTop');
+const anchorCenter=document.getElementById('anchorCenter');
+const anchorBottom=document.getElementById('anchorBottom');
+const toolsBtn=document.getElementById('toolsBtn');
+const knob=document.getElementById('scrubKnob');
+const knobLabel=document.getElementById('knobLabel');
+
+/* ===== State ===== */
+let CURRENT_LAYOUT='singleVertical';
+const CAMS={ westIso:{yaw:210,pitch:35,camZ:-900,anchor:'bottom'}, verticalIso:{yaw:30,pitch:35,camZ:-900,anchor:'bottom'}, isoClassic:{yaw:45,pitch:35,camZ:-920,anchor:'center'}, front:{yaw:0,pitch:0,camZ:-800,anchor:'center'}, top:{yaw:0,pitch:90,camZ:-780,anchor:'center'} };
+let CURRENT_CAM='westIso';
+let ALL=null; // flattened
+let idx=0, activeLayer=null, stacks=[]; // runtime
+let ORBIT=false, dragging=false, lx=0, ly=0;
+let PAN=false; // one-finger pan on bg
+let touches=new Map(); let pinchLast=null; // for pinch zoom
+let ANCHOR='center'; // 'top' | 'center' | 'bottom'
+let SCRUB_MODE=false, scrubStartX=0, scrubStartIdx=0; // edge scrub
+
+/* ===== Build ===== */
+function flatten(){ ALL = DATA.families.flatMap(f=> f.items.map(it=>({title:it.title,file:it.file,fid:f.id,color:f.color}))); }
+function clearStage(){ stage.innerHTML=''; stacks.length=0; }
+function render_singleVertical(){ const s=document.createElement('div'); s.className='stackObj'; s.style.left='0'; s.style.right='0'; s.style.margin='auto'; const spine=document.createElement('div'); spine.className='spine'; s.appendChild(spine); const cap=document.createElement('div'); cap.className='cap'; cap.textContent='ALL ' + ALL.length; s.appendChild(cap); ALL.forEach((item,i)=>{ const lay=mkLayer(item,i); const dz=i*css('--gapZ'); const dy=-i*1.0; lay.style.transform=`translate3d(0px, ${dy}px, ${dz}px)`; s.appendChild(lay); }); stage.appendChild(s); stacks.push({dom:s}); }
+function render_familiesRow(){ DATA.families.forEach((fam,xi)=>{ const s=document.createElement('div'); s.className='stackObj'; const x=(xi-0.5)*css('--stackX'); s.style.transform=`translate3d(${x}px,0,0)`; const spine=document.createElement('div'); spine.className='spine'; s.appendChild(spine); const cap=document.createElement('div'); cap.className='cap'; cap.textContent=fam.id.toUpperCase()+" "+fam.items.length; s.appendChild(cap); fam.items.forEach((it,zi)=>{ const lay=mkLayer({title:it.title,file:it.file,fid:fam.id,color:fam.color},zi); const dz=zi*css('--gapZ'); const dy=-zi*1.2; lay.style.transform=`translate3d(0, ${dy}px, ${dz}px)`; s.appendChild(lay); }); stage.appendChild(s); stacks.push({dom:s}); }); }
+function render_fanWall(){ const s=document.createElement('div'); s.className='stackObj'; s.style.left='0'; s.style.right='0'; s.style.margin='auto'; const spine=document.createElement('div'); spine.className='spine'; s.appendChild(spine); const cap=document.createElement('div'); cap.className='cap'; cap.textContent='FAN'; s.appendChild(cap); ALL.forEach((item,i)=>{ const lay=mkLayer(item,i); const a=(-12)+(i%24)*1.0; lay.style.transform=`rotateZ(${a}deg) translate3d(0, ${-i*.6}px, ${i*css('--gapZ')}px)`; s.appendChild(lay); }); stage.appendChild(s); stacks.push({dom:s}); }
+function mkLayer(item,i){ const lay=document.createElement('div'); lay.className=`layer ${item.color}`; lay.dataset.index=i; lay.innerHTML=`<div class="sub">${item.fid}</div><div class="title">${item.title}</div>`; lay.addEventListener('click', (ev)=>{ selectIndex(i); focusSelected('bottom'); ev.stopPropagation(); }); lay.addEventListener('dblclick',(ev)=>{ selectIndex(i); openPreview(); ev.stopPropagation(); }); return lay; }
+
+/* ===== Apply ===== */
+function applyCam(name){ const c=CAMS[name]; if(!c) return; setVar('--yaw', c.yaw+'deg'); setVar('--pitch', c.pitch+'deg'); setVar('--camZ', c.camZ+'px'); CURRENT_CAM=name; highlight('.cam', `[data-cam="${name}"]`); syncCameraFov(); scaleDepth(); fitFrustum({anchor:c.anchor||ANCHOR}); setHash(); }
+function applyLayout(name){ CURRENT_LAYOUT=name; highlight('.layout', `[data-layout="${name}"]`); clearStage(); if(name==='singleVertical') render_singleVertical(); else if(name==='familiesRow') render_familiesRow(); else if(name==='fanWall') render_fanWall(); fitFrustum({anchor:ANCHOR}); setHash(); }
+
+/* ===== Selection / Dock / Scrub ===== */
+function selectIndex(i){ idx=i; const item=ALL[i]; const url=urlFor(item.file); dockTitle.textContent=item.title; dockOpen.href=url; if(dockFrame.src!==url) dockFrame.src=url; dock.classList.add('open'); document.body.classList.add('dock-open'); baseScrub.classList.add('open'); stackRange.min=0; stackRange.max=ALL.length-1; stackRange.value=String(i); updateInfo(); setActiveLayer(i); }
+function openPreview(){ dock.classList.add('open'); document.body.classList.add('dock-open'); }
+function close(){ dock.classList.remove('open'); document.body.classList.remove('dock-open'); baseScrub.classList.remove('open'); dockFrame.removeAttribute('src'); setActiveLayer(null); fitFrustum({anchor:ANCHOR}); }
+function updateInfo(){ const fam=ALL[idx].fid; scrubInfo.textContent=`${fam.toUpperCase()}  ${idx+1}/${ALL.length}`; }
+function setActiveLayer(i){ if(activeLayer) activeLayer.classList.remove('active'); if(i==null) return; activeLayer=stage.querySelector(`[data-index="${i}"]`); activeLayer&&activeLayer.classList.add('active'); navigator.vibrate?.(3); }
+
+stackRange.addEventListener('input', ()=>{ const i=parseInt(stackRange.value); if(Number.isNaN(i)) return; selectIndex(i); focusSelected('bottom'); });
+prevBtn.addEventListener('click', ()=>step(-1)); nextBtn.addEventListener('click', ()=>step(+1));
+function step(d){ const i=Math.max(0, Math.min(ALL.length-1, idx+d)); stackRange.value=String(i); stackRange.dispatchEvent(new Event('input')); }
+
+document.getElementById('dockClose').addEventListener('click', close);
+
+/* ===== Gestures: orbit, one-finger pan on bg, two-finger pan, pinch zoom, edge-scrub ===== */
+stageWrap.addEventListener('pointerdown', e=>{
+  touches.set(e.pointerId,{x:e.clientX,y:e.clientY,target:e.target});
+  if(e.clientY > innerHeight*0.62){ SCRUB_MODE=true; scrubStartX=e.clientX; scrubStartIdx=idx; }
+  if(touches.size===2) pinchLast=distance2();
+  if(!ORBIT && touches.size===1 && !e.target.classList.contains('layer')){ PAN=true; lx=e.clientX; ly=e.clientY; }
+  if(ORBIT && touches.size===1){ dragging=true; lx=e.clientX; ly=e.clientY; stageWrap.setPointerCapture(e.pointerId); }
+});
+stageWrap.addEventListener('pointermove', e=>{
+  const t=touches.get(e.pointerId); if(!t) return; const dx=e.clientX-t.x, dy=e.clientY-t.y; touches.set(e.pointerId,{x:e.clientX,y:e.clientY,target:t.target});
+  if(touches.size===2){ const d=distance2(); if(pinchLast!=null){ const delta=d-pinchLast; pinchLast=d; zoomBy(delta*0.6); } return; }
+  if(SCRUB_MODE){ const dist=e.clientX - scrubStartX; const stepSize=12; const delta=Math.round(dist/stepSize); const i=clamp(scrubStartIdx+delta,0,ALL.length-1); if(i!==idx){ selectIndex(i); focusSelected('bottom'); } return; }
+  if(PAN && touches.size===1){ addPan(dx,dy); return; }
+  if(ORBIT && dragging && touches.size===1){ applyOrbitDelta(dx,dy,false); }
+});
+stageWrap.addEventListener('pointerup', e=>{ touches.delete(e.pointerId); if(touches.size<2) pinchLast=null; if(touches.size===0){ PAN=false; dragging=false; SCRUB_MODE=false; } });
+function distance2(){ const arr=[...touches.values()]; if(arr.length<2) return 0; const a=arr[0], b=arr[1]; const dx=a.x-b.x, dy=a.y-b.y; return Math.hypot(dx,dy); }
+function zoomBy(delta){ const current=parseFloat(getVar('--camZ')); const next=clamp(current + (-delta), -1600, -580); setVar('--camZ', next+'px'); distRange.value=String(Math.round(next)); syncCameraFov(); scaleDepth(); fitFrustum({anchor:ANCHOR}); }
+function addPan(dx,dy){ const x=parseFloat(getVar('--panX'))+dx; const y=parseFloat(getVar('--panY'))+dy; setVar('--panX', x+'px'); setVar('--panY', y+'px'); }
+function applyOrbitDelta(dx,dy,settle){ const yaw=wrapDeg(getDeg('--yaw')+dx*0.25); const pitch=clamp(getDeg('--pitch')-dy*0.22, 10, 80); setVar('--yaw', yaw+'deg'); setVar('--pitch', pitch+'deg'); if(settle) fitFrustum({anchor:ANCHOR}); }
+
+/* ===== Focus to bottom ===== */
+function focusSelected(where='bottom'){ const el = stage.querySelector(`[data-index="${idx}"]`); if(!el) return; fitElement(el,{where}); }
+function fitElement(el,{where='bottom', margin=.92}={}){
+  const r=el.getBoundingClientRect(); const vp=getFitViewport();
+  const aimX=vp.w/2; let aimY=vp.top+vp.h-14; if(where==='mid') aimY=vp.top+vp.h/2; else if(where==='top') aimY=vp.top+16;
+  const cx=r.left+r.width/2; const cy=r.top+r.height/2; const ay=(where==='top')? r.top : (where==='bottom')? r.bottom : cy;
+  const dx=(aimX-cx), dy=(aimY-ay);
+  setVar('--ox', (parseFloat(getVar('--ox')) + dx) + 'px');
+  setVar('--oy', (parseFloat(getVar('--oy')) + dy) + 'px');
+  const sx=(vp.w*margin)/Math.max(1,r.width); const sy=(vp.h*0.58)/Math.max(1,r.height);
+  const targetScale=Math.min(Math.max(0.6,Math.min(1.45,sx)), Math.max(0.6,Math.min(1.45,sy)));
+  setVar('--scale', String(targetScale));
+}
+
+/* ===== Frustum Fit (dock-aware) ===== */
+function getFitViewport(){ const open = dock.classList.contains('open'); const topPad=48; const dockH = open ? dock.getBoundingClientRect().height + 10 : 0; return { w: innerWidth, h: Math.max(140, innerHeight - dockH - topPad), top: topPad } }
+function fitFrustum({margin=0.90, anchor='center'}={}){ const target = (CURRENT_LAYOUT==='familiesRow') ? stage : stage.querySelector('.stackObj'); if(!target) return; _fitOnce(target, margin, anchor); requestAnimationFrame(()=> _fitOnce(target, margin, anchor)); }
+function _fitOnce(target, margin, anchor){ const r = target.getBoundingClientRect(); const vp = getFitViewport(); const cx = r.left + r.width/2; const cy = r.top + r.height/2; const aimX = vp.w/2; const ay = (anchor==='top')? r.top : (anchor==='bottom')? r.bottom : cy; const aimY = vp.top + vp.h/2; setVar('--ox', (aimX - cx) + 'px'); setVar('--oy', (aimY - ay) + 'px'); const sx = (vp.w * margin) / Math.max(1, r.width); const sy = (vp.h * margin) / Math.max(1, r.height); const scale = clamp(Math.min(sx, sy), 0.6, 1.35); setVar('--scale', String(scale)); }
+
+/* ===== Perspective coupling + depth scaling ===== */
+function syncCameraFov(){ const camZ = Math.abs(parseFloat(getVar('--camZ'))); const persp = clamp(camZ * 1.35, 700, 1600); stageWrap.style.perspective = persp + 'px'; }
+function scaleDepth(){ const camZ = Math.abs(parseFloat(getVar('--camZ'))); const gap = Math.max(16, Math.min(54, camZ/78)); setVar('--gapZ', gap+'px'); setVar('--stackX', (gap*12)+'px'); }
+
+/* ===== URL hash state (deep link) ===== */
+function setHash(){ const s=new URLSearchParams(); s.set('cam', CURRENT_CAM); s.set('layout', CURRENT_LAYOUT); s.set('i', String(idx)); location.hash = s.toString(); }
+function applyHash(){ const h=new URLSearchParams(location.hash.slice(1)); const cam=h.get('cam'); const lay=h.get('layout'); const i=parseInt(h.get('i')||'0'); if(lay) CURRENT_LAYOUT=lay; applyLayout(CURRENT_LAYOUT); if(!isNaN(i)) selectIndex(Math.max(0,Math.min(ALL.length-1,i))); if(cam && CAMS[cam]) applyCam(cam); }
+window.addEventListener('hashchange', applyHash);
+
+/* ===== Scrub knob control ===== */
+let knobDown=false; let knobCenter=null; let knobStartAngle=0; let knobStartIdx=0;
+function angleFor(ev){ const r=knob.getBoundingClientRect(); const cx=r.left+r.width/2, cy=r.top+r.height/2; const a=Math.atan2(ev.clientY-cy, ev.clientX-cx); return a; }
+function setKnobAngle(rad){ const deg=(rad*180/Math.PI)+90; document.documentElement.style.setProperty('--knob-angle', deg+'deg'); }
+knob.addEventListener('pointerdown', ev=>{ knobDown=true; knob.setPointerCapture(ev.pointerId); knobCenter=angleFor(ev); knobStartAngle=knobCenter; knobStartIdx=idx; ev.preventDefault(); });
+knob.addEventListener('pointermove', ev=>{ if(!knobDown) return; const a=angleFor(ev); setKnobAngle(a); const dRot = a - knobStartAngle; const steps = Math.round(dRot / (Math.PI/20)); // 18° per step
+  const i=clamp(knobStartIdx + steps, 0, ALL.length-1); if(i!==idx){ selectIndex(i); focusSelected('bottom'); }
+});
+knob.addEventListener('pointerup', ()=>{ knobDown=false; });
+
+/* ===== Utils ===== */
+function css(name){ return parseInt(getComputedStyle(document.documentElement).getPropertyValue(name)); }
+function setVar(name,val){ document.documentElement.style.setProperty(name,val); }
+function getVar(name){ return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+function getDeg(name){ return parseFloat(getVar(name)); }
+function clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
+function wrapDeg(d){ d%=360; if(d<0) d+=360; return d; }
+function highlight(groupSel, activeSel){ document.querySelectorAll(groupSel).forEach(b=>b.classList.remove('active')); const a=document.querySelector(activeSel); a&&a.classList.add('active'); }
+
+/* ===== Wiring ===== */
+document.querySelectorAll('.cam').forEach(b=> b.addEventListener('click', ()=> applyCam(b.dataset.cam)));
+document.querySelectorAll('.layout').forEach(b=> b.addEventListener('click', ()=> applyLayout(b.dataset.layout)));
+anchorTop.addEventListener('click', ()=>{ ANCHOR='top'; anchorTop.classList.add('active'); anchorCenter.classList.remove('active'); anchorBottom.classList.remove('active'); fitFrustum({anchor:ANCHOR}); });
+anchorCenter.addEventListener('click', ()=>{ ANCHOR='center'; anchorCenter.classList.add('active'); anchorTop.classList.remove('active'); anchorBottom.classList.remove('active'); fitFrustum({anchor:ANCHOR}); });
+anchorBottom.addEventListener('click', ()=>{ ANCHOR='bottom'; anchorBottom.classList.add('active'); anchorTop.classList.remove('active'); anchorCenter.classList.remove('active'); fitFrustum({anchor:ANCHOR}); });
+
+focusBtn.addEventListener('click', ()=> focusSelected('bottom'));
+toolsBtn.addEventListener('click', ()=>{ document.body.classList.toggle('tools-pinned'); });
+
+function syncDist(){ const v=parseInt(distRange.value); distOut.textContent=v; setVar('--camZ', v+'px'); syncCameraFov(); scaleDepth(); }
+distRange.addEventListener('input', ()=>{ syncDist(); });
+distRange.addEventListener('change', ()=>{ syncDist(); fitFrustum({anchor:ANCHOR}); setHash(); });
+autoFitBtn.addEventListener('click', ()=> { fitFrustum({anchor:ANCHOR}); setHash(); });
+resetPanBtn.addEventListener('click', ()=>{ setVar('--panX','0px'); setVar('--panY','0px'); fitFrustum({anchor:ANCHOR}); });
+orbitBtn.addEventListener('click', ()=>{ ORBIT=!ORBIT; orbitBtn.textContent = 'orbit: ' + (ORBIT?'on':'off'); });
+
+/* ===== Init ===== */
+flatten(); applyLayout(CURRENT_LAYOUT); applyCam('westIso'); syncCameraFov(); scaleDepth();
+if(location.hash) applyHash(); else { fitFrustum({anchor:'bottom'}); setHash(); }
+addEventListener('resize', ()=>{ syncCameraFov(); scaleDepth(); fitFrustum({anchor:ANCHOR}); });
+addEventListener('orientationchange', ()=>setTimeout(()=>{ syncCameraFov(); scaleDepth(); fitFrustum({anchor:ANCHOR}); },60));
+
+console.log('[v32] ready', {items: DATA.families.reduce((a,f)=>a+f.items.length,0)});
+</script>
+</body>
+</html>

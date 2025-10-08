@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>VOL‑Stacks — Clean HUD / MAX Aim</title>
+<style>
+  :root{ --bg:#050507; --ink:#e8e8e8; --muted:#9aa3ad; --accent:#89f5ff; --shadow:0 12px 30px rgba(0,0,0,.55), 0 2px 10px rgba(0,0,0,.3); }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent; touch-action:none}
+  html,body{height:100%}
+  body{margin:0; background:var(--bg); color:var(--ink); font:14px/1.2 Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; overflow:hidden}
+  canvas#scene{position:fixed; inset:0; display:block}
+
+  #hud{position:fixed; inset:0; pointer-events:none}
+  .tr{position:absolute; top:16px; right:16px; display:flex; gap:12px; pointer-events:auto}
+  .bl{position:absolute; left:16px; bottom:18px; display:flex; gap:12px; pointer-events:auto}
+  #paramDock{position:absolute; right:16px; bottom:18px; display:flex; gap:12px; pointer-events:auto}
+  #safeBottom{position:fixed; left:0; right:0; bottom:0; height:146px; pointer-events:none}
+
+  .stack{--w:66px; width:var(--w); height:92px; background:linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02)); border:1px solid rgba(255,255,255,.16); border-radius:14px; box-shadow:var(--shadow); position:relative; overflow:hidden}
+  .stack .glyph{position:absolute; top:6px; left:6px; font-size:10px; letter-spacing:.08em; color:var(--muted)}
+  .stack .legend{position:absolute; bottom:6px; width:100%; text-align:center; font-size:10px; color:#cfd6df}
+  .stack .layers{position:absolute; inset:14px 10px 18px 10px; display:flex; flex-direction:column; justify-content:flex-end; gap:3px}
+  .stack .lay{height:6px; border-radius:3px; background:rgba(255,255,255,.12); filter:drop-shadow(0 0 6px rgba(255,255,255,.12))}
+  .stack.accent{border-color:rgba(137,245,255,.55); box-shadow:0 0 0 1px rgba(137,245,255,.35), inset 0 0 24px rgba(137,245,255,.08), var(--shadow)}
+
+  #colorPipe{position:fixed; left:0; right:0; bottom:0; height:3px; background:linear-gradient(90deg, #777, #bbb); opacity:.6; pointer-events:none}
+  @media (max-width:760px){ .stack{--w:58px; height:84px} #safeBottom{height:132px} }
+</style>
+</head>
+<body>
+  <canvas id="scene"></canvas>
+  <div id="hud">
+    <!-- Single top bar: GRID / PACK / AIM / VIEW / MODE -->
+    <div class="tr">
+      <div class="stack accent" id="gridStack"><div class="glyph">GRID</div><div class="layers" id="gridLayers"></div><div class="legend" id="gridLegend">16×16</div></div>
+      <div class="stack" id="packStack"><div class="glyph">PACK</div><div class="layers" id="packLayers"></div><div class="legend" id="packLegend">P‑1</div></div>
+      <div class="stack" id="aimStack"><div class="glyph">AIM</div><div class="layers" id="aimLayers"></div><div class="legend" id="aimLegend">MAX</div></div>
+      <div class="stack" id="viewStack"><div class="glyph">VIEW</div><div class="layers" id="viewLayers"></div><div class="legend" id="viewLegend">ISO</div></div>
+      <div class="stack" id="modeStack"><div class="glyph">MODE</div><div class="layers" id="modeLayers"></div><div class="legend" id="modeLegend">LOOK</div></div>
+    </div>
+
+    <div id="safeBottom">
+      <div class="bl">
+        <div class="stack" id="playStack"><div class="glyph">PLAY</div><div class="layers" id="playLayers"></div><div class="legend" id="playLegend">STOP</div></div>
+        <div class="stack" id="tempoStack"><div class="glyph">TMP</div><div class="layers" id="tempoLayers"></div><div class="legend" id="tempoLegend">120</div></div>
+        <div class="stack" id="metroStack"><div class="glyph">BEAT</div><div class="layers" id="metroLayers"></div><div class="legend" id="metroLegend">ON</div></div>
+        <div class="stack" id="cueStack"><div class="glyph">CUE</div><div class="layers" id="cueLayers"></div><div class="legend" id="cueLegend">PRE</div></div>
+        <div class="stack" id="commitStack"><div class="glyph">COM</div><div class="layers" id="commitLayers"></div><div class="legend" id="commitLegend">PUSH</div></div>
+      </div>
+      <div id="paramDock"></div>
+    </div>
+    <div id="colorPipe"></div>
+  </div>
+
+<script>
+(()=>{
+  const canvas = document.getElementById('scene');
+  const ctx = canvas.getContext('2d');
+  const DPR = Math.max(1, devicePixelRatio||1);
+  let W=0,H=0; function resize(){ W=innerWidth; H=innerHeight; canvas.width=W*DPR; canvas.height=H*DPR; canvas.style.width=W+'px'; canvas.style.height=H+'px'; ctx.setTransform(DPR,0,0,DPR,0,0);} addEventListener('resize', resize, {passive:true}); resize();
+  const buzz=(p)=>{ try{ if(navigator.vibrate) navigator.vibrate(p||8);}catch{} };
+
+  const ROW_COLORS=['#ff7a7a','#ffd27a','#a6ff7a','#7affdc','#7ab5ff','#c47aff','#ff7ad1','#7aff9d'];
+
+  const state={
+    gridOpts:[16,8,4,2,1], gridIdx:0, cols:16, rows:8,
+    baseCell:28, defaultLayers:12,
+    cam:{phi:Math.PI*0.2,theta:Math.PI*0.22},
+    playing:false, t:0, bpm:120, playhead:0,
+    selection:null,
+    mode:'LOOK', editor:false,
+    focus:{tx:0,tz:0, sx:0, sz:0, scale:1, targetScale:1.0, lerp:0.2},
+    aimIdx:2, spreadFactor:[1.18,1.36,1.56], hitInflate:[26,34,44],
+    staging:{sound:null, look:null, armed:false},
+    metro:true, adjusting:false, packIdx:0,
+    lens:{on:false,x:0,y:0}
+  };
+
+  const PARAMS_SOUND=[{key:'vel',label:'VEL'},{key:'prob',label:'PRB'},{key:'len',label:'LEN'},{key:'pitch',label:'PIT'},{key:'pan',label:'PAN'},{key:'send',label:'SND'}];
+  const PARAMS_LOOK=[{key:'lum',label:'LUM'},{key:'sep',label:'SEP'},{key:'layers',label:'LAY'},{key:'halo',label:'HAL'},{key:'sat',label:'SAT'},{key:'twist',label:'TW'}];
+
+  function makeCell(r){ return { on:Math.random()<0.18, vel:0.7, prob:0.9, len:1, pitch:0, pan:(r-3.5)/3.5, send:0.2, lum:0.75, sep:1.0, layers:0.6, halo:0.5, sat:0.9, twist:0.0, _layersCache:state.defaultLayers }; }
+  function makeGrid(cols){ const g=[]; for(let r=0;r<state.rows;r++){ const row=[]; for(let c=0;c<cols;c++){ row.push(makeCell(r)); } g.push(row);} return g; }
+  let grid = makeGrid(state.cols);
+
+  const PACKS=[
+    {name:'P‑1', rows:(r)=> r%2? 'square':'sine', fxDelay:0.22},
+    {name:'P‑2', rows:(r)=> r%3? 'triangle':'sawtooth', fxDelay:0.28},
+    {name:'P‑3', rows:(r)=> ['sine','triangle','square','sawtooth'][r%4], fxDelay:0.18}
+  ];
+
+  function buildLayers(el, n=6, lit=3){ el.innerHTML=''; for(let i=0;i<n;i++){ const d=document.createElement('div'); d.className='lay'; if(i>=n-lit) d.style.background='linear-gradient(90deg, var(--accent), #fff)'; el.appendChild(d);} }
+  buildLayers(gridLayers,6,6); buildLayers(aimLayers,6,6); buildLayers(modeLayers,6,4); buildLayers(packLayers,6,3); buildLayers(viewLayers,6,3);
+  buildLayers(playLayers,6,2); buildLayers(tempoLayers,6,4); buildLayers(metroLayers,6,4); buildLayers(cueLayers,6,3); buildLayers(commitLayers,6,5);
+
+  function safeRect(){ const r = document.getElementById('safeBottom').getBoundingClientRect(); return {x:0,y:0,w:W,h:Math.max(0,H-(r.height+10))}; }
+  function gridSize(){ return Math.max(state.cols, state.rows); }
+  function spacing(){ const G=gridSize(); const fx=G/state.cols, fz=G/state.rows; const sF=state.spreadFactor[state.aimIdx]; return {dx:state.baseCell*fx*sF, dz:state.baseCell*fz*sF}; }
+
+  function isoProject(x,y,z){ const {phi,theta}=state.cam; const cy=Math.cos(theta), sy=Math.sin(theta); const cx=Math.cos(phi), sx=Math.sin(phi); let X=x, Y=y, Z=z; let x1= X*cy + Z*sy; let z1= -X*sy + Z*cy; let y2= Y*cx - z1*sx; x1 -= state.focus.sx; y2 -= state.focus.sz; const R=safeRect(); return {x:R.x+R.w*0.5+x1, y:R.y+R.h*0.5+y2, depth:z1}; }
+  function cellCenter(c,r){ const {dx,dz}=spacing(); const width=(state.cols-1)*dx; const height=(state.rows-1)*dz; return { x:(c*dx - width/2), y:0, z:(r*dz - height/2) }; }
+
+  function colorize(hex, sat){ const c=hexToRgb(hex); const g=0.3*c.r+0.59*c.g+0.11*c.b; const mix=(t,a,b)=>Math.round(a*(1-t)+b*t); const r=mix(1-sat, c.r, g), g2=mix(1-sat, c.g, g), b=mix(1-sat, c.b, g); return `rgb(${r},${g2},${b})`; }
+  function hexToRgb(h){ const n=parseInt(h.slice(1),16); return {r:(n>>16)&255, g:(n>>8)&255, b:n&255}; }
+  function roundedRect(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+  function calcLayersFrom(v){ return Math.round(6 + v*14); }
+
+  function drawStack(c,r,cell){
+    const base=cellCenter(c,r); const color=ROW_COLORS[r%ROW_COLORS.length]; const sel = state.selection && state.selection.r===r && state.selection.c===c;
+    const staged = sel ? {...cell, ...(state.staging.look||{}), ...(state.staging.sound||{})} : cell;
+    const baseP=isoProject(base.x,0,base.z); const lum=staged.lum, sat=staged.sat, halo=staged.halo, sep=staged.sep, twist=staged.twist;
+    const layers = sel ? calcLayersFrom(staged.layers) : (cell._layersCache||state.defaultLayers); if(sel) cell._layersCache=layers;
+
+    const dim = state.editor && !sel ? 0.38 : 1.0;
+    ctx.save(); ctx.translate(baseP.x, baseP.y); ctx.globalAlpha=0.10*dim; ctx.fillStyle=color; roundedRect(-14,-8,28,16,6); ctx.fill(); ctx.restore();
+
+    for(let i=0;i<layers;i++){
+      const y=i*(8*sep); const px=isoProject(base.x + Math.sin(i*0.14)*twist*10, -y, base.z); const w=22,h=10,rads=5;
+      ctx.save(); ctx.translate(px.x, px.y);
+      ctx.globalAlpha = (0.14 + i*0.02) * lum * dim; ctx.fillStyle = colorize(color, sat); ctx.shadowColor = colorize(color, 1.0); ctx.shadowBlur = 8*halo;
+      roundedRect(-w/2, -h/2, w, h, rads); ctx.fill();
+      if(sel && i===layers-1){ ctx.globalAlpha=0.95; ctx.strokeStyle='#fff'; ctx.lineWidth=1.5; roundedRect(-w/2,-h/2,w,h,rads); ctx.stroke(); }
+      ctx.restore();
+    }
+  }
+
+  function clamp01(x){ return Math.max(0, Math.min(1, x)); }
+  function valueTo01(key, cell){ switch(key){ case 'lum': return cell.lum; case 'sep': return (cell.sep-0.5)/1.5; case 'layers': return cell.layers; case 'halo': return cell.halo; case 'sat': return cell.sat; case 'twist': return (cell.twist+1)/2; default: return 0.5; } }
+  function apply01ToLook(obj, key, v){ if(key==='lum') obj.lum=v; if(key==='sep') obj.sep=0.5+v*1.5; if(key==='layers') obj.layers=v; if(key==='halo') obj.halo=v; if(key==='sat') obj.sat=v; if(key==='twist') obj.twist=v*2-1; }
+  function apply01ToSound(obj, key, v){ if(key==='pitch') obj.pitch=Math.round((v*2-1)*12); else if(key==='pan') obj.pan=(v*2-1); else obj[key]=v; }
+
+  function pickCell(mx,my){ let best=null, bestD=1e9; const inflate=state.hitInflate[state.aimIdx]; for(let r=0;r<state.rows;r++){ for(let c=0;c<state.cols;c++){ const cc=cellCenter(c,r); const P=isoProject(cc.x,0,cc.z); const dx=mx-P.x, dy=my-P.y; const d=(dx*dx+dy*dy) - inflate*inflate; if(d<bestD){ bestD=d; best={r,c,px:P.x,py:P.y}; } } } return best; }
+
+  canvas.addEventListener('pointerdown', e=>{ const R=canvas.getBoundingClientRect(); const mx=e.clientX-R.left, my=e.clientY-R.top; const hit=pickCell(mx,my); if(hit){ canvas.setPointerCapture(e.pointerId); state.scrubbing=true; state.lens.on=true; state.lens.x=mx; state.lens.y=my; handleSelectOrToggle(hit,true); scrubTo(hit.c,true); buzz(8); e.preventDefault(); }});
+  canvas.addEventListener('pointermove', e=>{ const R=canvas.getBoundingClientRect(); const mx=e.clientX-R.left, my=e.clientY-R.top; state.lens.x=mx; state.lens.y=my; if(!state.scrubbing) return; const hit=pickCell(mx,my); if(hit) scrubTo(hit.c); });
+  addEventListener('pointerup', ()=>{ state.scrubbing=false; lastScrubCol=-1; state.lens.on=false; });
+
+  function handleSelectOrToggle(hit, allowToggle){ if(state.selection && state.selection.r===hit.r && state.selection.c===hit.c && allowToggle){ const cell=grid[hit.r][hit.c]; cell.on=!cell.on; buzz(14); } else { state.selection={r:hit.r,c:hit.c}; enterEditor(); refreshParamDock(); buzz(10); } }
+  let lastScrubCol=-1; function scrubTo(col, silent){ if(col===lastScrubCol) return; state.playhead=col; lastScrubCol=col; if(!silent) buzz(3); for(let r=0;r<state.rows;r++){ const base=grid[r][state.playhead]; const audition=(state.selection&& r===state.selection.r && state.staging.armed && state.staging.sound)? {...base, ...state.staging.sound}: base; if(audition.on) trig(r, audition); } }
+
+  function enterEditor(){ state.editor=true; state.mode='LOOK'; modeLegend.textContent='LOOK'; buildLayers(modeLayers,6,4); focusOnSelection(); }
+  function exitEditor(){ state.editor=false; state.staging={sound:null,look:null,armed:false}; state.focus.targetScale=1; }
+  function focusOnSelection(){ if(!state.selection){ state.focus.targetScale=1; return; } const sel=state.selection; const base=cellCenter(sel.c, sel.r); const R=safeRect(); const anchorX=R.x + R.w*0.5; const anchorY=R.y + R.h*0.66; const p=isoProject(base.x,0,base.z); state.focus.tx += (p.x - anchorX); state.focus.tz += (p.y - anchorY); state.focus.targetScale = Math.min(2.1, 1.0 + (16/state.cols)*0.24 * state.spreadFactor[state.aimIdx]); }
+
+  const paramDock = document.getElementById('paramDock');
+  function refreshParamDock(){ paramDock.innerHTML=''; const sel=state.selection; const isSel=!!sel; const SET = state.mode==='LOOK' ? PARAMS_LOOK : (state.mode==='SOUND' ? PARAMS_SOUND : []); const activeColor = isSel? ROW_COLORS[sel.r%ROW_COLORS.length] : '#e5e5e5'; colorPipe.style.background = `linear-gradient(90deg, ${activeColor}, #fff)`; SET.forEach(p=>{ const s=document.createElement('div'); s.className='stack'; s.innerHTML=`<div class="glyph">${p.label}</div><div class="layers"></div><div class="legend"></div>`; const L=s.querySelector('.layers'); let v=0.5; if(isSel){ const cell=grid[sel.r][sel.c]; v = state.mode==='LOOK'? valueTo01(p.key, cell) : (p.key==='pitch'? (cell.pitch+12)/24 : p.key==='pan'? (cell.pan+1)/2 : cell[p.key]); } buildLayers(L,6,Math.round(1+v*5)); let grabbing=false, sy=0, sv=v, smooth=v, lastTick=-1; const dead=8, alpha=0.22; s.addEventListener('pointerdown', e=>{ grabbing=true; sy=e.clientY; sv=v; smooth=v; lastTick=Math.round(v*10); state.adjusting=true; s.setPointerCapture(e.pointerId); buzz(10); e.preventDefault(); }); s.addEventListener('pointermove', e=>{ if(!grabbing||!isSel) return; const dy=sy-e.clientY; let dv=(Math.abs(dy)>dead? (dy>0? (dy-dead):(dy+dead)) : 0)/160; v=clamp01(sv+dv); smooth = smooth*(1-alpha)+v*alpha; buildLayers(L,6,Math.round(1+smooth*5)); const bucket = (state.mode==='LOOK' ? (state.staging.look=state.staging.look||{}) : (state.staging.sound=state.staging.sound||{})); if(state.mode==='LOOK'){ apply01ToLook(bucket, p.key, smooth); state.focus.targetScale=Math.max(state.focus.targetScale,1.85); } else { apply01ToSound(bucket, p.key, smooth); if(state.staging.armed){ const cell = {...grid[sel.r][sel.c], ...state.staging.sound}; trig(sel.r, cell); } } const tick=Math.round(smooth*10); if(tick!==lastTick){ buzz(3); lastTick=tick; } }); s.addEventListener('pointerup', ()=>{ grabbing=false; state.adjusting=false; buzz(8); }); s.style.borderColor = activeColor; s.style.boxShadow=`0 0 0 1px ${activeColor}55, inset 0 0 24px ${activeColor}22, var(--shadow)`; paramDock.appendChild(s); }); }
+
+  gridStack.addEventListener('pointerdown', e=>{ e.preventDefault(); setGridByIndex(state.gridIdx+1); });
+  packStack.addEventListener('pointerdown', e=>{ e.preventDefault(); cyclePack(); });
+  aimStack.addEventListener('pointerdown', e=>{ e.preventDefault(); cycleAim(); });
+  modeStack.addEventListener('pointerdown', e=>{ e.preventDefault(); cycleMode(); });
+  viewStack.addEventListener('pointerdown', ()=>{ const order=['ISO','TOP','LOW','SIDE']; const next=(order.indexOf(viewLegend.textContent)+1)%order.length; const v=order[next]; viewLegend.textContent=v; if(v==='ISO'){ state.cam.theta=Math.PI*0.22; state.cam.phi=Math.PI*0.2; } if(v==='TOP'){ state.cam.theta=0; state.cam.phi=-Math.PI/2+0.12; } if(v==='LOW'){ state.cam.theta=Math.PI*0.22; state.cam.phi=-0.1; } if(v==='SIDE'){ state.cam.theta=Math.PI/2; state.cam.phi=0.15; } buzz(6); });
+
+  function setGridByIndex(idx){ state.gridIdx=(idx+state.gridOpts.length)%state.gridOpts.length; const size=state.gridOpts[state.gridIdx]; state.cols=size; grid=makeGrid(state.cols); gridLegend.textContent=(size===1?'1×1':`${size}×${size}`); const lit=1+(5-state.gridIdx); buildLayers(gridLayers,6,Math.max(2,Math.min(6,lit))); buzz(14); state.focus.targetScale=1; }
+  function cyclePack(){ state.packIdx=(state.packIdx+1)%PACKS.length; const p=PACKS[state.packIdx]; packLegend.textContent=p.name; buildLayers(packLayers,6,3+state.packIdx); buzz(10); ensureAudio(); if(reverb) reverb.delayTime.value = p.fxDelay; }
+  function cycleAim(){ state.aimIdx=(state.aimIdx+1)%3; const names=['STD','WIDE','MAX']; aimLegend.textContent=names[state.aimIdx]; buildLayers(aimLayers,6,2+state.aimIdx*2); buzz(8); focusOnSelection(); }
+  function cycleMode(){ state.mode = state.mode==='GRID' ? 'SOUND' : (state.mode==='SOUND' ? 'LOOK' : 'GRID'); modeLegend.textContent=state.mode; buildLayers(modeLayers,6, state.mode==='GRID'?3: (state.mode==='SOUND'?5:4)); refreshParamDock(); buzz(9); }
+
+  playStack.addEventListener('pointerdown', ()=>{ ensureAudio(); state.playing=!state.playing; buildLayers(playLayers,6, state.playing?6:2); playLegend.textContent = state.playing? 'PLAY':'STOP'; buzz(12); });
+  let tempoGrab=false, tSY=0, startBPM=state.bpm; tempoStack.addEventListener('pointerdown', e=>{ tempoGrab=true; tSY=e.clientY; startBPM=state.bpm; tempoStack.setPointerCapture(e.pointerId); buzz(10); e.preventDefault(); });
+  tempoStack.addEventListener('pointermove', e=>{ if(!tempoGrab) return; const dy=tSY - e.clientY; state.bpm = Math.round(Math.max(50, Math.min(200, startBPM + dy*0.6))); tempoLegend.textContent = state.bpm; const lit = Math.round(1 + (state.bpm-50)/(200-50)*5); buildLayers(tempoLayers,6,lit); });
+  addEventListener('pointerup', ()=>{ if(tempoGrab) buzz(6); tempoGrab=false; });
+
+  metroStack.addEventListener('pointerdown', ()=>{ state.metro=!state.metro; metroLegend.textContent = state.metro? 'ON':'OFF'; buildLayers(metroLayers,6, state.metro? 5:2); buzz(8); });
+  cueStack.addEventListener('pointerdown', ()=>{ state.staging.armed = !state.staging.armed; cueLegend.textContent = state.staging.armed? 'ARM':'PRE'; buildLayers(cueLayers,6, state.staging.armed?5:3); buzz(10); });
+  commitStack.addEventListener('pointerdown', ()=>{ if(!state.selection) return; const cell = grid[state.selection.r][state.selection.c]; if(state.staging.sound) Object.assign(cell, state.staging.sound); if(state.staging.look){ Object.assign(cell, state.staging.look); cell._layersCache = calcLayersFrom(cell.layers); } state.staging={sound:null,look:null,armed:false}; cueLegend.textContent='PRE'; buildLayers(cueLayers,6,3); buzz(16); });
+
+  const AC=(window.AudioContext||window.webkitAudioContext); let audioCtx=null, master=null, reverb=null; function ensureAudio(){ if(audioCtx) return; audioCtx=new AC(); master=audioCtx.createGain(); master.gain.value=0.22; master.connect(audioCtx.destination); reverb=audioCtx.createDelay(PACKS[state.packIdx].fxDelay); reverb.connect(master); }
+  function trig(row,cell){ if(!audioCtx) return; if(Math.random()>cell.prob) return; const o=audioCtx.createOscillator(); const g=audioCtx.createGain(); const p=audioCtx.createStereoPanner(); const base=[48,50,52,53,55,57,59,60][row%8]; const freq=440*Math.pow(2, ((base+cell.pitch)-69)/12); o.frequency.value=freq; g.gain.value=0; const v=cell.vel*(cell.on?1:0); const now=audioCtx.currentTime; const len=0.08+cell.len*0.24; g.gain.setTargetAtTime(v, now, 0.004); g.gain.setTargetAtTime(0.0001, now+len, 0.07); p.pan.value=cell.pan; o.type=PACKS[state.packIdx].rows(row); o.connect(g); g.connect(p); p.connect(master); p.connect(reverb); o.start(); o.stop(now+len+0.25); }
+
+  function update(dt){ if(state.playing){ const bps=state.bpm/60; state.t += dt*bps; const nextCol = Math.floor(state.t) % state.cols; if(nextCol!==state.playhead){ state.playhead=nextCol; if(state.metro && state.playhead%4===0) buzz(6); for(let r=0;r<state.rows;r++){ const cell=grid[r][state.playhead]; if(cell.on) trig(r,cell); } }} state.focus.sx += (state.focus.tx - state.focus.sx) * state.focus.lerp; state.focus.sz += (state.focus.tz - state.focus.sz) * state.focus.lerp; state.focus.scale += (state.focus.targetScale - state.focus.scale)* state.focus.lerp; }
+
+  function render(){ ctx.clearRect(0,0,W,H); const R=safeRect(); const minSide=Math.min(R.w,R.h); const cx=R.x+R.w*0.5, cy=R.y+R.h*0.5; const baseScale=minSide/Math.max(640, minSide) * state.focus.scale; ctx.save(); ctx.translate(cx,cy); ctx.scale(baseScale,baseScale); ctx.translate(-cx,-cy);
+    const phx=cellCenter(state.playhead,0).x; const p0=isoProject(phx,-120, cellCenter(0,0).z-120); const p1=isoProject(phx,220, cellCenter(state.cols-1,state.rows-1).z+120); ctx.save(); ctx.globalAlpha= state.editor ? 0.06 : 0.12; ctx.strokeStyle='#9ef'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(p0.x,p0.y); ctx.lineTo(p1.x,p1.y); ctx.stroke(); ctx.restore();
+    const order=[]; for(let r=0;r<state.rows;r++) for(let c=0;c<state.cols;c++) order.push({r,c}); order.sort((a,b)=>(a.r+a.c)-(b.r+b.c)); order.forEach(({r,c})=> drawStack(c,r, grid[r][c]));
+    if(state.selection){ const sel=state.selection; const base=cellCenter(sel.c,sel.r); const p=isoProject(base.x,0,base.z); ctx.save(); ctx.globalAlpha=0.36; ctx.strokeStyle='#fff'; ctx.lineWidth=2.2; ctx.beginPath(); ctx.arc(p.x,p.y,26*state.focus.scale,0,Math.PI*2); ctx.stroke(); ctx.restore(); }
+    if(state.lens.on){ ctx.save(); ctx.globalAlpha=0.18; ctx.strokeStyle='#bfe9ff'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(state.lens.x, state.lens.y, 48, 0, Math.PI*2); ctx.stroke(); ctx.restore(); }
+    ctx.restore(); }
+
+  let last=performance.now(); function loop(now){ const dt=Math.min(0.05,(now-last)/1000); last=now; update(dt); render(); requestAnimationFrame(loop);} requestAnimationFrame(loop);
+
+  canvas.addEventListener('dblclick', ()=>{ exitEditor(); buzz(12); });
+  refreshParamDock();
+})();
+</script>
+</body>
+</html>

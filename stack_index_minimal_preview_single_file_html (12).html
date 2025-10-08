@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>VOL‑MEDIA DECKS v17 — Everything Is A Stack (Per‑Row Controllers + Grid Sequencer)</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;touch-action:none;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{background:#000;color:#fff;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;overflow:hidden}
+  #canvas{width:100vw;height:100vh;display:block}
+  #hud{position:fixed;inset:0;pointer-events:none;z-index:10}
+  #viewHUD{position:absolute;top:10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.6);padding:6px 12px;border-radius:10px;font-weight:800;font-size:13px;border:1px solid rgba(255,255,255,.18)}
+  #bottomPad{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);display:grid;grid-template-columns:repeat(7,30px);gap:6px;pointer-events:auto}
+  .mini{width:30px;height:30px;border-radius:7px;border:1px solid rgba(255,255,255,.22);background:rgba(0,0,0,.55);font-weight:800;font-size:11px;display:flex;align-items:center;justify-content:center;cursor:pointer}
+  .mini:active{transform:translateY(1px)}
+  #toast{position:fixed;bottom:10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.86);border:1px solid rgba(255,255,255,.2);padding:6px 10px;border-radius:10px;font-size:12px;display:none;z-index:12}
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+<div id="hud">
+  <div id="viewHUD">FRONT</div>
+  <div id="bottomPad">
+    <div class="mini" data-btn="start">▶</div>
+    <div class="mini" data-btn="orbit">○</div>
+    <div class="mini" data-btn="fit">□</div>
+    <div class="mini" data-btn="zoomIn">＋</div>
+    <div class="mini" data-btn="zoomOut">－</div>
+    <div class="mini" data-btn="packPrev">◀</div>
+    <div class="mini" data-btn="packNext">▶</div>
+  </div>
+</div>
+<div id="toast"></div>
+<script>
+(async function(){
+  // ===== Load THREE (fallback)
+  if(!window.THREE){
+    const CDNs=['https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js','https://unpkg.com/three@0.152.2/build/three.min.js'];
+    for(const src of CDNs){try{await new Promise((res,rej)=>{const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=rej;document.head.appendChild(s)}); if(window.THREE) break;}catch(e){}}
+  }
+
+  // ===== Scene
+  const canvas=document.getElementById('canvas');
+  const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
+  renderer.setSize(innerWidth,innerHeight);
+  renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
+  const scene=new THREE.Scene(); scene.background=new THREE.Color(0x000000);
+  const camera=new THREE.PerspectiveCamera(58, innerWidth/innerHeight, .1, 4000); camera.position.set(120,80,150);
+  const camTarget=new THREE.Vector3(0,8,0);
+  const fitLook=()=>camera.lookAt(camTarget); fitLook();
+  addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight)});
+
+  // Lights
+  scene.add(new THREE.AmbientLight(0xffffff,.28));
+  const key=new THREE.PointLight(0x66ddff,1.2,900); key.position.set(0,150,200); scene.add(key);
+  const warm=new THREE.PointLight(0xffaa66,.8,800); warm.position.set(140,80,-120); scene.add(warm);
+  const rim=new THREE.DirectionalLight(0xffffff,.5); rim.position.set(-120,160,-40); scene.add(rim);
+
+  // HUD + helpers
+  const viewHUD=document.getElementById('viewHUD');
+  const toastEl=document.getElementById('toast');
+  function toast(t){toastEl.textContent=t; toastEl.style.display='block'; clearTimeout(toast._id); toast._id=setTimeout(()=>toastEl.style.display='none',1200);} 
+
+  // ===== Views (declare early)
+  const VIEWS=[
+    {name:'FRONT',pos:[0,50,170]},
+    {name:'ISO L',pos:[-140,90,120]},
+    {name:'ISO R',pos:[140,90,120]},
+    {name:'TOP',pos:[0,240,0.01]},
+    {name:'WIDE',pos:[230,90,0]}
+  ];
+  let viewIdx=0; const applyView=()=>{ const v=VIEWS[viewIdx%VIEWS.length]; camera.position.set(...v.pos); fitLook(); viewHUD.textContent=v.name; };
+  applyView();
+
+  // ===== Sprite helper
+  function mkSprite(text){ const cvs=document.createElement('canvas'); const s=256; cvs.width=cvs.height=s; const ctx=cvs.getContext('2d'); ctx.clearRect(0,0,s,s); ctx.fillStyle='rgba(0,0,0,0)'; ctx.fillRect(0,0,s,s); ctx.fillStyle='white'; ctx.font='bold 48px Inter, system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.shadowColor='rgba(0,0,0,0.6)'; ctx.shadowBlur=12; ctx.fillText(text,s/2,s/2); const tex=new THREE.CanvasTexture(cvs); const mat=new THREE.SpriteMaterial({map:tex,transparent:true,depthWrite:false}); const spr=new THREE.Sprite(mat); spr.scale.set(6,6,1); return spr; }
+
+  // ===== Mini-stack builder (visual)
+  function makeMiniStack(color, layers=8, spacing=0.55, size=2.6){
+    const g=new THREE.Group();
+    for(let i=0;i<layers;i++){
+      const geo=new THREE.PlaneGeometry(size,size);
+      const mat=new THREE.MeshStandardMaterial({color,transparent:true,opacity:0.2,roughness:.6,metalness:.1,side:THREE.DoubleSide,depthWrite:false});
+      const m=new THREE.Mesh(geo,mat); m.rotation.x=-Math.PI/2; m.position.y=i*spacing; m.material.emissive=new THREE.Color(color); m.material.emissiveIntensity=.12; g.add(m);
+    }
+    g.userData.pulse=(level)=>{ const L=g.children.length; for(let i=0;i<L;i++){ const p=g.children[i]; const on=i<Math.min(L,Math.ceil(level*L)); p.material.opacity=on?0.75:0.15; p.material.emissiveIntensity=on?0.9:0.1; p.scale.set(on?1.05:1,1,on?1.05:1); }
+      if(level>0){ const s=1+level*0.15; g.scale.set(s,1,s); setTimeout(()=>g.scale.set(1,1,1),90); }
+    };
+    return g;
+  }
+
+  // ===== Grid of Stacks (sequencer grid)
+  const GRID={ rows:8, cols:16, gapX:7.5, gapZ:8.5, group:new THREE.Group(), cells:[], cursor:null, labels:[] };
+  scene.add(GRID.group);
+  const instruments=['Kick','Snr','Hat','Bass','Chord','Lead','Perc','FX'];
+  const colors=[0xff8844,0xff6688,0xffff66,0x66ffcc,0x99bbff,0xc47dff,0x88ffaa,0xffffff];
+
+  function buildGrid(){
+    GRID.cells.length=0; GRID.labels.length=0; while(GRID.group.children.length) GRID.group.remove(GRID.group.children[0]);
+    const startX=-(GRID.cols-1)*GRID.gapX/2, startZ=-(GRID.rows-1)*GRID.gapZ/2;
+    for(let r=0;r<GRID.rows;r++){
+      const row=[]; for(let c=0;c<GRID.cols;c++){
+        const stack=makeMiniStack(colors[r]);
+        stack.position.set(startX + c*GRID.gapX, 0, startZ + r*GRID.gapZ);
+        stack.userData.rc=[r,c]; stack.userData.active=0; row.push(stack); GRID.group.add(stack);
+      }
+      GRID.cells.push(row);
+    }
+    GRID.cursor=new THREE.Mesh(new THREE.BoxGeometry(3.2,0.4, GRID.rows*GRID.gapZ + 4), new THREE.MeshBasicMaterial({color:0xffffff, transparent:true, opacity:0.1}));
+    GRID.cursor.position.set(startX, 0.2, 0); GRID.group.add(GRID.cursor);
+    for(let r=0;r<instruments.length;r++){
+      const label=mkSprite(instruments[r]); label.scale.set(5,5,1); label.position.set(startX-8.5, 6, startZ + r*GRID.gapZ); label.userData.row=r; GRID.labels.push(label); GRID.group.add(label);
+    }
+  }
+  buildGrid();
+
+  // ===== Per‑Row Controller Stacks (everything is a stack)
+  // For each row, build a small controller bar made of stacks: [EN (enable/tap), LVL, SEND, WIDTH, PROB, SHAPE]
+  const ROWCTL={ group:new THREE.Group(), bars:[] };
+  scene.add(ROWCTL.group);
+  function buildRowControllers(){
+    ROWCTL.bars.length=0; while(ROWCTL.group.children.length) ROWCTL.group.remove(ROWCTL.group.children[0]);
+    const startX=-(GRID.cols-1)*GRID.gapX/2 - 24; const startZ=-(GRID.rows-1)*GRID.gapZ/2;
+    for(let r=0;r<GRID.rows;r++){
+      const defs=[
+        {key:'en',    name:'EN',   col:0xffffff, val:1},
+        {key:'lvl',   name:'LVL',  col:0x59e0ff, val:0.7},
+        {key:'send',  name:'SEND', col:0xc47dff, val:0.25},
+        {key:'width', name:'WID',  col:0x7da1ff, val:0.5},
+        {key:'prob',  name:'PRB',  col:0xffa44d, val:1.0},
+        {key:'shape', name:'COL',  col:0xff6688, val:0.6}
+      ];
+      const bar={row:r, stacks:{}}; const gap=3.6; const baseZ=startZ + r*GRID.gapZ;
+      defs.forEach((d,i)=>{ const s=makeMiniStack(d.col,6,0.5,2.2); s.position.set(startX - i*gap, 0, baseZ); s.userData.type='rowctl'; s.userData.row=r; s.userData.key=d.key; s.userData.val=d.val; s.userData.pulse(d.val); ROWCTL.group.add(s); bar.stacks[d.key]=s; });
+      const tag=mkSprite('R'+(r+1)); tag.scale.set(3.5,3.5,1); tag.position.set(startX + 2.5, 6, baseZ); ROWCTL.group.add(tag); bar.tag=tag;
+      ROWCTL.bars.push(bar);
+    }
+  }
+  buildRowControllers();
+
+  // ===== Pattern + Harmony
+  const pattern=Array.from({length:GRID.rows},()=>Array(GRID.cols).fill(0)); // velocity 0..3
+  const scales={major:[0,2,4,5,7,9,11], minor:[0,2,3,5,7,8,10], dorian:[0,2,3,5,7,9,10], mixolydian:[0,2,4,5,7,9,10], pentMinor:[0,3,5,7,10]};
+  let root=50; let scaleName='dorian'; let progression=[0,3,4,5];
+  const degreeToFreq=(deg,oct=0)=>{ const arr=scales[scaleName]; const idx=((deg%arr.length)+arr.length)%arr.length; const semi=arr[idx]+12*oct; return 440*Math.pow(2,((root-69)+semi)/12); };
+
+  // ===== Audio — lazy init & per‑lane wiring
+  let AC=null, master=null, reverb=null, wet=null, dry=null;
+  async function audioInit(){ if(AC) return true; try{ const C=window.AudioContext||window.webkitAudioContext; if(!C){ toast('AudioContext unsupported'); return false; } AC=new C(); master=AC.createGain(); master.gain.value=.18; master.connect(AC.destination); reverb=AC.createConvolver(); reverb.buffer=(function IR(sec=2.2,decay=3){const rate=AC.sampleRate,len=rate*sec,buf=AC.createBuffer(2,len,rate);for(let ch=0;ch<2;ch++){const d=buf.getChannelData(ch);for(let i=0;i<len;i++){d[i]=(Math.random()*2-1)*Math.pow(1-i/len,decay);}}return buf;})(); wet=AC.createGain(); dry=AC.createGain(); wet.gain.value=.22; dry.gain.value=.78; wet.connect(reverb).connect(master); dry.connect(master); return true; }catch(e){ console.error(e); toast('Audio init failed'); return false; } }
+  function mkEnv(){ const e=AC.createGain(); e.gain.value=0; return e; }
+  function mkFilter(type='lowpass'){ const f=AC.createBiquadFilter(); f.type=type; f.frequency.value=1200; f.Q.value=0.8; return f; }
+  function noiseBuf(){ const b=AC.createBuffer(1, AC.sampleRate*1, AC.sampleRate); const d=b.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1; return b; }
+
+  function laneProcessors(){
+    const lanes=[]; for(let i=0;i<GRID.rows;i++){
+      const sat=AC.createWaveShaper(); const curve=new Float32Array(512); for(let j=0;j<512;j++){ const x=j/511*2-1; curve[j]=Math.tanh(2.5*x);} sat.curve=curve;
+      const laneDry=AC.createGain(); const laneWet=AC.createGain(); laneWet.gain.value=.2; laneDry.gain.value=.8; const pan=AC.createStereoPanner(); pan.pan.value=0; const pre=AC.createGain();
+      pre.connect(sat); sat.connect(laneDry).connect(dry); sat.connect(laneWet).connect(wet); laneDry.connect(pan).connect(master); laneWet.connect(pan).connect(master);
+      lanes.push({pre,sat,laneDry,laneWet,pan});
+    }
+    return lanes;
+  }
+
+  function buildKick(dest){ const o=AC.createOscillator(); o.type='sine'; const g=mkEnv(); const f=mkFilter('lowpass'); o.connect(f).connect(g).connect(dest.pre); o.start(); return {start(v){ const t=AC.currentTime; o.frequency.setValueAtTime(120,t); o.frequency.exponentialRampToValueAtTime(40,t+0.08); g.gain.cancelScheduledValues(t); g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.9*Math.min(1,v/2), t+0.005); g.gain.exponentialRampToValueAtTime(0.0001, t+0.28); }}}
+  function buildSnare(dest){ const n=AC.createBufferSource(); n.buffer=noiseBuf(); n.loop=true; const g=mkEnv(); const hp=mkFilter('highpass'); hp.frequency.value=1800; n.connect(hp).connect(g).connect(dest.pre); n.start(); return {start(v){ const t=AC.currentTime; g.gain.cancelScheduledValues(t); g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.7*(v/3+0.5), t+0.005); g.gain.exponentialRampToValueAtTime(0.0001, t+0.18); }}}
+  function buildHat(dest){ const n=AC.createBufferSource(); n.buffer=noiseBuf(); n.loop=true; const g=mkEnv(); const hp=mkFilter('highpass'); hp.frequency.value=6000; n.connect(hp).connect(g).connect(dest.pre); n.start(); return {start(v){ const t=AC.currentTime; g.gain.cancelScheduledValues(t); g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.4*(0.5+v/3), t+0.002); g.gain.exponentialRampToValueAtTime(0.0001, t+0.06); }}}
+  function buildMono(dest,osc='sawtooth'){ const o=AC.createOscillator(); o.type=osc; const f=mkFilter('lowpass'); const g=mkEnv(); o.connect(f).connect(g).connect(dest.pre); o.start(); return {o,f,g,start(freq,vel=.6,decay=.2,shape=0.6){ const t=AC.currentTime; o.frequency.setTargetAtTime(freq,t,0.02); const bright=800 + 2600*shape; f.frequency.setTargetAtTime(bright,t,0.03); g.gain.cancelScheduledValues(t); g.gain.setValueAtTime(g.gain.value,t); g.gain.linearRampToValueAtTime(vel, t+0.01); g.gain.exponentialRampToValueAtTime(0.0001, t+decay); }}}
+  function buildChord(dest){ const gain=mkEnv(); gain.connect(dest.pre); const make=(det=0)=>{ const o=AC.createOscillator(); o.type='triangle'; o.detune.value=det; const f=mkFilter('lowpass'); o.connect(f).connect(gain); o.start(); return {o,f}; }; const a=make(-7), b=make(0), c=make(7); return {start(rootHz,vel=.4,shape=0.6){ const t=AC.currentTime; const thirds=[0,3,4]; const r=rootHz; const fA=r*Math.pow(2,thirds[(progressionIdx%thirds.length)]/12); const fB=r*Math.pow(2,7/12); a.o.frequency.setTargetAtTime(fA,t,0.02); b.o.frequency.setTargetAtTime(r,t,0.02); c.o.frequency.setTargetAtTime(fB,t,0.02); [a.f,b.f,c.f].forEach(f=>f.frequency.setTargetAtTime(900+shape*1800,t,0.04)); gain.gain.cancelScheduledValues(t); gain.gain.setValueAtTime(gain.gain.value,t); gain.gain.linearRampToValueAtTime(vel, t+0.03); gain.gain.exponentialRampToValueAtTime(0.0001, t+0.5); }}}
+
+  const laneFX=[]; let activeVoices=[]; function buildVoices(){ if(!AC) return; if(activeVoices.length) return; const fx=laneProcessors(); for(let i=0;i<GRID.rows;i++){ laneFX[i]=fx[i]; }
+    activeVoices=[
+      buildKick(laneFX[0]), buildSnare(laneFX[1]), buildHat(laneFX[2]),
+      buildMono(laneFX[3],'sawtooth'), buildChord(laneFX[4]),
+      buildMono(laneFX[5],'square'), buildMono(laneFX[6],'triangle'), buildMono(laneFX[7],'sine')
+    ];
+  }
+
+  // ===== Tone Packs (affect oscillator types lightly)
+  const PACKS=[
+    {name:'TAPE', bass:'sawtooth', lead:'triangle', perc:'square'},
+    {name:'FMISH', bass:'square',  lead:'square',   perc:'square'},
+    {name:'GRAN',  bass:'triangle',lead:'sine',     perc:'triangle'},
+    {name:'BIT',   bass:'square',  lead:'sawtooth', perc:'square'},
+    {name:'WAVE',  bass:'sawtooth',lead:'sawtooth', perc:'triangle'}
+  ];
+  let packIdx=0; function applyPack(i){ packIdx=((i%PACKS.length)+PACKS.length)%PACKS.length; const P=PACKS[packIdx]; if(activeVoices[3]?.o) activeVoices[3].o.type=P.bass; if(activeVoices[5]?.o) activeVoices[5].o.type=P.lead; if(activeVoices[6]?.o) activeVoices[6].o.type=P.perc; if(activeVoices[7]?.o) activeVoices[7].o.type='sine'; toast('Pack: '+P.name); }
+
+  // ===== Sequencer core
+  let bpm=112; let playing=false; let step=0; let progressionIdx=0; let dist=170; let orbit=false, theta=0;
+  function startClock(){ let last=performance.now(); (function loop(){ const beat=60000/bpm; const stepDur=beat/4; const now=performance.now(); if(playing && AC && AC.state==='running'){ if(now-last>=stepDur){ last=now; tick(); } } requestAnimationFrame(loop); })(); }
+
+  const moveCursor=()=>{ const x0=-(GRID.cols-1)*GRID.gapX/2; GRID.cursor.position.x = x0 + step*GRID.gapX; };
+
+  function shouldFire(row){ const bar=ROWCTL.bars[row]; const en=bar.stacks.en.userData.val>0.1; if(!en) return false; const p=bar.stacks.prob.userData.val; return Math.random()<=p; }
+
+  function trig(row,vel){ if(!activeVoices.length) return; const bar=ROWCTL.bars[row]; const lvl=bar.stacks.lvl.userData.val; const send=bar.stacks.send.userData.val; const width=(bar.stacks.width.userData.val-0.5)*2; const shape=bar.stacks.shape.userData.val; // 0..1
+    // apply row processors
+    laneFX[row].laneWet.gain.setTargetAtTime(send, AC.currentTime, 0.05);
+    laneFX[row].laneDry.gain.setTargetAtTime(1-send, AC.currentTime, 0.05);
+    laneFX[row].pan.pan.setTargetAtTime((row-3.5)/3.5 * width, AC.currentTime, 0.05);
+
+    const V=Math.max(0,Math.min(3,vel))/3; const velGain=0.2+0.8*V; const rowGain=0.15+0.85*lvl; const vfinal=velGain*rowGain;
+    const cell=GRID.cells[row][step]; cell.userData.pulse(V);
+
+    switch(row){
+      case 0: activeVoices[0].start(1+V*2); break;
+      case 1: activeVoices[1].start(1+V*2); break;
+      case 2: activeVoices[2].start(1+V*2); break;
+      case 3: { const deg=(step%4)*2 + (progression[progressionIdx%progression.length]); const f=degreeToFreq(deg, -1); activeVoices[3].start(f, vfinal, 0.18+0.04*V, shape); } break;
+      case 4: { const deg=progression[progressionIdx%progression.length]; const f=degreeToFreq(deg, 0); activeVoices[4].start(f, vfinal, shape); } break;
+      case 5: { const deg=(step%7); const f=degreeToFreq(deg, 1); activeVoices[5].start(f, vfinal, 0.16+0.05*V, shape); } break;
+      case 6: { const deg=((step*3)%5); const f=degreeToFreq(deg, 0); activeVoices[6].start(f, vfinal, 0.1+0.05*V, shape); } break;
+      case 7: { const f=degreeToFreq((step%5), 2); activeVoices[7].start(f, vfinal, 0.2, shape); } break;
+    }
+  }
+
+  function tick(){ step=(step+1)%GRID.cols; if(step%4===0) progressionIdx=(progressionIdx+1)%progression.length; moveCursor(); for(let r=0;r<GRID.rows;r++){ const v=pattern[r][step]; if(v>0 && shouldFire(r)) trig(r,v); } }
+
+  // ===== Interaction — everything (cells + row controllers) acts like stacks
+  const ray=new THREE.Raycaster(); const v2=new THREE.Vector2();
+  function pickMeshesAt(x,y){ v2.x=(x/innerWidth)*2-1; v2.y=-(y/innerHeight)*2+1; ray.setFromCamera(v2,camera); const objs=[]; GRID.cells.forEach(row=>row.forEach(s=>objs.push(...s.children))); Object.values(ROWCTL.bars).forEach(b=>{ Object.values(b.stacks).forEach(s=>objs.push(...s.children)); }); return ray.intersectObjects(objs); }
+
+  let pressTimer=null; let pressedCell=null; let draggingCtl=null; let dragStartY=0; let dragStartVal=0;
+  canvas.addEventListener('pointerdown',e=>{
+    const hits=pickMeshesAt(e.clientX,e.clientY); if(!hits.length) return; const parent=hits[0].object.parent;
+    if(parent.userData.rc){ pressedCell=parent; const [r,c]=parent.userData.rc; pressTimer=setTimeout(()=>{ pattern[r][c]=3; parent.userData.active=3; parent.userData.pulse(1); camTarget.copy(parent.position); fitLook(); toast('R'+(r+1)+'@'+(c+1)+' vel3'); },420); return; }
+    if(parent.userData.type==='rowctl'){ draggingCtl=parent; dragStartY=e.clientY; dragStartVal=parent.userData.val; }
+  });
+  addEventListener('pointermove',e=>{
+    if(draggingCtl){ const dy=dragStartY-e.clientY; let v=Math.max(0,Math.min(1, dragStartVal + dy/220)); draggingCtl.userData.val=v; draggingCtl.userData.pulse(v); if(draggingCtl.userData.key==='en'){ draggingCtl.userData.val = v>0.5?1:0; draggingCtl.userData.pulse(draggingCtl.userData.val); } }
+  });
+  addEventListener('pointerup',()=>{
+    if(pressedCell){ clearTimeout(pressTimer); const [r,c]=pressedCell.userData.rc; if(pattern[r][c]===0){ pattern[r][c]=1; } else if(pattern[r][c]===1){ pattern[r][c]===2 ? pattern[r][c]=0 : pattern[r][c]=2; } else if(pattern[r][c]===2){ pattern[r][c]=0; } pressedCell.userData.active=pattern[r][c]; pressedCell.userData.pulse(pattern[r][c]/3); pressedCell=null; }
+    draggingCtl=null;
+  });
+
+  // Row label double‑tap focuses camera
+  GRID.labels.forEach(lbl=>{ lbl.onpointerdown=(e)=>{ const now=performance.now(); if(lbl._t && now-lbl._t<300){ camTarget.set(lbl.position.x+10, 8, lbl.position.z); toast('Focus row '+(lbl.userData.row+1)); } lbl._t=now; } });
+
+  // ===== Bottom buttons (baseline camera + transport)
+  const pad=document.getElementById('bottomPad');
+  // NOTE: dist is declared once above; do not redeclare here
+  let draggingCam=null; let pinch=null; let started=false;
+
+  pad.querySelectorAll('.mini').forEach(b=>{
+    b.addEventListener('pointerdown',async ()=>{
+      const k=b.getAttribute('data-btn');
+      if(k==='start'){ if(!started){ const ok=await audioInit(); if(!ok) return; try{ if(AC.state==='suspended') await AC.resume(); }catch{} buildVoices(); started=true; startClock(); playing=true; toast('Playing'); } else { playing=!playing; toast(playing?'Play':'Pause'); } }
+      if(k==='orbit'){ orbit=!orbit; b.textContent=orbit?'●':'○'; }
+      if(k==='fit'){ dist=170; camTarget.set(0,8,0); applyView(); }
+      if(k==='zoomIn'){ dist=Math.max(80,dist-15); const yaw=Math.atan2(camera.position.z,camera.position.x); camera.position.set(Math.cos(yaw)*dist, camera.position.y, Math.sin(yaw)*dist); fitLook(); }
+      if(k==='zoomOut'){ dist=Math.min(420,dist+15); const yaw=Math.atan2(camera.position.z,camera.position.x); camera.position.set(Math.cos(yaw)*dist, camera.position.y, Math.sin(yaw)*dist); fitLook(); }
+      if(k==='packPrev'){ applyPack(--packIdx); }
+      if(k==='packNext'){ applyPack(++packIdx); }
+    });
+  });
+
+  // Drag look + pinch zoom (canvas)
+  canvas.addEventListener('pointerdown',e=>{ draggingCam={x:e.clientX,y:e.clientY, yaw:Math.atan2(camera.position.z,camera.position.x), pitch:Math.asin((camera.position.y-50)/dist)}; });
+  addEventListener('pointermove',e=>{ if(!draggingCam) return; const dx=e.clientX-draggingCam.x; const dy=e.clientY-draggingCam.y; const yaw=draggingCam.yaw - dx*0.005; const pitch=Math.max(-1.2,Math.min(1.2, draggingCam.pitch - dy*0.003)); const cx=Math.cos(yaw)*dist, cz=Math.sin(yaw)*dist, cy=50+Math.sin(pitch)*70; camera.position.set(cx,cy,cz); fitLook(); });
+  addEventListener('pointerup',()=>{ draggingCam=null; });
+  addEventListener('touchstart',e=>{ if(e.touches.length===2){ const dx=e.touches[0].clientX-e.touches[1].clientX; const dy=e.touches[0].clientY-e.touches[1].clientY; pinch={d:Math.hypot(dx,dy)}; } },{passive:false});
+  addEventListener('touchmove',e=>{ if(pinch && e.touches.length===2){ const dx=e.touches[0].clientX-e.touches[1].clientX; const dy=e.touches[0].clientY-e.touches[1].clientY; const nd=Math.hypot(dx,dy); const k=nd/(pinch.d||1); pinch.d=nd; dist=Math.max(90,Math.min(420, dist/(k||1))); e.preventDefault(); } },{passive:false});
+  addEventListener('touchend',()=>{ pinch=null; });
+
+  // ===== Animation
+  function animate(){ requestAnimationFrame(animate); if(orbit){ const yaw=Math.atan2(camera.position.z,camera.position.x)+0.004; camera.position.x=Math.cos(yaw)*dist; camera.position.z=Math.sin(yaw)*dist; camera.position.y=60+Math.sin(yaw*0.6)*20; fitLook(); } renderer.render(scene,camera); }
+  animate();
+
+  // ===== Console tests
+  (function tests(){ try{ const results=[]; const ok=(n,p)=>results.push({test:n,pass:!!p});
+    ok('THREE loaded', !!window.THREE);
+    ok('Grid size matches', GRID.cells.length===GRID.rows && GRID.cells[0].length===GRID.cols);
+    ok('Row controllers present', ROWCTL.bars.length===GRID.rows);
+    ok('Audio lazy', AC===null);
+    ok('Pattern matrix 8x16', pattern.length===8 && pattern[0].length===16);
+    ok('dist is a number', typeof dist==='number');
+    ok('Bottom pad has 7 buttons', document.querySelectorAll('#bottomPad .mini').length===7);
+    console.table(results);
+  }catch(e){} })();
+})();
+</script>
+</body>
+</html>

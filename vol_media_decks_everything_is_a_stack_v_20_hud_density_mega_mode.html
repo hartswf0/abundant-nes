@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>VOL‑MEDIA DECKS v20 — Everything Is A Stack (HUD Density + Mega Mode)</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;touch-action:none;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{background:#000;color:#fff;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;overflow:hidden}
+  #canvas{width:100vw;height:100vh;display:block}
+  /* ===== HUD ===== */
+  #hud{position:fixed;inset:0;pointer-events:none;z-index:10}
+  #viewHUD{position:absolute;top:10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.7);padding:6px 12px;border-radius:10px;font-weight:800;font-size:13px;border:1px solid rgba(255,255,255,.18)}
+  /* Bottom-right mini pad — keeps center-bottom clear */
+  #bottomPad{position:absolute;right:10px;bottom:10px;display:flex;gap:6px;pointer-events:auto}
+  .mini{width:36px;height:36px;border-radius:8px;border:1px solid rgba(255,255,255,.22);background:rgba(0,0,0,.65);font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center;cursor:pointer}
+  .mini:active{transform:translateY(1px)}
+  /* Right-edge DENSITY DOCK (screen-fixed stacks) */
+  #dockRight{position:absolute;right:12px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:10px;pointer-events:auto}
+  .stackHUD{--lit:0;position:relative;width:46px;height:82px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.02));box-shadow:0 0 0 1px rgba(255,255,255,.05) inset;cursor:pointer}
+  .stackHUD::before{content:"";position:absolute;inset:6px;border-radius:8px;background:repeating-linear-gradient(to top, rgba(255,255,255,.06), rgba(255,255,255,.06) 9px, rgba(255,255,255,.01) 9px, rgba(255,255,255,.01) 18px);filter:drop-shadow(0 0 6px rgba(255,255,255,.18))}
+  .stackHUD .levels{position:absolute;left:6px;right:6px;bottom:6px;display:grid;grid-template-rows:repeat(10, 1fr);gap:3px}
+  .stackHUD .cell{height:6px;border-radius:3px;background:rgba(255,255,255,.12)}
+  .stackHUD .cell.lit{background:rgba(255,255,255,.92);box-shadow:0 0 12px rgba(255,255,255,.85),0 0 28px rgba(255,255,255,.35)}
+  .stackHUD.active{outline:2px solid rgba(255,255,255,.7)}
+  #dockLabel{position:absolute;right:64px;top:50%;transform:translateY(-50%);font-size:11px;letter-spacing:.14em;opacity:.7;background:rgba(0,0,0,.5);padding:4px 6px;border:1px solid rgba(255,255,255,.15);border-radius:6px}
+  #toast{position:fixed;bottom:60px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.9);border:1px solid rgba(255,255,255,.25);padding:8px 14px;border-radius:10px;font-size:13px;font-weight:600;display:none;z-index:12}
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+<div id="hud">
+  <div id="viewHUD">STACK VIEW</div>
+  <!-- Bottom-right transport/views (keeps center clear) -->
+  <div id="bottomPad">
+    <div class="mini" data-btn="play">▶</div>
+    <div class="mini" data-btn="view">◎</div>
+    <div class="mini" data-btn="fit">□</div>
+    <div class="mini" data-btn="pack">♪</div>
+  </div>
+  <!-- Right-edge density dock -->
+  <div id="dockRight"></div>
+  <div id="dockLabel">GRID</div>
+</div>
+<div id="toast"></div>
+<script>
+(async function(){
+  // Load THREE if needed
+  if(!window.THREE){
+    const CDNs=['https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js','https://unpkg.com/three@0.152.2/build/three.min.js'];
+    for(const src of CDNs){try{await new Promise((res,rej)=>{const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=rej;document.head.appendChild(s)}); if(window.THREE) break;}catch(e){}}
+  }
+
+  const canvas=document.getElementById('canvas');
+  const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
+  renderer.setSize(innerWidth,innerHeight);
+  renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
+  const scene=new THREE.Scene(); 
+  scene.background=new THREE.Color(0x000000);
+  scene.fog=new THREE.Fog(0x000000, 100, 400);
+  const camera=new THREE.PerspectiveCamera(58, innerWidth/innerHeight, .1, 4000); 
+  camera.position.set(0,80,180);
+  const camTarget=new THREE.Vector3(0,15,0);
+  function fitLook(){camera.lookAt(camTarget);} fitLook();
+  addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+
+  // Lighting
+  scene.add(new THREE.AmbientLight(0xffffff,.25));
+  const key=new THREE.PointLight(0x66ddff,1.4,900); key.position.set(0,150,200); scene.add(key);
+  const warm=new THREE.PointLight(0xffaa66,.9,800); warm.position.set(160,90,-140); scene.add(warm);
+  const rim=new THREE.DirectionalLight(0xffffff,.6); rim.position.set(-140,180,-50); scene.add(rim);
+
+  // HUD helpers
+  const viewHUD=document.getElementById('viewHUD');
+  const toastEl=document.getElementById('toast');
+  function toast(t){toastEl.textContent=t;toastEl.style.display='block';clearTimeout(toast._id);toast._id=setTimeout(()=>toastEl.style.display='none',1500);}
+
+  // ===== UNIVERSAL STACK MAKER =====
+  function makeStack(color, layers=8, spacing=0.6, size=2.8, shape='plane'){
+    const g=new THREE.Group();
+    g.userData.layers=layers; g.userData.spacing=spacing; g.userData.color=color; g.userData.size=size;
+    for(let i=0;i<layers;i++){
+      let geo; if(shape==='square') geo=new THREE.BoxGeometry(size,0.2,size);
+      else if(shape==='ring') geo=new THREE.TorusGeometry(size/2.5, size/12, 8, 16);
+      else geo=new THREE.PlaneGeometry(size,size);
+      const mat=new THREE.MeshStandardMaterial({color,transparent:true,opacity:0.18,roughness:.5,metalness:.15,side:THREE.DoubleSide,depthWrite:false});
+      const m=new THREE.Mesh(geo,mat); if(shape==='plane') m.rotation.x=-Math.PI/2; m.position.y=i*spacing;
+      m.material.emissive=new THREE.Color(color); m.material.emissiveIntensity=.1; g.add(m);
+    }
+    g.userData.pulse=(level)=>{const L=g.children.length;for(let i=0;i<L;i++){const p=g.children[i];const on=i<Math.ceil(level*L);p.material.opacity=on?0.8:0.15;p.material.emissiveIntensity=on?1.0:0.08;p.scale.set(on?1.08:1,1,on?1.08:1);} if(level>0){const s=1+level*0.18; g.scale.set(s,1,s); setTimeout(()=>g.scale.set(1,1,1),80);}};
+    g.userData.set=(level)=>{const L=g.children.length;for(let i=0;i<L;i++){const p=g.children[i];const on=i<Math.ceil(level*L);p.material.opacity=on?0.65:0.12;p.material.emissiveIntensity=on?0.7:0.08;}};
+    g.userData.set(0); return g;
+  }
+
+  function mkSprite(text){ const cvs=document.createElement('canvas'); const s=256; cvs.width=cvs.height=s; const ctx=cvs.getContext('2d'); ctx.clearRect(0,0,s,s); ctx.fillStyle='white'; ctx.font='bold 56px Inter, system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.shadowColor='rgba(0,0,0,0.7)'; ctx.shadowBlur=16; ctx.fillText(text,s/2,s/2); const tex=new THREE.CanvasTexture(cvs); const mat=new THREE.SpriteMaterial({map:tex,transparent:true,depthWrite:false}); const spr=new THREE.Sprite(mat); spr.scale.set(6,6,1); return spr; }
+
+  // ===== GRID (dynamic density) =====
+  const instruments=['Kick','Snr','Hat','Bass','Chord','Lead','Perc','FX'];
+  const colors=[0xff8844,0xff6688,0xffff66,0x66ffcc,0x99bbff,0xc47dff,0x88ffaa,0xffffff];
+  const shapes=['square','square','ring','plane','plane','plane','plane','plane'];
+  const GRID={group:new THREE.Group(),cells:[],gapX:8,gapZ:9,originX:0,originZ:0,cursor:null,labels:[],rows:8,cols:16};
+  scene.add(GRID.group);
+
+  // Pattern is [rows][cols] with velocity 0..3
+  let pattern=[]; function allocPattern(rows,cols){ pattern=Array.from({length:rows},()=>Array(cols).fill(0)); }
+
+  function buildGrid(){
+    GRID.cells=[]; GRID.labels=[]; while(GRID.group.children.length) GRID.group.remove(GRID.group.children[0]);
+    const startX=-(GRID.cols-1)*GRID.gapX/2; const startZ=-(GRID.rows-1)*GRID.gapZ/2; GRID.originX=startX; GRID.originZ=startZ;
+    for(let r=0;r<GRID.rows;r++){
+      const row=[]; for(let c=0;c<GRID.cols;c++){
+        const stack=makeStack(colors[r], 8, 0.55, 2.6, shapes[r]);
+        stack.position.set(startX + c*GRID.gapX, 0, startZ + r*GRID.gapZ);
+        stack.userData.type='cell'; stack.userData.row=r; stack.userData.col=c; stack.userData.vel=0; row.push(stack); GRID.group.add(stack);
+      } GRID.cells.push(row);
+    }
+    const cursorGeo=new THREE.PlaneGeometry(3.5, GRID.rows*GRID.gapZ + 5);
+    const cursorMat=new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0.12,side:THREE.DoubleSide});
+    GRID.cursor=new THREE.Mesh(cursorGeo, cursorMat); GRID.cursor.rotation.x=-Math.PI/2; GRID.cursor.position.set(startX, 0.3, 0); GRID.group.add(GRID.cursor);
+    for(let r=0;r<GRID.rows;r++){ const lbl=mkSprite(instruments[r]); lbl.scale.set(5,5,1); lbl.position.set(startX-10, 7, startZ + r*GRID.gapZ); lbl.userData.row=r; GRID.labels.push(lbl); GRID.group.add(lbl);}  
+  }
+
+  function setCell(r,c,vel){ if(!GRID.cells[r]||!GRID.cells[r][c]) return; pattern[r][c]=vel; GRID.cells[r][c].userData.vel=vel; GRID.cells[r][c].userData.set(vel/3); }
+
+  // ===== ROW CONTROLLERS (world left) =====
+  const ROWCTL={group:new THREE.Group(),rows:[]}; scene.add(ROWCTL.group);
+  function buildRowControllers(){ ROWCTL.rows=[]; while(ROWCTL.group.children.length) ROWCTL.group.remove(ROWCTL.group.children[0]);
+    const startX=GRID.originX - 28; const startZ=GRID.originZ; const ctlDefs=[
+      {key:'en',color:0xffffff,label:'EN'}, {key:'lvl',color:0x59e0ff,label:'LV'}, {key:'send',color:0xc47dff,label:'SD'},
+      {key:'width',color:0x7da1ff,label:'WD'}, {key:'prob',color:0xffa44d,label:'PR'}, {key:'shape',color:0xff6688,label:'SH'}
+    ];
+    for(let r=0;r<GRID.rows;r++){
+      const rowObj={stacks:{},params:{en:1,lvl:0.7,send:0.2,width:0.5,prob:1.0,shape:0.6,sync:true,swing:0,octave:0,chorus:0.1,evo:false}};
+      const baseZ=startZ + r*GRID.gapZ; const gap=4;
+      ctlDefs.forEach((def,i)=>{ const stack=makeStack(def.color,6,0.5,2.2); stack.position.set(startX - i*gap,0,baseZ); stack.userData.type='rowctl'; stack.userData.row=r; stack.userData.key=def.key; rowObj.stacks[def.key]=stack; ROWCTL.group.add(stack); const lbl=mkSprite(def.label); lbl.scale.set(2.5,2.5,1); lbl.position.set(stack.position.x,4.5,baseZ); ROWCTL.group.add(lbl); });
+      Object.entries(rowObj.stacks).forEach(([k,s])=>{const v=rowObj.params[k]; s.userData.set(typeof v==='boolean'?(v?1:0):v)});
+      ROWCTL.rows.push(rowObj);
+    }
+  }
+
+  // ===== FLOATING (advanced per-row) =====
+  const FLOATING={group:new THREE.Group(),active:false,row:-1,stacks:{},spinSpeed:0.005}; scene.add(FLOATING.group);
+  function buildFloatingStacks(){ while(FLOATING.group.children.length) FLOATING.group.remove(FLOATING.group.children[0]); FLOATING.stacks={};
+    const defs=[{key:'sync',color:0xffffff,label:'SYNC'},{key:'swing',color:0x9ad7ff,label:'SWING'},{key:'oct',color:0x66ffaa,label:'OCT'},{key:'chor',color:0xffcc55,label:'CHOR'},{key:'evo',color:0xc47dff,label:'EVO'}];
+    const radius=18; const angleStep=(Math.PI*2)/defs.length;
+    defs.forEach((def,i)=>{const angle=i*angleStep; const x=Math.cos(angle)*radius; const z=Math.sin(angle)*radius; const stack=makeStack(def.color,8,0.6,3.2); stack.position.set(x,12,z); stack.userData.type='floating'; stack.userData.key=def.key; stack.userData.baseAngle=angle; FLOATING.stacks[def.key]=stack; FLOATING.group.add(stack); const lbl=mkSprite(def.label); lbl.scale.set(4,4,1); lbl.position.set(x,18,z); FLOATING.group.add(lbl);});
+    FLOATING.group.visible=false;
+  }
+  function showFloating(row){ FLOATING.active=true; FLOATING.row=row; FLOATING.group.visible=true; FLOATING.group.position.set(0,20,0); const p=ROWCTL.rows[row].params; FLOATING.stacks.sync.userData.set(p.sync?1:0); FLOATING.stacks.swing.userData.set((p.swing+1)/2); FLOATING.stacks.oct.userData.set((p.octave+2)/4); FLOATING.stacks.chor.userData.set(p.chorus); FLOATING.stacks.evo.userData.set(p.evo?1:0); toast('Row '+(row+1)+' extended controls'); }
+  function hideFloating(){ FLOATING.active=false; FLOATING.row=-1; FLOATING.group.visible=false; }
+
+  // ===== AUDIO =====
+  let AC=null, master=null, reverb=null, wet=null, dry=null; const laneFX=[]; let activeVoices=[];
+  async function audioInit(){ if(AC) return true; try{ const C=window.AudioContext||window.webkitAudioContext; if(!C){toast('Audio unsupported');return false;} AC=new C(); master=AC.createGain(); master.gain.value=.18; master.connect(AC.destination); reverb=AC.createConvolver(); reverb.buffer=(function IR(sec=2.2,decay=3){const rate=AC.sampleRate; const len=rate*sec; const buf=AC.createBuffer(2,len,rate); for(let ch=0;ch<2;ch++){const d=buf.getChannelData(ch); for(let i=0;i<len;i++){d[i]=(Math.random()*2-1)*Math.pow(1-i/len,decay);}} return buf;})(); wet=AC.createGain(); dry=AC.createGain(); wet.gain.value=.18; dry.gain.value=.82; wet.connect(reverb).connect(master); dry.connect(master); return true; }catch(e){console.error(e); toast('Audio init failed'); return false;}}
+  function mkEnv(){ const e=AC.createGain(); e.gain.value=0; return e; } function mkFilter(type='lowpass'){ const f=AC.createBiquadFilter(); f.type=type; f.frequency.value=1200; f.Q.value=0.8; return f; } function noiseBuf(){ const b=AC.createBuffer(1, AC.sampleRate*1, AC.sampleRate); const d=b.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1; return b; }
+  function laneProcessors(){ const lanes=[]; for(let i=0;i<GRID.rows;i++){ const sat=AC.createWaveShaper(); const curve=new Float32Array(512); for(let j=0;j<512;j++){ const x=j/511*2-1; curve[j]=Math.tanh(2.5*x);} sat.curve=curve; const laneDry=AC.createGain(); const laneWet=AC.createGain(); laneWet.gain.value=.2; laneDry.gain.value=.8; const pan=AC.createStereoPanner(); pan.pan.value=0; const pre=AC.createGain(); pre.connect(sat); sat.connect(laneDry).connect(dry); sat.connect(laneWet).connect(wet); laneDry.connect(pan).connect(master); laneWet.connect(pan).connect(master); lanes.push({pre,sat,laneDry,laneWet,pan}); } return lanes; }
+  function buildKick(dest){ const o=AC.createOscillator(); o.type='sine'; const g=mkEnv(); const f=mkFilter('lowpass'); o.connect(f).connect(g).connect(dest.pre); o.start(); return {start(v){ const t=AC.currentTime; o.frequency.setValueAtTime(120,t); o.frequency.exponentialRampToValueAtTime(40,t+0.08); g.gain.cancelScheduledValues(t); g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.9*Math.min(1,v/2), t+0.005); g.gain.exponentialRampToValueAtTime(0.0001, t+0.28); }}}
+  function buildSnare(dest){ const n=AC.createBufferSource(); n.buffer=noiseBuf(); n.loop=true; const g=mkEnv(); const hp=mkFilter('highpass'); hp.frequency.value=1800; n.connect(hp).connect(g).connect(dest.pre); n.start(); return {start(v){ const t=AC.currentTime; g.gain.cancelScheduledValues(t); g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.7*(v/3+0.5), t+0.005); g.gain.exponentialRampToValueAtTime(0.0001, t+0.18); }}}
+  function buildHat(dest){ const n=AC.createBufferSource(); n.buffer=noiseBuf(); n.loop=true; const g=mkEnv(); const hp=mkFilter('highpass'); hp.frequency.value=6000; n.connect(hp).connect(g).connect(dest.pre); n.start(); return {start(v){ const t=AC.currentTime; g.gain.cancelScheduledValues(t); g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.4*(0.5+v/3), t+0.002); g.gain.exponentialRampToValueAtTime(0.0001, t+0.06); }}}
+  function buildMono(dest,osc='sawtooth'){ const o=AC.createOscillator(); o.type=osc; const f=mkFilter('lowpass'); const g=mkEnv(); o.connect(f).connect(g).connect(dest.pre); o.start(); return {o,f,g,start(freq,vel=.6,decay=.2,shape=0.6){ const t=AC.currentTime; o.frequency.setTargetAtTime(freq,t,0.02); const bright=800 + 2600*shape; f.frequency.setTargetAtTime(bright,t,0.03); g.gain.cancelScheduledValues(t); g.gain.setValueAtTime(g.gain.value,t); g.gain.linearRampToValueAtTime(vel, t+0.01); g.gain.exponentialRampToValueAtTime(0.0001, t+decay); }}}
+  function buildChord(dest){ const gain=mkEnv(); gain.connect(dest.pre); const make=(det=0)=>{ const o=AC.createOscillator(); o.type='triangle'; o.detune.value=det; const f=mkFilter('lowpass'); o.connect(f).connect(gain); o.start(); return {o,f}; }; const a=make(-7), b=make(0), c=make(7); return {start(rootHz,vel=.4,shape=0.6){ const t=AC.currentTime; const thirds=[0,3,4]; const r=rootHz; const fA=r*Math.pow(2,thirds[0]/12); const fB=r*Math.pow(2,7/12); a.o.frequency.setTargetAtTime(fA,t,0.02); b.o.frequency.setTargetAtTime(r,t,0.02); c.o.frequency.setTargetAtTime(fB,t,0.02); [a.f,b.f,c.f].forEach(f=>f.frequency.setTargetAtTime(900+shape*1800,t,0.04)); const g=gain; g.gain.cancelScheduledValues(t); g.gain.setValueAtTime(g.gain.value,t); g.gain.linearRampToValueAtTime(vel, t+0.03); g.gain.exponentialRampToValueAtTime(0.0001, t+0.5); }}}
+  function buildVoices(){ if(!AC||activeVoices.length) return; const fx=laneProcessors(); for(let i=0;i<GRID.rows;i++){ laneFX[i]=fx[i]; }
+    activeVoices=[ buildKick(laneFX[0]), buildSnare(laneFX[1]), buildHat(laneFX[2]), buildMono(laneFX[3],'sawtooth'), buildChord(laneFX[4]), buildMono(laneFX[5],'square'), buildMono(laneFX[6],'triangle'), buildMono(laneFX[7],'sine') ]; }
+
+  // ===== TONE PACKS =====
+  const PACKS=[{name:'TAPE', bass:'sawtooth', lead:'triangle', perc:'square'},{name:'FM', bass:'square',lead:'square',perc:'square'},{name:'GRAN',bass:'triangle',lead:'sine',perc:'triangle'},{name:'BIT',bass:'square',lead:'sawtooth',perc:'square'}];
+  let packIdx=0; function applyPack(i){ packIdx=((i%PACKS.length)+PACKS.length)%PACKS.length; const P=PACKS[packIdx]; if(activeVoices[3]?.o) activeVoices[3].o.type=P.bass; if(activeVoices[5]?.o) activeVoices[5].o.type=P.lead; if(activeVoices[6]?.o) activeVoices[6].o.type=P.perc; toast('Pack: '+P.name); }
+
+  // ===== HARMONY =====
+  const scales={major:[0,2,4,5,7,9,11], minor:[0,2,3,5,7,8,10], dorian:[0,2,3,5,7,9,10]};
+  let root=50; let scaleName='dorian'; let progression=[0,3,4,5];
+  const degreeToFreq=(deg,oct=0)=>{ const arr=scales[scaleName]; const idx=((deg%arr.length)+arr.length)%arr.length; const semi=arr[idx]+12*oct; return 440*Math.pow(2,((root-69)+semi)/12); };
+
+  // ===== SEQUENCER =====
+  let bpm=116; let playing=false; let step=0; let progressionIdx=0;
+  function startClock(){ let last=performance.now(); (function loop(){ const beat=60000/bpm; const stepDur=beat/4; const now=performance.now(); if(playing && AC && AC.state==='running'){ if(now-last>=stepDur){ last=now; tick(); } } requestAnimationFrame(loop); })(); }
+  function moveCursor(){ const x0=GRID.originX; if(GRID.cursor) GRID.cursor.position.x = x0 + step*GRID.gapX; }
+  function shouldFire(row){ const params=ROWCTL.rows[row].params; if(params.en < 0.5) return false; return Math.random() <= params.prob; }
+  function trig(row,vel){ if(!activeVoices.length) return; const params=ROWCTL.rows[row].params; const lvl=params.lvl; const send=params.send; const width=(params.width-0.5)*2; const shape=params.shape; const octAdj=Math.round((params.octave*2)-2); laneFX[row].laneWet.gain.setTargetAtTime(send, AC.currentTime, 0.05); laneFX[row].laneDry.gain.setTargetAtTime(1-send, AC.currentTime, 0.05); laneFX[row].pan.pan.setTargetAtTime((row-3.5)/3.5 * width, AC.currentTime, 0.05); const V=Math.max(0,Math.min(3,vel))/3; const velGain=0.2+0.8*V; const rowGain=0.15+0.85*lvl; const vfinal=velGain*rowGain; if(GRID.cells[row] && GRID.cells[row][step]) GRID.cells[row][step].userData.pulse(V); const degShift = (params.sync? 0 : Math.round(params.swing*2)); switch(row){ case 0: activeVoices[0].start(1+V*2); break; case 1: activeVoices[1].start(1+V*2); break; case 2: activeVoices[2].start(1+V*2); break; case 3: { const deg=(step%4)*2 + (progression[progressionIdx%progression.length]) + degShift; const f=degreeToFreq(deg, -1+octAdj); activeVoices[3].start(f*(1+params.chorus*0.02), vfinal, 0.18+0.04*V, shape); } break; case 4: { const deg=progression[progressionIdx%progression.length] + degShift; const f=degreeToFreq(deg, 0+octAdj); activeVoices[4].start(f, vfinal, shape); } break; case 5: { const deg=(step%7) + degShift; const f=degreeToFreq(deg, 1+octAdj); activeVoices[5].start(f*(1-params.chorus*0.02), vfinal, 0.16+0.05*V, shape); } break; case 6: { const deg=((step*3)%5) + degShift; const f=degreeToFreq(deg, 0+octAdj); activeVoices[6].start(f, vfinal, 0.1+0.05*V, shape); } break; case 7: { const f=degreeToFreq((step%5) + degShift, 2+octAdj); activeVoices[7].start(f, vfinal, 0.2, shape); } break; }
+  }
+  function tick(){ if(megaMode){ // Rotate blade around mega stack (visual only)
+      megaAngle=(megaAngle+1)%64; const a=(megaAngle/64)*Math.PI*2; if(MEGA.blade) { MEGA.blade.position.x=Math.cos(a)*6; MEGA.blade.position.z=Math.sin(a)*6; }
+      // Fire rhythmic pulse from mega (drum-like)
+      const k=[0,8,16,24].includes(megaAngle%32); const s=[12,28].includes(megaAngle%32); if(k && shouldFire(0)) activeVoices[0]?.start(1.2); if(s && shouldFire(1)) activeVoices[1]?.start(1.1);
+      return; }
+    step=(step+1)%GRID.cols; if(step%4===0) progressionIdx=(progressionIdx+1)%progression.length; moveCursor(); for(let r=0;r<GRID.rows;r++){ const v=pattern[r][step]||0; if(v>0 && shouldFire(r)) trig(r,v); } }
+
+  // ===== INTERACTION =====
+  const ray=new THREE.Raycaster(); const v2=new THREE.Vector2();
+  function pickAt(x,y){ v2.x=(x/innerWidth)*2-1; v2.y=-(y/innerHeight)*2+1; ray.setFromCamera(v2,camera); const targets=[]; GRID.cells.forEach(row=>row.forEach(s=>targets.push(...s.children))); Object.values(ROWCTL.rows).forEach(r=>{Object.values(r.stacks).forEach(s=>targets.push(...s.children));}); if(FLOATING.active){ Object.values(FLOATING.stacks).forEach(s=>targets.push(...s.children)); } return ray.intersectObjects(targets); }
+  let pressTimer=null; let pressedStack=null; let draggingStack=null; let dragStartY=0; let dragStartVal=0;
+  canvas.addEventListener('pointerdown',e=>{ const hits=pickAt(e.clientX,e.clientY); if(!hits.length) return; const parent=hits[0].object.parent; const type=parent.userData.type; if(type==='cell'){ pressedStack=parent; const r=parent.userData.row; pressTimer=setTimeout(()=>{ showFloating(r); pressTimer=null; }, 400); return; } if(type==='rowctl'){ draggingStack=parent; dragStartY=e.clientY; const key=parent.userData.key; const row=parent.userData.row; dragStartVal=ROWCTL.rows[row].params[key]; return; } if(type==='floating'){ draggingStack=parent; dragStartY=e.clientY; dragStartVal=FLOATING.stacks[parent.userData.key].userData.val || 0; return; } });
+  addEventListener('pointermove',e=>{ if(draggingStack){ const dy=dragStartY-e.clientY; let newVal=Math.max(0,Math.min(1, dragStartVal + dy/200)); if(draggingStack.userData.type==='rowctl'){ const key=draggingStack.userData.key; const row=draggingStack.userData.row; if(key==='en'){ newVal = newVal > 0.5 ? 1 : 0; } ROWCTL.rows[row].params[key]=newVal; draggingStack.userData.set(newVal); }
+    if(draggingStack.userData.type==='floating'){ const key=draggingStack.userData.key; const row=FLOATING.row; if(key==='sync'){ const sync = newVal > 0.5; ROWCTL.rows[row].params.sync = sync; newVal = sync ? 1 : 0; } else if(key==='swing'){ ROWCTL.rows[row].params.swing = newVal*2-1; } else if(key==='oct'){ ROWCTL.rows[row].params.octave = newVal; } else if(key==='chor'){ ROWCTL.rows[row].params.chorus = newVal; } else if(key==='evo'){ const evo = newVal > 0.5; ROWCTL.rows[row].params.evo = evo; newVal = evo ? 1 : 0; } draggingStack.userData.set(newVal); }
+  }});
+  addEventListener('pointerup',()=>{ if(pressedStack){ clearTimeout(pressTimer); if(pressTimer !== null && !megaMode){ const r=pressedStack.userData.row; const c=pressedStack.userData.col; let v=pattern[r][c]; v = (v+1)%4; setCell(r,c,v); toast('R'+(r+1)+' C'+(c+1)+' vel:'+v); } pressedStack=null; pressTimer=null; } draggingStack=null; });
+
+  // ===== CAMERA DRAG (keeps bottom-center clear because controls are bottom-right) =====
+  let draggingCam=null; canvas.addEventListener('pointerdown',e=>{ if(e.target !== canvas) return; draggingCam={x:e.clientX,y:e.clientY,startPos:camera.position.clone()}; });
+  addEventListener('pointermove',e=>{ if(!draggingCam) return; const dx=(e.clientX-draggingCam.x)*0.3; const dy=(e.clientY-draggingCam.y)*0.3; camera.position.x=draggingCam.startPos.x - dx; camera.position.y=Math.max(20, draggingCam.startPos.y + dy); fitLook(); });
+  addEventListener('pointerup',()=>{ draggingCam=null; });
+
+  // ===== VIEWS =====
+  const VIEWS=[{name:'GRID', pos:[0,80,180], target:[0,15,0]},{name:'TOP', pos:[0,200,0.1], target:[0,0,0]},{name:'SIDE', pos:[150,60,0], target:[0,15,0]},{name:'CLOSE', pos:[0,40,100], target:[0,15,0]}];
+  let viewIdx=0; function applyView(){ const v=VIEWS[viewIdx%VIEWS.length]; camera.position.set(...v.pos); camTarget.set(...v.target); fitLook(); viewHUD.textContent=v.name; if(FLOATING.active) hideFloating(); }
+
+  // ===== PRESET PATTERN =====
+  function loadBasicPattern(){ for(let r=0;r<GRID.rows;r++){ for(let c=0;c<GRID.cols;c++){ let v=0; if(r===0 && c%4===0) v=2; if(r===1 && c%8===4) v=2; if(r===2 && c%2===1) v=1; if(r===3 && c%2===0) v=1; if(r===4 && c%4===0) v=1; setCell(r,c,v); } } toast('Basic pattern loaded'); }
+
+  // ===== HUD DENSITY DOCK (RIGHT EDGE) =====
+  const densities=[16,8,4,2,1]; let densityIdx=0; let megaMode=false;
+  const dockRight=document.getElementById('dockRight');
+  function renderDock(){ dockRight.innerHTML=''; densities.forEach((val,i)=>{ const el=document.createElement('div'); el.className='stackHUD'+(i===densityIdx?' active':''); const levels=document.createElement('div'); levels.className='levels'; const lit=Math.max(1, Math.round((i+1)*2)); for(let j=0;j<10;j++){ const cell=document.createElement('div'); cell.className='cell'+(j<lit?' lit':''); levels.appendChild(cell);} el.appendChild(levels); el.title = (val===1? 'MEGA' : (val+' steps')); el.addEventListener('pointerdown',()=>setDensity(i)); dockRight.appendChild(el); }); }
+  function setDensity(i){ densityIdx=((i%densities.length)+densities.length)%densities.length; Array.from(dockRight.children).forEach((n,idx)=>n.classList.toggle('active', idx===densityIdx)); const steps=densities[densityIdx]; if(steps===1){ enterMegaMode(); } else { if(megaMode) exitMegaMode(); regridTo(steps); toast('Grid: '+steps+' steps'); } }
+
+  function preserveInto(newCols){ const newPat=Array.from({length:GRID.rows},()=>Array(newCols).fill(0)); const copyCols=Math.min(GRID.cols,newCols); for(let r=0;r<GRID.rows;r++){ for(let c=0;c<copyCols;c++){ newPat[r][c]=pattern[r][c]; } } return newPat; }
+  function regridTo(cols){ const preserved=preserveInto(cols); GRID.cols=cols; buildGrid(); buildRowControllers(); allocPattern(GRID.rows, GRID.cols); for(let r=0;r<GRID.rows;r++){ for(let c=0;c<GRID.cols;c++){ setCell(r,c,preserved[r][c]); } } step=0; moveCursor(); }
+
+  // ===== MEGA MODE (1×1 performance stack) =====
+  const MEGA={group:new THREE.Group(),stack:null,blade:null}; let megaAngle=0; function buildMega(){ while(MEGA.group.children.length) MEGA.group.remove(MEGA.group.children[0]); const big=makeStack(0xffffff, 22, 0.7, 6.0, 'ring'); MEGA.stack=big; big.position.set(0,0,0); MEGA.group.add(big); const bladeGeo=new THREE.CylinderGeometry(0.2,0.2, GRID.rows*GRID.gapZ + 12, 8); const bladeMat=new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.2}); const blade=new THREE.Mesh(bladeGeo, bladeMat); blade.rotation.x=-Math.PI/2; blade.position.set(6,1,0); MEGA.blade=blade; MEGA.group.add(blade); MEGA.group.visible=false; scene.add(MEGA.group); }
+  function enterMegaMode(){ megaMode=true; GRID.group.visible=false; if(!MEGA.stack) buildMega(); MEGA.group.visible=true; toast('MEGA stack'); }
+  function exitMegaMode(){ megaMode=false; MEGA.group.visible=false; GRID.group.visible=true; toast('Grid mode'); }
+
+  // ===== BOTTOM PAD =====
+  const pad=document.getElementById('bottomPad'); let started=false;
+  pad.querySelectorAll('.mini').forEach(b=>{ b.addEventListener('pointerdown',async ()=>{ const k=b.getAttribute('data-btn'); if(k==='play'){ if(!started){ const ok=await audioInit(); if(!ok) return; try{ if(AC.state==='suspended') await AC.resume(); }catch{} buildVoices(); started=true; startClock(); playing=true; loadBasicPattern(); toast('▶ Playing'); b.textContent='⏸'; } else { playing=!playing; toast(playing?'▶ Play':'⏸ Pause'); b.textContent=playing?'⏸':'▶'; } }
+      if(k==='view'){ viewIdx++; applyView(); }
+      if(k==='fit'){ viewIdx=0; applyView(); }
+      if(k==='pack'){ applyPack(++packIdx); }
+    }); });
+
+  // ===== INIT =====
+  allocPattern(GRID.rows, GRID.cols); buildGrid(); buildRowControllers(); buildFloatingStacks(); buildMega(); renderDock();
+
+  // ===== ANIMATE =====
+  function animate(){ requestAnimationFrame(animate); if(FLOATING.active){ FLOATING.group.rotation.y += FLOATING.spinSpeed; Object.values(FLOATING.stacks).forEach(stack=>{ stack.rotation.y += 0.01; }); } renderer.render(scene,camera); }
+  animate();
+
+  console.log('🥞 v20 — Everything Is A Stack (HUD Density + Mega Mode)');
+})();
+</script>
+</body>
+</html>

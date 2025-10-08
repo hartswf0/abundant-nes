@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>SEA SEQUENCER — Master Alley • Whale • Sand/Chladni (v2.2 ES5 Shader‑Fix)</title>
+<style>
+  :root{
+    --bg:#00111d; --fg:#eaf7ff; --muted:#91a8b0; --line:rgba(255,255,255,.14);
+    --glass:rgba(4,20,32,.72); --accent:#29ffd5; --accent2:#6bc7ff; --accent3:#b19cff;
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;overflow:hidden}
+
+  /* Stage */
+  #stage{position:fixed;inset:0}
+  canvas#board{position:absolute;inset:0;display:block;width:100%;height:100%}
+
+  /* Master Alley (thin, looping) */
+  #alley{position:fixed;top:0;bottom:0;left:0;width:64px;display:flex;flex-direction:column;align-items:center;gap:8px;padding:10px 6px 10px 6px;z-index:10;pointer-events:auto}
+  #alley::before{content:"";position:absolute;top:0;bottom:0;left:0;right:0;background:linear-gradient(180deg,rgba(20,120,160,.25),rgba(10,40,70,.18));backdrop-filter:blur(10px);border-right:1px solid var(--line)}
+  .slot{position:relative;width:52px;height:52px;border-radius:14px;border:1px solid var(--line);background:rgba(0,0,0,.35);display:grid;place-items:center;font-size:22px;cursor:pointer;z-index:1; color:#cfefff}
+  .slot:active{transform:translateY(1px)}
+  .slot .led{position:absolute;inset:0;border-radius:14px;box-shadow:0 0 0 rgba(0,0,0,0);opacity:.0;pointer-events:none}
+  .slot[data-focus="1"]{outline:2px solid var(--accent)}
+
+  /* Global cluster */
+  #gcluster{margin-top:auto;display:grid;grid-template-columns:1fr 1fr;gap:8px;width:52px;z-index:1}
+  .mini{width:52px;height:36px;border-radius:10px;border:1px solid var(--line);background:rgba(0,0,0,.35);display:grid;place-items:center;font-size:18px;cursor:pointer;color:#e8fdff}
+
+  /* Top HUD (glyph pills) */
+  #hud{position:fixed;top:8px;left:50%;transform:translateX(-50%);display:flex;gap:8px;z-index:9}
+  .pill{height:28px;min-width:28px;border-radius:999px;border:1px solid var(--line);background:rgba(0,0,0,.35);display:flex;align-items:center;gap:8px;padding:0 10px;font-size:14px}
+
+  /* Sub‑Alley Deck (symbol only) */
+  #deck{position:fixed;left:0;right:0;bottom:0;transform:translateY(110%);transition:transform .22s ease;z-index:12}
+  #deck.show{transform:translateY(0%)}
+  #deck .panel{margin:0 auto;background:rgba(3,18,28,.92);border:1px solid var(--line);border-top-left-radius:18px;border-top-right-radius:18px;max-width:880px;padding:10px 12px calc(12px + var(--safe-bottom));backdrop-filter:blur(8px)}
+  #deck .gr{display:grid;grid-template-columns:repeat(8,1fr);gap:10px}
+  .gbtn{height:44px;border-radius:12px;border:1px solid var(--line);background:rgba(0,0,0,.35);display:grid;place-items:center;font-size:18px;cursor:pointer;color:#e8fdff}
+  .knob{height:44px;border-radius:12px;border:1px solid var(--line);background:linear-gradient(90deg,rgba(255,255,255,.08),rgba(255,255,255,.02));display:flex;align-items:center;padding:0 10px}
+  .knob input[type=range]{-webkit-appearance:none;appearance:none;width:100%}
+  .knob input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none;appearance:none;width:22px;height:22px;border-radius:50%;background:var(--accent);border:1px solid var(--line)}
+  .knob .sym{width:28px;text-align:center;font-size:16px;margin-right:8px}
+
+  /* Toast */
+  #toast{position:fixed;bottom:10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.86);border:1px solid var(--line);padding:6px 10px;border-radius:10px;font-size:12px;display:none;z-index:15}
+
+  #scrim{position:fixed;inset:0;display:none;z-index:11}
+  #scrim.show{display:block}
+</style>
+</head>
+<body>
+  <div id="stage">
+    <canvas id="board" aria-hidden="false"></canvas>
+  </div>
+
+  <!-- One‑tap Onboarding (symbol only) -->
+  <div id="onboard" style="position:fixed;inset:0;display:grid;place-items:center;background:linear-gradient(180deg, rgba(0,17,29,.96), rgba(0,17,29,.86));z-index:20">
+    <button id="startBig" aria-label="Start" style="width:160px;height:160px;border-radius:999px;border:1px solid rgba(255,255,255,.18);background:radial-gradient(circle at 50% 45%, rgba(41,255,213,.22), rgba(41,255,213,.08));box-shadow:0 10px 40px rgba(41,255,213,.15) inset;display:grid;place-items:center;font-size:46px;color:#eaf7ff;cursor:pointer">🐋▶</button>
+  </div>
+
+  <!-- Master Alley Stack (left) -->
+  <nav id="alley" aria-label="Master Alley"> (left) -->
+  <nav id="alley" aria-label="Master Alley">
+    <button class="slot" data-row="0" aria-label="Row 1"><span>◉</span><span class="led"></span></button>
+    <button class="slot" data-row="1" aria-label="Row 2"><span>◉</span><span class="led"></span></button>
+    <button class="slot" data-row="2" aria-label="Row 3"><span>◉</span><span class="led"></span></button>
+    <button class="slot" data-row="3" aria-label="Row 4"><span>◉</span><span class="led"></span></button>
+    <button class="slot" data-row="4" aria-label="Row 5"><span>◉</span><span class="led"></span></button>
+    <button class="slot" data-row="5" aria-label="Row 6"><span>◉</span><span class="led"></span></button>
+    <button class="slot" data-row="6" aria-label="Row 7"><span>◉</span><span class="led"></span></button>
+    <button class="slot" data-row="7" aria-label="Row 8"><span>◉</span><span class="led"></span></button>
+
+    <div id="gcluster">
+      <button class="mini" id="btnPlay" aria-label="Play">▶</button>
+      <button class="mini" id="btnSurf" aria-label="Surface">🌊</button>
+      <button class="mini" id="btnPackPrev" aria-label="Prev">◀</button>
+      <button class="mini" id="btnPackNext" aria-label="Next">▶</button>
+    </div>
+  </nav>
+
+  <!-- Top HUD (glyph pills) -->
+  <div id="hud">
+    <div class="pill" id="bpm">♩ 56</div>
+    <div class="pill" id="den">■×16</div>
+    <div class="pill" id="theme">🐋</div>
+  </div>
+
+  <!-- Sub‑Alley Deck (symbol only) -->
+  <div id="deck" aria-hidden="true">
+    <div class="panel">
+      <div class="gr">
+        <button class="gbtn" id="d_sync" title="sync">∞</button>
+        <button class="gbtn" id="d_evo"  title="evo">✴︎</button>
+        <div class="knob"><div class="sym">🎚️</div><input id="d_lvl" type="range" min="0" max="1" step="0.01" value="0.7"/></div>
+        <div class="knob"><div class="sym">💧</div><input id="d_send" type="range" min="0" max="1" step="0.01" value="0.35"/></div>
+        <div class="knob"><div class="sym">⚡</div><input id="d_prob" type="range" min="0" max="1" step="0.01" value="1"/></div>
+        <div class="knob"><div class="sym">↔︎</div><input id="d_width" type="range" min="0" max="1" step="0.01" value="0.5"/></div>
+        <div class="knob"><div class="sym">⟰</div><input id="d_oct" type="range" min="0" max="1" step="0.01" value="0.6"/></div>
+        <div class="knob"><div class="sym">◷</div><input id="d_swg" type="range" min="0" max="1" step="0.01" value="0.55"/></div>
+      </div>
+    </div>
+  </div>
+  <div id="scrim"></div>
+
+  <div id="toast"></div>
+
+<script>
+(function(){
+  // ===== Utilities (ES5)
+  var toastEl=document.getElementById('toast');
+  function toast(t){ toastEl.textContent=t; toastEl.style.display='block'; clearTimeout(toast._id); toast._id=setTimeout(function(){toastEl.style.display='none';},900); }
+  function hapt(ms){ if(typeof ms==='undefined') ms=10; try{ if(navigator.vibrate) navigator.vibrate(ms); }catch(e){} }
+  function qs(s,root){ if(!root) root=document; return root.querySelector(s); }
+
+  // ===== Load THREE if needed
+  if(!window.THREE){
+    var CDNs=['https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js','https://unpkg.com/three@0.152.2/build/three.min.js'];
+    var i=0; function tryNext(){ if(i>=CDNs.length){ onThreeLoaded(); return; } var s=document.createElement('script'); s.src=CDNs[i++]; s.onload=function(){ onThreeLoaded(); }; s.onerror=function(){ tryNext(); }; document.head.appendChild(s); }
+    tryNext();
+  } else { onThreeLoaded(); }
+
+  function onThreeLoaded(){ if(!window.THREE){ alert('THREE failed'); return; }
+    // ===== THREE setup
+    var cvs=document.getElementById('board');
+    var renderer=new THREE.WebGLRenderer({canvas:cvs, antialias:true});
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    var scene=new THREE.Scene(); scene.background=new THREE.Color(0x00111d); scene.fog=new THREE.Fog(0x00111d, 220, 880);
+    var camera=new THREE.PerspectiveCamera(58, window.innerWidth/window.innerHeight, 0.1, 4000); camera.position.set(180,110,220);
+    var camTarget=new THREE.Vector3(0,20,0); function fitLook(){ camera.lookAt(camTarget); } fitLook();
+
+    // Lights — deep sea blues
+    var amb=new THREE.HemisphereLight(0x2a4a6a,0x001018,0.5); scene.add(amb);
+    var key=new THREE.SpotLight(0x55d7ff, 0.8, 1200, Math.PI/6, 0.5, 1.2); key.position.set(120,260,120); scene.add(key);
+    var rim=new THREE.DirectionalLight(0x88ccff, 0.25); rim.position.set(-180,180,-140); scene.add(rim);
+
+    // ===== Sand/Chladni material (shader)
+    // NOTE: fixed two issues causing program validation failure:
+    //  1) added 'uniform float time;' to vertex shader
+    //  2) renamed uniform 'mix' -> 'mixAmt' to avoid clashing with GLSL mix() builtin
+    var sandUniforms={ time:{value:0}, colorA:{value:new THREE.Color('#0a3b57')}, colorB:{value:new THREE.Color('#29ffd5')}, mixAmt:{value:0.5} };
+    var sandMat=new THREE.ShaderMaterial({
+      uniforms:sandUniforms, transparent:true, depthWrite:true, depthTest:true, side:THREE.DoubleSide, blending:THREE.AdditiveBlending,
+      vertexShader:
+        'uniform float time; varying vec2 vUv; void main(){ vUv=uv; vec3 p=position; p.y += sin((position.x+position.z+time*40.0)*0.002)*0.6; gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.0); }',
+      fragmentShader:
+        'precision highp float; varying vec2 vUv; uniform float time; uniform vec3 colorA; uniform vec3 colorB; uniform float mixAmt;\n'+
+        'float chladni(vec2 uv){ float a=cos(uv.x*3.1415*6.0); float b=cos(uv.y*3.1415*4.0); float c=cos((uv.x+uv.y+time*0.12)*3.1415*2.0); return pow(abs(a*b*c),0.6); }\n'+
+        'void main(){ vec2 uv=vUv*2.0-1.0; float n=chladni(uv*1.0); vec3 base=mix(colorA,colorB, clamp(n*1.35*mixAmt,0.0,1.0));\n'+
+        '  float alpha=smoothstep(0.18,0.85,n)*0.95; gl_FragColor=vec4(base, alpha); }'
+    });
+
+    // ===== Grid Stacks (3D)
+    var ROWS=8, COLS_INIT=16; var COLS=COLS_INIT;
+    var rowColor=[0x0de0ff,0x29ffd5,0x6bc7ff,0xb19cff,0xffffff,0x9fd4ff,0x7ef8ff,0xc5f6ff];
+    var GRID={ gapX:10.5, gapZ:12.0, group:new THREE.Group(), cells:[], cursor:null, origin:new THREE.Vector3() };
+    scene.add(GRID.group);
+
+    function makeStack(col, layers, spacing, size){ if(typeof col==='undefined') col=0x29ffd5; if(typeof layers==='undefined') layers=12; if(typeof spacing==='undefined') spacing=0.9; if(typeof size==='undefined') size=4.2;
+      var g=new THREE.Group();
+      // base glow
+      var baseGeo=new THREE.CylinderGeometry(size*0.55, size*0.8, 0.6, 24, 1, true);
+      var baseMat=new THREE.MeshBasicMaterial({color:col, transparent:true, opacity:0.12});
+      var base=new THREE.Mesh(baseGeo, baseMat); base.position.y=0.15; g.add(base);
+      for(var i=0;i<layers;i++){
+        var geo=new THREE.PlaneGeometry(size,size,1,1);
+        var m=sandMat.clone(); m.uniforms.time=sandUniforms.time; m.uniforms.colorB.value=new THREE.Color(col);
+        var mesh=new THREE.Mesh(geo,m); mesh.rotation.x=-Math.PI/2; mesh.position.y=0.4 + i*spacing; mesh.renderOrder=2+i;
+        g.add(mesh);
+      }
+      var ringGeo=new THREE.RingGeometry(size*0.6, size*0.85, 48);
+      var ringMat=new THREE.MeshBasicMaterial({color:col, transparent:true, opacity:0.2, side:THREE.DoubleSide});
+      var ring=new THREE.Mesh(ringGeo, ringMat); ring.rotation.x=-Math.PI/2; ring.position.y=layers*spacing + 0.6; g.add(ring);
+      g.userData.pulse=function(k){ var s=1.0+0.12*k; ring.material.opacity=0.45; g.scale.set(s,1,s); setTimeout(function(){ g.scale.set(1,1,1); ring.material.opacity=0.2; },140); };
+      return g;
+    }
+
+    function buildGrid(){
+      GRID.cells.length=0; while(GRID.group.children.length) GRID.group.remove(GRID.group.children[0]);
+      var startX=-(COLS-1)*GRID.gapX/2, startZ=-(ROWS-1)*GRID.gapZ/2; GRID.origin.set(startX,0,startZ);
+      // seabed
+      var bedGeo=new THREE.PlaneGeometry(COLS*GRID.gapX+20, ROWS*GRID.gapZ+20, COLS, ROWS);
+      var bedMat=new THREE.MeshBasicMaterial({color:0x0a2130, wireframe:true, transparent:true, opacity:0.18});
+      var bed=new THREE.Mesh(bedGeo, bedMat); bed.rotation.x=-Math.PI/2; bed.position.set(0,0,0); GRID.group.add(bed);
+      for(var r=0;r<ROWS;r++){ var row=[]; for(var c=0;c<COLS;c++){ var stack=makeStack(rowColor[r]); stack.position.set(startX + c*GRID.gapX, 0, startZ + r*GRID.gapZ); stack.userData.rc=[r,c]; row.push(stack); GRID.group.add(stack); } GRID.cells.push(row); }
+      var cursorGeo=new THREE.BoxGeometry(3.6,0.6, ROWS*GRID.gapZ + 6);
+      var cursorMat=new THREE.MeshBasicMaterial({color:0xffffff, transparent:true, opacity:0.06});
+      GRID.cursor=new THREE.Mesh(cursorGeo,cursorMat); GRID.cursor.position.set(startX,0.4,0); GRID.group.add(GRID.cursor);
+    }
+    buildGrid();
+
+    // ===== Raycast picking
+    var ray=new THREE.Raycaster(); var v2=new THREE.Vector2();
+    function pick(x,y){ v2.x=(x/window.innerWidth)*2-1; v2.y=-(y/window.innerHeight)*2+1; ray.setFromCamera(v2,camera); return ray.intersectObjects(GRID.group.children,true); }
+
+    // ===== Audio — whale/sea palette
+    var AC=null, master=null, wet=null, dry=null, reverb=null; var started=false;
+    function audioInit(){ if(AC) return true; var C=window.AudioContext||window.webkitAudioContext; if(!C) return false; AC=new C(); master=AC.createGain(); master.gain.value=.22; master.connect(AC.destination); reverb=AC.createConvolver(); // simple empty IR placeholder
+      wet=AC.createGain(); dry=AC.createGain(); wet.gain.value=.35; dry.gain.value=.75; wet.connect(master); dry.connect(master); return true; }
+    function mkGain(v){ if(typeof v==='undefined') v=0; var g=AC.createGain(); g.gain.value=v; return g; }
+    function mkFilter(type,f){ if(typeof type==='undefined') type='lowpass'; if(typeof f==='undefined') f=800; var ftr=AC.createBiquadFilter(); ftr.type=type; ftr.frequency.value=f; return ftr; }
+    function whaleCall(dest,fStart,fEnd,dur,amp){ if(typeof fStart==='undefined') fStart=60; if(typeof fEnd==='undefined') fEnd=240; if(typeof dur==='undefined') dur=2.8; if(typeof amp==='undefined') amp=0.4; var o=AC.createOscillator(); o.type='sine'; var g=mkGain(0); var lfo=AC.createOscillator(); var lfoGain=mkGain(20); lfo.frequency.value=0.4+Math.random()*0.6; lfo.connect(lfoGain); lfoGain.connect(o.frequency); o.connect(g).connect(dest); var t=AC.currentTime; o.frequency.setValueAtTime(fStart,t); o.frequency.exponentialRampToValueAtTime(fEnd,t+dur*0.8); g.gain.setTargetAtTime(amp,t,0.2); g.gain.setTargetAtTime(0.0001,t+dur,0.4); o.start(); lfo.start(); setTimeout(function(){ try{o.stop(); lfo.stop();}catch(e){} }, (dur+0.5)*1000); }
+    function subDrone(dest,f,amp){ if(typeof f==='undefined') f=40; if(typeof amp==='undefined') amp=0.15; var o=AC.createOscillator(); o.type='sine'; var g=mkGain(amp); o.connect(g).connect(dest); o.start(); return {stop:function(){try{o.stop();}catch(e){}}, set:function(nf){ o.frequency.setTargetAtTime(nf, AC.currentTime, 2); }} }
+    function surfNoise(dest,amp){ if(typeof amp==='undefined') amp=0.12; var n=AC.createBufferSource(); var b=AC.createBuffer(1, AC.sampleRate*2, AC.sampleRate); var d=b.getChannelData(0); for(var i2=0;i2<d.length;i2++){ d[i2]=(Math.random()*2-1)*Math.exp(-i2/(AC.sampleRate*1.2)); } n.buffer=b; var f2=mkFilter('lowpass', 1400); var g2=mkGain(amp); n.loop=true; n.connect(f2).connect(g2).connect(dest); n.start(); return {gain:g2, filter:f2}; }
+
+    // per-row drones + noise layer
+    var laneBus=[]; var drones=[]; var surf=null;
+    function initSea(){ if(!AC) return; if(laneBus.length) return; for(var r=0;r<ROWS;r++){ var bus=mkGain(0.8); var pan=AC.createStereoPanner(); bus.connect(pan).connect(dry); laneBus[r]={bus:bus,pan:pan}; drones[r]=subDrone(bus, 28+ r*6, 0.06+ r*0.01); }
+      surf=surfNoise(dry,0.08);
+    }
+
+    // ===== Model / Sequencer
+    var step=0; var bpm=56; var COLS_TARGET=16; var playing=false; var pack=0; // packs can mod hue/timbre later
+    var EASY_MODE=true;
+    var pattern=(function(){ var a=[], r; for(r=0;r<ROWS;r++){ var row=[]; for(var c=0;c<COLS_TARGET;c++) row.push(0); a.push(row); } return a; })();
+    function seedCalm(){
+      // Gentle default: sparse triggers on 3 rows
+      for(var r=0;r<ROWS;r++){ for(var c=0;c<COLS_TARGET;c++){ pattern[r][c]=0; } }
+      var seeds=[ {r:3, step:0}, {r:4, step:8}, {r:5, step:4} ];
+      for(var i=0;i<seeds.length;i++){ var s=seeds[i]; pattern[s.r][s.step]=1; pattern[s.r][(s.step+8)%COLS_TARGET]=1; }
+    }
+    var rowState=(function(){ var a=[]; for(var r=0;r<ROWS;r++){ a.push({lvl:.7,send:.35,prob:1,width:.5,oct:.6,swg:.55,evo:false,sync:true}); } return a; })();
+    var focusRow=0;
+
+    // ===== Deck wiring (symbol only)
+    var deck=document.getElementById('deck'); var scrim=document.getElementById('scrim');
+    var d_lvl=qs('#d_lvl'), d_send=qs('#d_send'), d_prob=qs('#d_prob'), d_width=qs('#d_width'), d_oct=qs('#d_oct'), d_swg=qs('#d_swg');
+    var d_evo=qs('#d_evo'), d_sync=qs('#d_sync');
+    function showDeck(on){ deck.classList.toggle('show',!!on); deck.setAttribute('aria-hidden', on? 'false':'true'); scrim.classList.toggle('show',!!on); }
+    scrim.addEventListener('click',function(){showDeck(false);});
+    function syncDeckFromRow(){ var st=rowState[focusRow]; d_lvl.value=st.lvl; d_send.value=st.send; d_prob.value=st.prob; d_width.value=st.width; d_oct.value=st.oct; d_swg.value=st.swg; d_evo.dataset.on=st.evo?1:0; d_sync.dataset.on=st.sync?1:0; }
+    function syncRowFromDeck(){ var st=rowState[focusRow]; st.lvl=+d_lvl.value; st.send=+d_send.value; st.prob=+d_prob.value; st.width=+d_width.value; st.oct=+d_oct.value; st.swg=+d_swg.value; st.evo=!!(+d_evo.dataset.on||0); st.sync=!!(+d_sync.dataset.on||0); if(laneBus[focusRow]){ var now=AC?AC.currentTime:0; laneBus[focusRow].pan.pan.setTargetAtTime((focusRow-3.5)/3.5 * (st.width-0.5)*2, now, 0.2); } }
+    var _inputs=[d_lvl,d_send,d_prob,d_width,d_oct,d_swg]; for(var ii=0;ii<_inputs.length;ii++){ _inputs[ii].addEventListener('input',function(){ syncRowFromDeck(); hapt(4); }); }
+    d_evo.addEventListener('click',function(){ d_evo.dataset.on = d_evo.dataset.on==='1'? '0':'1'; syncRowFromDeck(); hapt(8); });
+    d_sync.addEventListener('click',function(){ d_sync.dataset.on = d_sync.dataset.on==='1'? '0':'1'; syncRowFromDeck(); hapt(8); });
+
+    // ===== Alley selection
+    var slots=(function(){ var arr=[ ]; var els=document.querySelectorAll('#alley .slot'); for(var j=0;j<els.length;j++) arr.push(els[j]); return arr; })();
+    function focus(r){ focusRow=r; for(var j=0;j<slots.length;j++){ slots[j].dataset.focus='0'; } slots[r].dataset.focus='1'; showDeck(true); syncDeckFromRow(); hapt(8); }
+    for(var sI=0;sI<slots.length;sI++){ (function(btn){ btn.addEventListener('click',function(){ var r=+btn.dataset.row; focus(r); toast('◉'+(r+1)); }); })(slots[sI]); }
+
+    // ===== Board picking (3D)
+    var cvs=document.getElementById('board');
+    cvs.addEventListener('pointerdown',function(e){ var hits=pick(e.clientX,e.clientY); if(!hits.length) return; var g=hits[0].object; while(g && !(g.parent && g.parent.userData && g.parent.userData.rc)){ g=g.parent; }
+      if(!g) return; var rc=(g.parent && g.parent.userData && g.parent.userData.rc) ? g.parent.userData.rc : [0,0]; var r=rc[0], c=rc[1]; var v=pattern[r][c]; var n=v===0?1:v===1?2:v===2?0:1; pattern[r][c]=n; if(g.parent && g.parent.userData && g.parent.userData.pulse){ g.parent.userData.pulse(n/3); } focus(r); });
+
+    // ===== Transport + HUD
+    var btnPlay=qs('#btnPlay'); var btnSurf=qs('#btnSurf'); var btnPackPrev=qs('#btnPackPrev'); var btnPackNext=qs('#btnPackNext');
+    var bpmEl=qs('#bpm'); var denEl=qs('#den'); var theme=qs('#theme');
+    function setBPM(v){ bpm=v; bpmEl.textContent='♩ '+bpm; }
+    function setDEN(v){ COLS=v; denEl.textContent='■×'+COLS; buildGrid(); }
+    theme.addEventListener('click',function(){ document.body.classList.toggle('light'); toast('🐋'); });
+    btnPackPrev.addEventListener('click',function(){ pack=(pack+2)%3; toast('◀'); });
+    btnPackNext.addEventListener('click',function(){ pack=(pack+1)%3; toast('▶'); });
+    btnSurf.addEventListener('click',function(){ sandMat.uniforms.mixAmt.value = (sandMat.uniforms.mixAmt.value>0.5?0.2:0.8); setTimeout(function(){sandMat.uniforms.mixAmt.value=0.5;},600); toast('🌊'); });
+
+    btnPlay.addEventListener('click', function(){
+      if(!started){
+        easyStart(function(){ playing=true; btnPlay.textContent='⏸'; toast('▶'); });
+        return;
+      }
+      playing=!playing; btnPlay.textContent=playing?'⏸':'▶'; toast(playing?'▶':'⏸');
+    });
+
+    // ===== Clock / Sequencer
+    var acc=0, last=performance.now();
+    function tick(){ step=(step+1)%COLS; var startX=GRID.origin.x; GRID.cursor.position.x=startX + step*GRID.gapX; for(var r=0;r<ROWS;r++){ var st=rowState[r]; var v=pattern[r][step]; if(v>0 && Math.random()<=st.prob){ if(AC){ var base=24 + r*7 + Math.round((st.oct-0.5)*12); var f0=20*Math.pow(2, base/12); var f1=f0*(1.5+0.5*Math.random()); whaleCall(laneBus[r].bus, f0, f1, 1.8+st.swg*1.2, 0.25+st.lvl*0.5); } } } }
+    function loop(){ var now=performance.now(); var dt=now-last; last=now; acc+=dt; sandMat.uniforms.time.value = now*0.001; var stepDur=(60000/bpm)/4; while(playing && acc>=stepDur){ acc-=stepDur; tick(); } renderer.render(scene,camera); requestAnimationFrame(loop); }
+    requestAnimationFrame(loop);
+
+    // ===== Resize
+    window.addEventListener('resize',function(){ camera.aspect=window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth,window.innerHeight); });
+
+    // ===== Self-tests (kept + more)
+    (function tests(){ try{ var results=[]; function ok(n,p){ results.push({test:n,pass:!!p}); }
+      ok('THREE present', !!window.THREE);
+      ok('Grid built', GRID.cells.length===ROWS && GRID.cells[0].length===COLS);
+      ok('Deck present', !!document.getElementById('deck'));
+      setDEN(16); setBPM(56); ok('cols/bpm set', COLS===16 && bpm===56);
+      ok('Shader has time', !!sandMat && !!sandMat.uniforms && sandMat.uniforms.time);
+      ok('Shader uniform rename', !!sandMat.uniforms.mixAmt && !sandMat.uniforms.mix);
+      ok('Alley slots', document.querySelectorAll('#alley .slot').length===8);
+      console.table(results); toast('Self‑tests '+(function(){var c=0; for(var i3=0;i3<results.length;i3++) if(results[i3].pass) c++; return c;})()+'/'+results.length);
+    }catch(e){ try{ console.error(e); }catch(_e){} } })();
+
+    // Defaults
+    focus(0); setDEN(16); setBPM(56);
+    seedCalm();
+  }
+    // ===== Easy start: one tap anywhere or big button
+    var onboard=document.getElementById('onboard');
+    var startBig=document.getElementById('startBig');
+    function easyStart(cb){ var ok=audioInit(); if(!ok) return; try{ if(AC.state==='suspended') AC.resume(); }catch(e){} initSea(); started=true; playing=true; if(onboard) onboard.style.display='none'; if(typeof cb==='function') cb(); }
+    if(startBig){ startBig.addEventListener('click', function(){ easyStart(function(){ btnPlay.textContent='⏸'; }); }); }
+    document.body.addEventListener('pointerdown', function onceTap(){ if(!started){ easyStart(function(){ btnPlay.textContent='⏸'; }); } document.body.removeEventListener('pointerdown', onceTap); }, {passive:true});
+
+  })();
+</script>
+</body>
+</html>

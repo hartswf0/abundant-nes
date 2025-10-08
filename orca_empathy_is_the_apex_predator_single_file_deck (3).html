@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>SEA SEQUENCER — Whale Choir Pack (FAST)</title>
+<style>
+  :root{
+    --abyss:#03080f; --mid:#061a2a; --foam:#dff4ff; --ink:#e9f6ff; --muted:#8fb4c9;
+    --cyan:#58e0ff; --azure:#4aa3ff; --teal:#36d1c4; --vio:#7ab8ff; --white:#ffffff;
+    --shadow:0 14px 36px rgba(0,0,0,.55), 0 2px 12px rgba(0,0,0,.35);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent; touch-action:none}
+  html,body{height:100%}
+  body{margin:0; background:radial-gradient(1200px 800px at 50% 40%, #071a2b 0%, var(--abyss) 60%); color:var(--ink); font:14px/1.2 Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; overflow:hidden}
+  canvas#scene{position:fixed; inset:0; display:block}
+
+  /* HUD minimal */
+  #hud{position:fixed; inset:0; pointer-events:none}
+  .bl{position:absolute; left:16px; bottom:18px; display:flex; gap:12px; pointer-events:auto}
+  #paramDock{position:absolute; right:16px; bottom:18px; display:flex; gap:12px; pointer-events:auto}
+  #safeBottom{position:fixed; left:0; right:0; bottom:0; height:138px; pointer-events:none}
+  #alley{position:absolute; right:16px; top:50%; transform:translateY(-50%); display:flex; flex-direction:column; gap:12px; pointer-events:auto}
+
+  .stack{--w:66px; width:var(--w); height:92px; background:linear-gradient(180deg, rgba(180,230,255,.08), rgba(255,255,255,.02)); border:1px solid rgba(160,210,255,.18); border-radius:14px; box-shadow:var(--shadow); position:relative; overflow:hidden}
+  .stack .glyph{position:absolute; top:6px; left:6px; font-size:10px; letter-spacing:.08em; color:var(--muted)}
+  .stack .legend{position:absolute; bottom:6px; width:100%; text-align:center; font-size:10px; color:#cfe8ff}
+  .stack .layers{position:absolute; inset:14px 10px 18px 10px; display:flex; flex-direction:column; justify-content:flex-end; gap:3px}
+  .stack .lay{height:6px; border-radius:3px; background:rgba(170,220,255,.14); filter:drop-shadow(0 0 6px rgba(120,200,255,.16))}
+  .stack.accent{border-color:rgba(120,200,255,.55); box-shadow:0 0 0 1px rgba(120,200,255,.35), inset 0 0 24px rgba(120,200,255,.12), var(--shadow)}
+
+  #colorPipe{position:fixed; left:0; right:0; bottom:0; height:3px; background:linear-gradient(90deg, #1c5d7a, #78d9ff); opacity:.55; pointer-events:none}
+  @media (max-width:760px){ .stack{--w:58px; height:84px} #safeBottom{height:128px} }
+</style>
+</head>
+<body>
+  <canvas id="scene"></canvas>
+  <div id="hud">
+    <div id="baseDock" class="bl">
+      <div class="stack" id="playStack"><div class="glyph">PLAY</div><div class="layers" id="playLayers"></div><div class="legend" id="playLegend">STOP</div></div>
+      <div class="stack" id="tempoStack"><div class="glyph">TMP</div><div class="layers" id="tempoLayers"></div><div class="legend" id="tempoLegend">120</div></div>
+      <div class="stack" id="modeStack"><div class="glyph">MODE</div><div class="layers" id="modeLayers"></div><div class="legend" id="modeLegend">LOOK</div></div>
+      <div class="stack" id="cueStack"><div class="glyph">CUE</div><div class="layers" id="cueLayers"></div><div class="legend" id="cueLegend">PRE</div></div>
+      <div class="stack" id="commitStack"><div class="glyph">COM</div><div class="layers" id="commitLayers"></div><div class="legend" id="commitLegend">PUSH</div></div>
+    </div>
+
+    <div id="paramDock"></div>
+
+    <div id="alley">
+      <div class="stack accent" id="alleySurf"><div class="glyph">SURF</div><div class="layers" id="alleySurfLayers"></div><div class="legend" id="alleySurfLegend">PARAM</div></div>
+      <div class="stack" id="alleyFace"><div class="glyph">FACE</div><div class="layers" id="alleyFaceLayers"></div><div class="legend" id="alleyFaceLegend">FOOT</div></div>
+      <div class="stack" id="alleyGrid"><div class="glyph">GRID</div><div class="layers" id="alleyGridLayers"></div><div class="legend" id="alleyGridLegend">8×8</div></div>
+      <div class="stack" id="alleyPack"><div class="glyph">PACK</div><div class="layers" id="alleyPackLayers"></div><div class="legend" id="alleyPackLegend">SEA</div></div>
+      <div class="stack" id="alleyHelp"><div class="glyph">HELP</div><div class="layers" id="alleyHelpLayers"></div><div class="legend" id="alleyHelpLegend">●</div></div>
+    </div>
+
+    <div id="safeBottom"></div>
+    <div id="colorPipe"></div>
+  </div>
+
+<script>
+(()=>{
+  const canvas=document.getElementById('scene');
+  const ctx=canvas.getContext('2d');
+  const $=id=>document.getElementById(id);
+  const colorPipe=$('colorPipe');
+  const DPR=Math.max(1,devicePixelRatio||1);
+  let W=0,H=0; function resize(){W=innerWidth;H=innerHeight;canvas.width=W*DPR;canvas.height=H*DPR;canvas.style.width=W+'px';canvas.style.height=H+'px';ctx.setTransform(DPR,0,0,DPR,0,0);} addEventListener('resize',resize,{passive:true}); resize();
+  const buzz=(p)=>{try{navigator.vibrate&&navigator.vibrate(p||10)}catch{}}
+
+  const ROW_COLORS=['#0ea5e9','#22d3ee','#38bdf8','#67e8f9','#93c5fd','#a5f3fc','#60a5fa','#7dd3fc'];
+
+  const state={
+    gridOpts:[16,8,4,2,1], gridIdx:1, cols:8, rows:8,
+    baseCell:30, defaultLayers:12,
+    cam:{phi:0.2*Math.PI, theta:0.22*Math.PI},
+    playing:false, t:0, bpm:120, playhead:0,
+    selection:null, mode:'LOOK', editor:false,
+    focus:{tx:0,tz:0,sx:0,sz:0,scale:1,targetScale:1,lerp:0.22},
+    aimInflate:40,
+    staging:{sound:null,look:null,armed:false},
+    paramPage:{LOOK:0,SOUND:0},
+    now:0
+  };
+
+  function makeCell(r){return{on:Math.random()<0.22,vel:0.6,prob:0.9,len:0.6,pitch:0,pan:(r-3.5)/3.5,send:0.3,lum:0.8,sep:1.0,layers:0.6,halo:0.6,sat:0.9,twist:0.05,_layersCache:state.defaultLayers, y:0, vy:0, pulse:0, scan:0}};
+  function makeGrid(cols){const g=[];for(let r=0;r<state.rows;r++){const row=[];for(let c=0;c<cols;c++)row.push(makeCell(r));g.push(row);}return g}
+  let grid=makeGrid(state.cols);
+
+  const alleySurfLegend=$('alleySurfLegend'),alleySurfLayers=$('alleySurfLayers');
+  const alleyFaceLegend=$('alleyFaceLegend'),alleyFaceLayers=$('alleyFaceLayers');
+  const alleyGridLegend=$('alleyGridLegend'),alleyGridLayers=$('alleyGridLayers');
+  const alleyPackLegend=$('alleyPackLegend'),alleyPackLayers=$('alleyPackLayers');
+  const alleyHelpLayers=$('alleyHelpLayers');
+  function buildLayers(el,n=6,lit=3){el.innerHTML='';for(let i=0;i<n;i++){const d=document.createElement('div');d.className='lay';if(i>=n-lit)d.style.background='linear-gradient(90deg,#58e0ff,#fff)';el.appendChild(d)}}
+  buildLayers(alleySurfLayers,6,5);buildLayers(alleyFaceLayers,6,3);buildLayers(alleyGridLayers,6,4);buildLayers(alleyPackLayers,6,4);buildLayers(alleyHelpLayers,6,2);
+
+  let surf='PARAM'; let face='FOOT';
+  $('alleySurf').addEventListener('pointerdown',()=>{surf = (surf==='PARAM'?'TRANSPORT':'PARAM');alleySurfLegend.textContent=surf;buzz(10);applySurface()});
+  $('alleyFace').addEventListener('pointerdown',()=>{face = (face==='FOOT'?'HEAD':'FOOT');alleyFaceLegend.textContent=face;buzz(8);applySurface()});
+  $('alleyGrid').addEventListener('pointerdown',()=>{setGridByIndex(state.gridIdx+1)});
+  $('alleyPack').addEventListener('pointerdown',()=>{cyclePack()});
+  $('alleyHelp').addEventListener('pointerdown',()=>{alert('Tap a stack to focus. PLAY to run. Ripple line shows energy through stacks.');});
+
+  function applySurface(){const base=$('baseDock'); const param=$('paramDock'); if(surf==='PARAM'){param.style.right='16px'; if(face==='HEAD'){param.style.top='16px';param.style.bottom='';} else {param.style.bottom='18px';param.style.top='';} refreshParamDock(); } else { if(face==='HEAD'){base.style.top='16px';base.style.bottom='';} else {base.style.bottom='18px';base.style.top='';} }}
+
+  function safeRect(){const r=document.getElementById('safeBottom').getBoundingClientRect();return{x:0,y:0,w:W,h:Math.max(0,H-(r.height+8))}}
+  function spacing(){const G=Math.max(state.cols,state.rows);const fx=G/state.cols,fz=G/state.rows;return{dx:state.baseCell*fx*1.34,dz:state.baseCell*fz*1.34}}
+  function isoProject(x,y,z){const {phi,theta}=state.cam;const cy=Math.cos(theta),sy=Math.sin(theta);const cx=Math.cos(phi),sx=Math.sin(phi);let X=x,Y=y,Z=z;let x1=X*cy+Z*sy;let z1=-X*sy+Z*cy;let y2=Y*cx-z1*sx;const f=state.focus|| (state.focus={tx:0,tz:0,sx:0,sz:0,scale:1,targetScale:1,lerp:0.22});x1-=f.sx;y2-=(f.sz - y*10);const R=safeRect();return{x:R.x+R.w*.5+x1,y:R.y+R.h*.5+y2,depth:z1}}
+  function cellCenter(c,r){const {dx,dz}=spacing();const w=(state.cols-1)*dx;const h=(state.rows-1)*dz;return{x:c*dx-w/2,y:0,z:r*dz-h/2}}
+
+  function colorize(hex,sat){const n=parseInt(hex.slice(1),16);let r=(n>>16)&255,g=(n>>8)&255,b=n&255;const gr=0.3*r+0.59*g+0.11*b;const mix=(t,a,b)=>Math.round(a*(1-t)+b*t);r=mix(1-sat,r,gr);g=mix(1-sat,g,gr);b=mix(1-sat,b,gr);return`rgb(${r},${g},${b})`}
+  function roundedRect(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath()}
+  function calcLayersFrom(v){return Math.round(6+v*14)}
+  function drawStack(c,r,cell){
+    const base=cellCenter(c,r);const color=ROW_COLORS[r%ROW_COLORS.length];const sel=state.selection && state.selection.r===r && state.selection.c===c;const staged= sel?{...cell,...(state.staging.look||{}),...(state.staging.sound||{})}:cell;const p=isoProject(base.x,cell.y,base.z);
+    const layers= sel?calcLayersFrom(staged.layers): (cell._layersCache||state.defaultLayers);if(sel) cell._layersCache=layers;const lum=staged.lum,sat=staged.sat;let halo=staged.halo,sep=staged.sep,tw=staged.twist;const dim= state.editor && !sel? 0.36:1.0;
+
+    // scan & pulse lighting
+    const scanGlow=Math.max(0,1.0 - (state.now - cell.scan)/0.35);
+    const pulseGlow=Math.max(0,1.0 - (state.now - cell.pulse)/0.6);
+    halo += scanGlow*0.8 + pulseGlow*1.2; const scaleBoost = 1 + pulseGlow*0.15;
+
+    ctx.save();ctx.translate(p.x,p.y);ctx.globalAlpha=(.10+scanGlow*0.08)*dim;ctx.fillStyle=color;roundedRect(-16*scaleBoost,-9*scaleBoost,32*scaleBoost,18*scaleBoost,7);ctx.fill();ctx.restore();
+    for(let i=0;i<layers;i++){const y=i*(9*sep);const px=isoProject(base.x+Math.sin(i*.12)*tw*12*scaleBoost,-y,base.z);ctx.save();ctx.translate(px.x,px.y);ctx.globalAlpha=(.12+i*.02 + scanGlow*0.1 + pulseGlow*0.2)*lum*dim;ctx.fillStyle=colorize(color,sat);ctx.shadowColor='#7fdcff';ctx.shadowBlur=9*(halo+0.2);roundedRect(-12*scaleBoost,-6*scaleBoost,24*scaleBoost,12*scaleBoost,6);ctx.fill();if(sel && i===layers-1){ctx.globalAlpha=.95;ctx.strokeStyle='#fff';ctx.lineWidth=1.6;roundedRect(-12,-6,24,12,6);ctx.stroke()}ctx.restore()}
+  }
+
+  function pickCell(mx,my){let best=null,bestD=1e9;for(let r=0;r<state.rows;r++)for(let c=0;c<state.cols;c++){const cc=cellCenter(c,r);const P=isoProject(cc.x,grid[r][c].y,cc.z);const dx=mx-P.x,dy=my-P.y;const d=dx*dx+dy*dy - state.aimInflate*state.aimInflate;if(d<bestD){bestD=d;best={r,c}}}return best}
+
+  function scrubTo(col, silent){ if(typeof col!=='number') return; const c=Math.max(0,Math.min(state.cols-1,col|0)); if(c===state.playhead && silent) return; state.playhead=c; if(!silent) buzz(4); // audition
+    for(let r=0;r<state.rows;r++){ const cell=grid[r][state.playhead]; cell.scan=state.now; cell.vy -= 0.5; const audition=(state.selection && r===state.selection.r && state.staging.armed && state.staging.sound) ? {...cell,...state.staging.sound} : cell; if(audition.on) { trig(r,audition); cell.pulse=state.now; }} }
+
+  canvas.addEventListener('pointerdown',e=>{const R=canvas.getBoundingClientRect();const mx=e.clientX-R.left,my=e.clientY-R.top;const hit=pickCell(mx,my);if(hit){canvas.setPointerCapture(e.pointerId);state.selection=hit;state.editor=true;refreshParamDock();focusOnSelection();scrubTo(hit.c,true);buzz(15);e.preventDefault();}})
+  canvas.addEventListener('pointermove',e=>{if(!state.editor) return; const R=canvas.getBoundingClientRect();const mx=e.clientX-R.left,my=e.clientY-R.top;const hit=pickCell(mx,my); if(hit) scrubTo(hit.c)})
+
+  function focusOnSelection(){if(!state.selection){state.focus.targetScale=1;return}const sel=state.selection;const base=cellCenter(sel.c,sel.r);const R=safeRect();const aX=R.x+R.w*.5,aY=R.y+R.h*.68;const p=isoProject(base.x,0,base.z);state.focus.tx+=(p.x-aX);state.focus.tz+=(p.y-aY);state.focus.targetScale=Math.min(2.0,1.0+(16/state.cols)*0.24)}
+
+  const PAGE_SIZE=4; function clamp01(x){return Math.max(0,Math.min(1,x))}
+  function value01(key,c){if(key==='lum')return c.lum; if(key==='sep')return (c.sep-.5)/1.5; if(key==='layers')return c.layers; if(key==='halo')return c.halo; if(key==='sat')return c.sat; if(key==='twist')return (c.twist+1)/2; if(key==='pitch')return (c.pitch+12)/24; if(key==='pan')return (c.pan+1)/2; return c[key]||.5}
+  function applyLook(obj,k,v){if(k==='lum')obj.lum=v; if(k==='sep')obj.sep=.5+v*1.5; if(k==='layers')obj.layers=v; if(k==='halo')obj.halo=v; if(k==='sat')obj.sat=v; if(k==='twist')obj.twist=v*2-1}
+  function applySound(obj,k,v){if(k==='pitch')obj.pitch=Math.round((v*2-1)*12); else if(k==='pan')obj.pan=(v*2-1); else obj[k]=v}
+  const PARAMS_SOUND=[{key:'vel',label:'VEL'},{key:'prob',label:'PRB'},{key:'len',label:'LEN'},{key:'pitch',label:'PIT'},{key:'pan',label:'PAN'},{key:'send',label:'SND'}];
+  const PARAMS_LOOK=[{key:'lum',label:'LUM'},{key:'sep',label:'SEP'},{key:'layers',label:'LAY'},{key:'halo',label:'HAL'},{key:'sat',label:'SAT'},{key:'twist',label:'TW'}];
+  function refreshParamDock(){const dock=$('paramDock');dock.innerHTML='';const sel=state.selection;const isSel=!!sel;const SET= state.mode==='LOOK'?PARAMS_LOOK:PARAMS_SOUND;const key= state.mode==='LOOK'?'LOOK':'SOUND';const pages=Math.max(1,Math.ceil(SET.length/PAGE_SIZE));const page= state.paramPage[key]%pages;const slice=SET.slice(page*PAGE_SIZE,page*PAGE_SIZE+PAGE_SIZE);const active= isSel? ROW_COLORS[sel.r%ROW_COLORS.length]:'#bfe8ff';colorPipe.style.background=`linear-gradient(90deg, ${active}, #fff)`;slice.forEach(p=>{const s=document.createElement('div');s.className='stack';s.innerHTML=`<div class=\"glyph\">${p.label}</div><div class=\"layers\"></div><div class=\"legend\"></div>`;const L=s.querySelector('.layers');let v=.5;if(isSel)v=value01(p.key,grid[sel.r][sel.c]);buildLayers(L,6,Math.round(1+v*5));let grab=false,sy=0,sv=v,sm=v,last=-1;const dead=8,a=.22;s.addEventListener('pointerdown',e=>{grab=true;sy=e.clientY;sv=v;sm=v;last=Math.round(v*10);s.setPointerCapture(e.pointerId);buzz(9)});s.addEventListener('pointermove',e=>{if(!grab||!isSel)return;const dy=sy-e.clientY;let dv=(Math.abs(dy)>dead?(dy>0?(dy-dead):(dy+dead)):0)/160;v=clamp01(sv+dv);sm=sm*(1-a)+v*a;buildLayers(L,6,Math.round(1+sm*5));const bucket=(state.mode==='LOOK'?(state.staging.look=state.staging.look||{}):(state.staging.sound=state.staging.sound||{}));if(state.mode==='LOOK'){applyLook(bucket,p.key,sm);state.focus.targetScale=Math.max(state.focus.targetScale,1.85)} else {applySound(bucket,p.key,sm);if(state.staging.armed){const cell={...grid[sel.r][sel.c],...state.staging.sound};trig(sel.r,cell)}}const tick=Math.round(sm*10);if(tick!==last){buzz(4);last=tick}});s.addEventListener('pointerup',()=>{grab=false;buzz(6)});s.style.borderColor=active;s.style.boxShadow=`0 0 0 1px ${active}55, inset 0 0 24px ${active}22, var(--shadow)`;dock.appendChild(s)});if(SET.length>PAGE_SIZE){const more=document.createElement('div');more.className='stack';more.innerHTML='<div class=\"glyph\">MORE</div><div class=\"layers\" id=\"moreLayers\"></div><div class=\"legend\" id=\"moreLegend\"></div>';const Lm=more.querySelector('#moreLayers');buildLayers(Lm,6,2+page);more.querySelector('#moreLegend').textContent=`${page+1}/${pages}`;more.addEventListener('pointerdown',()=>{state.paramPage[key]=(page+1)%pages;refreshParamDock();buzz(8)});dock.appendChild(more)}}
+
+  // === AUDIO (from previous build) ===
+  const AC=(window.AudioContext||window.webkitAudioContext); let audioCtx=null, master=null, busLow=null, busMid=null, busHigh=null, busVerb=null;
+  function ensureAudio(){ if(audioCtx) return; audioCtx=new AC(); master=audioCtx.createGain(); master.gain.value=0.9; master.connect(audioCtx.destination); busLow=audioCtx.createGain(); busMid=audioCtx.createGain(); busHigh=audioCtx.createGain(); busVerb=audioCtx.createGain(); busLow.gain.value=0.35; busMid.gain.value=0.25; busHigh.gain.value=0.18; busVerb.gain.value=0.22; const delay=audioCtx.createDelay(0.6); delay.delayTime.value=0.33; const fb=audioCtx.createGain(); fb.gain.value=0.28; const hp=audioCtx.createBiquadFilter(); hp.type='lowpass'; hp.frequency.value=1800; busVerb.connect(delay); delay.connect(fb); fb.connect(delay); delay.connect(hp); hp.connect(master); busLow.connect(master); busMid.connect(master); busHigh.connect(master); const tideLFO=audioCtx.createOscillator(); tideLFO.frequency.value=0.05; const tideG=audioCtx.createGain(); tideG.gain.value=0.15; tideLFO.connect(tideG); tideG.connect(busVerb.gain); tideLFO.start(); }
+  function brownNoise(){ const buffer=audioCtx.createBuffer(1, audioCtx.sampleRate*2, audioCtx.sampleRate); const data=buffer.getChannelData(0); let last=0; for(let i=0;i<data.length;i++){ const white=Math.random()*2-1; data[i]=(last+0.02*white)/(1+0.02); last=data[i]; } const src=audioCtx.createBufferSource(); src.buffer=buffer; src.loop=true; return src; }
+  function lowDrone(freq){ const src=brownNoise(); const bp=audioCtx.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=freq; bp.Q.value=3.0; const g=audioCtx.createGain(); g.gain.value=0.0; src.connect(bp); bp.connect(g); g.connect(busLow); g.connect(busVerb); src.start(); return {src,g,bp}; }
+  function pingResonant(freq){ const o=audioCtx.createOscillator(); o.type='sine'; const g=audioCtx.createGain(); g.gain.value=0.0; const bp=audioCtx.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=freq; bp.Q.value=10; o.connect(bp); bp.connect(g); g.connect(busMid); g.connect(busVerb); o.start(); return {o,g,bp}; }
+  function shimmer(){ const buf=audioCtx.createBuffer(1, audioCtx.sampleRate*1, audioCtx.sampleRate); const d=buf.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*0.6; const src=audioCtx.createBufferSource(); src.buffer=buf; src.loop=true; const hp=audioCtx.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=1200; const g=audioCtx.createGain(); g.gain.value=0.0; src.connect(hp); hp.connect(g); g.connect(busHigh); g.connect(busVerb); src.start(); return {src,g,hp}; }
+  let instLow=null, instMid=null, instHigh=null; function ensureInstruments(){ if(!instLow){ instLow=lowDrone(40); } if(!instMid){ instMid=pingResonant(520); } if(!instHigh){ instHigh=shimmer(); } }
+  function envGain(node, a=0.02, d=0.7, peak=0.22, tail=0.0001){ const t=audioCtx.currentTime; node.gain.cancelScheduledValues(t); node.gain.setValueAtTime(0.0001,t); node.gain.linearRampToValueAtTime(peak,t+a); node.gain.exponentialRampToValueAtTime(tail, t+a+d); }
+  function trig(row,cell){ if(!audioCtx) return; ensureInstruments(); if(Math.random()>cell.prob) return; const which=row%3; if(which===0){ instLow.bp.frequency.setTargetAtTime(28+row*4+(cell.pitch||0), audioCtx.currentTime, 0.2); envGain(instLow.g, 0.03, 1.2, 0.28+cell.vel*0.2); }
+    else if(which===1){ const base=[240,300,360,420][(cell.pitch+24)%4]; instMid.bp.frequency.setTargetAtTime(base, audioCtx.currentTime, 0.01); envGain(instMid.g, 0.01, 0.35, 0.22+cell.vel*0.2); }
+    else { instHigh.hp.frequency.setTargetAtTime(1000+cell.pitch*30, audioCtx.currentTime, 0.02); envGain(instHigh.g, 0.01, 0.3, 0.18+cell.vel*0.2); } }
+
+  // Transport
+  $('playStack').addEventListener('pointerdown',()=>{ ensureAudio(); audioCtx.resume(); state.playing=!state.playing; buildLayers($('playLayers'),6,state.playing?6:2); $('playLegend').textContent = state.playing?'PLAY':'STOP'; buzz(14)});
+  let grabT=false, sy=0, sbpm=state.bpm; $('tempoStack').addEventListener('pointerdown',e=>{grabT=true;sy=e.clientY;sbpm=state.bpm; e.currentTarget.setPointerCapture(e.pointerId); buzz(10)}); $('tempoStack').addEventListener('pointermove',e=>{if(!grabT)return;const dy=sy-e.clientY; state.bpm=Math.round(Math.max(40,Math.min(160,sbpm+dy*0.5))); $('tempoLegend').textContent=state.bpm; buildLayers($('tempoLayers'),6,Math.round(1+(state.bpm-40)/(160-40)*5))}); addEventListener('pointerup',()=>{grabT=false});
+  $('modeStack').addEventListener('pointerdown',()=>{state.mode=state.mode==='LOOK'?'SOUND':'LOOK'; $('modeLegend').textContent=state.mode; buildLayers($('modeLayers'),6,state.mode==='LOOK'?4:5); refreshParamDock(); buzz(8)});
+  $('cueStack').addEventListener('pointerdown',()=>{state.staging.armed=!state.staging.armed; $('cueLegend').textContent=state.staging.armed?'ARM':'PRE'; buildLayers($('cueLayers'),6,state.staging.armed?5:3); buzz(8)});
+  $('commitStack').addEventListener('pointerdown',()=>{ if(!state.selection)return; const cell=grid[state.selection.r][state.selection.c]; if(state.staging.sound) Object.assign(cell,state.staging.sound); if(state.staging.look){Object.assign(cell,state.staging.look); cell._layersCache=calcLayersFrom(cell.layers);} state.staging={sound:null,look:null,armed:false}; $('cueLegend').textContent='PRE'; buildLayers($('cueLayers'),6,3); buzz(16)});
+
+  function setGridByIndex(idx){ state.gridIdx=(idx+state.gridOpts.length)%state.gridOpts.length; const n=state.gridOpts[state.gridIdx]; state.cols=n; grid=makeGrid(state.cols); alleyGridLegend.textContent= n===1?'1×1':`${n}×${n}`; buildLayers(alleyGridLayers,6,6-(state.gridIdx)); state.focus.targetScale=1; }
+  function cyclePack(){ const next = alleyPackLegend.textContent==='SEA'?'DEEP':'SEA'; alleyPackLegend.textContent=next; buildLayers(alleyPackLayers,6,next==='SEA'?4:5); buzz(6); }
+
+  // ====== Physics & Playline Ripple ======
+  function update(dt){
+    state.now += dt;
+    if(state.playing){ const bps=state.bpm/60; state.t += dt*bps; const nextCol=Math.floor(state.t)%state.cols; if(nextCol!==state.playhead){ state.playhead=nextCol; // scan/pulse handled in scrub
+      scrubTo(state.playhead,true); buzz(3);
+    } }
+    // per-cell spring settle
+    for(let r=0;r<state.rows;r++) for(let c=0;c<state.cols;c++){ const cell=grid[r][c]; const k=8, d=6; const a = -k*cell.y - d*cell.vy; cell.vy += a*dt; cell.y += cell.vy*dt; cell.y *= 0.999; }
+    state.focus.sx += (state.focus.tx-state.focus.sx)*state.focus.lerp; state.focus.sz += (state.focus.tz-state.focus.sz)*state.focus.lerp; state.focus.scale += (state.focus.targetScale-state.focus.scale)*state.focus.lerp; }
+
+  function render(){ ctx.clearRect(0,0,W,H); const R=safeRect(); const side=Math.min(R.w,R.h); const cx=R.x+R.w*.5, cy=R.y+R.h*.5; const base=side/Math.max(640,side)*state.focus.scale; ctx.save(); ctx.translate(cx,cy); ctx.scale(base,base); ctx.translate(-cx,-cy);
+    // Playline with ripple
+    const phx=cellCenter(state.playhead,0).x; const p0=isoProject(phx,-160, cellCenter(0,0).z-160); const p1=isoProject(phx,220, cellCenter(state.cols-1,state.rows-1).z+160);
+    const oscill = (1+Math.sin(state.now*6))*0.5; ctx.save();
+    const grad=ctx.createLinearGradient(p0.x,p0.y,p1.x,p1.y); grad.addColorStop(0,`rgba(143,228,255,0)`); grad.addColorStop(0.5,`rgba(143,228,255,${0.25+0.35*oscill})`); grad.addColorStop(1,`rgba(143,228,255,0)`);
+    ctx.strokeStyle=grad; ctx.lineWidth=2+4*oscill; ctx.beginPath(); ctx.moveTo(p0.x,p0.y); ctx.lineTo(p1.x,p1.y); ctx.stroke();
+    // expanding rings at each row intersection
+    for(let r=0;r<state.rows;r++){ const cc=cellCenter(state.playhead,r); const q=isoProject(cc.x,0,cc.z); const age = state.now - grid[r][state.playhead].scan; const alpha = Math.max(0, 0.35 - age*0.7); if(alpha>0){ ctx.globalAlpha=alpha; ctx.strokeStyle='#bfe8ff'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(q.x,q.y, 6+age*90, 0, Math.PI*2); ctx.stroke(); } }
+    ctx.restore();
+
+    const order=[]; for(let r=0;r<state.rows;r++) for(let c=0;c<state.cols;c++) order.push({r,c}); order.sort((a,b)=>(a.r+a.c)-(b.r+b.c)); order.forEach(({r,c})=>drawStack(c,r,grid[r][c]));
+    if(state.selection){ const sel=state.selection; const baseC=cellCenter(sel.c,sel.r); const p=isoProject(baseC.x,grid[sel.r][sel.c].y,baseC.z); ctx.save(); ctx.globalAlpha=0.35; ctx.strokeStyle='#fff'; ctx.lineWidth=2.2; ctx.beginPath(); ctx.arc(p.x,p.y,28*state.focus.scale,0,Math.PI*2); ctx.stroke(); ctx.restore(); }
+    ctx.restore(); }
+
+  let last=performance.now(); function loop(now){ const dt=Math.min(0.05,(now-last)/1000); last=now; update(dt); render(); requestAnimationFrame(loop);} requestAnimationFrame(loop);
+
+  function boot(){ buildLayers($('playLayers'),6,2); buildLayers($('tempoLayers'),6,4); buildLayers($('modeLayers'),6,4); buildLayers($('cueLayers'),6,3); buildLayers($('commitLayers'),6,5); applySurface(); refreshParamDock(); }
+  boot();
+})();
+</script>
+</body>
+</html>

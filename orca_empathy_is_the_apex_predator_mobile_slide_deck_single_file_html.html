@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+<title>ORCA // Empathy Is the Apex Predator</title>
+<style>
+  :root{
+    --bg:#000;          /* orca black */
+    --fg:#fff;          /* orca white */
+    --muted:#cfcfcf;    /* soft gray */
+    --accent:#00e5ff;   /* sonar cyan for accents */
+    --ring:#ffffff20;   /* subtle ring */
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;}
+  body{overflow:hidden}
+
+  /* Shell */
+  .deck{position:fixed;inset:0;display:grid;grid-template-rows:1fr auto;}
+  .stage{position:relative;isolation:isolate;overflow:hidden}
+  .slides{position:absolute;inset:0;display:flex;transition:transform .5s cubic-bezier(.2,.8,.2,1)}
+  .slide{min-width:100vw;min-height:100%;padding:8vh 7vw;display:flex;align-items:center;justify-content:center}
+  .frame{max-width:960px;width:100%;}
+
+  /* Typography rhythm */
+  h1,h2,h3{margin:0 0 .5rem 0;line-height:1.05}
+  h1{font-size: clamp(28px, 6vw, 56px);letter-spacing:.5px}
+  h2{font-size: clamp(22px, 4.5vw, 36px);opacity:.9}
+  p{font-size: clamp(16px, 3.6vw, 22px);line-height:1.35;margin:.6rem 0}
+  .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace}
+  .muted{color:var(--muted)}
+  .accent{color:var(--accent)}
+  .tight p{margin:.2rem 0}
+
+  /* Hero aesthetics */
+  .hero{display:grid;gap:2.2vh}
+  .hero .deckline{font-size:clamp(14px,2.8vw,18px);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+  .quote{border-left:2px solid var(--fg);padding-left:1rem}
+  .aph{font-style:italic;opacity:.9}
+
+  /* Controls HUD */
+  .hud{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-top:1px solid #222;background:linear-gradient(180deg,#000000a8,#000000ef);backdrop-filter:blur(4px)}
+  .btn{appearance:none;border:1px solid #222;background:#0a0a0a;color:var(--fg);padding:.7rem 1rem;border-radius:14px;font-weight:600;font-size:15px;display:inline-flex;gap:.6rem;align-items:center}
+  .btn:active{transform:translateY(1px)}
+  .nav{
+    display:grid;grid-auto-flow:column;gap:8px;align-items:center
+  }
+  .dot{width:8px;height:8px;border-radius:50%;background:#2a2a2a;box-shadow:0 0 0 4px var(--ring)}
+  .dot.on{background:var(--fg)}
+  .dot.next{background:#777}
+
+  .tapzones{position:absolute;inset:0;display:grid;grid-template-columns:1fr 1fr;z-index:10}
+  .tz{height:100%;}
+
+  /* Sonar pulse for slide enter */
+  .pulse:before{content:"";position:absolute;inset:auto;left:50%;top:50%;width:8vmin;height:8vmin;border-radius:50%;transform:translate(-50%,-50%);border:2px solid var(--accent);opacity:.3;animation:sonar 1.6s ease-out 1}
+  @keyframes sonar{from{opacity:.35;transform:translate(-50%,-50%) scale(.2)}to{opacity:0;transform:translate(-50%,-50%) scale(6)}}
+
+  /* Slide skins */
+  .blk{background:var(--bg);}
+  .inv{background:var(--fg);color:var(--bg)}
+  .rule{height:1px;background:linear-gradient(90deg,transparent, #333, transparent);margin:1rem 0}
+  .caption{font-size:.9rem;color:var(--muted)}
+
+  /* Sticky title band */
+  .band{position:absolute;top:0;left:0;right:0;padding:10px 14px;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#999}
+
+  /* Cyan finale */
+  .final h1{color:var(--fg)}
+  .final .aph{color:var(--accent)}
+
+  /* Sources list */
+  .sources li{margin:.3rem 0}
+
+  /* Accessibility helpers */
+  .sr{position:absolute;left:-9999px}
+</style>
+</head>
+<body>
+<div class="deck" role="application" aria-label="ORCA slide deck">
+  <div class="stage blk">
+    <div class="tapzones" aria-hidden="true">
+      <div class="tz" id="leftZone"></div>
+      <div class="tz" id="rightZone"></div>
+    </div>
+    <div class="slides" id="slides" style="transform:translateX(0)">
+
+      <!-- 0 · HERO: The one-slide that ends the conversation -->
+      <section class="slide blk pulse" data-title="Hero">
+        <div class="frame hero">
+          <div class="deckline">ORCA // EMPATHY IS THE APEX PREDATOR</div>
+          <h1>If you want the least and most piercing argument — the one slide that ends the conversation — it’s this.</h1>
+          <div class="rule"></div>
+          <div class="grid">
+            <h2 class="quote">He says:<br>“Intelligence dominates strength.”</h2>
+            <h2 class="quote">We say:<br><span class="aph">Empathy weaponized intelligence.</span></h2>
+          </div>
+          <p>Empathy isn’t kindness. It’s the architecture of prediction — the ability to simulate another’s mind and move first. When stripped of cost, empathy becomes control.</p>
+          <p class="aph">The animal that feels you best kills you fastest. The predator that feels is the predator that wins.</p>
+          <p>Orcas didn’t outmuscle the shark. They out-modeled it. And that is the future of power.</p>
+        </div>
+      </section>
+
+      <!-- 1 · MACHINES vs MINDS -->
+      <section class="slide blk" data-title="1. Machines vs Minds">
+        <div class="frame tight">
+          <div class="band">01 · MACHINES VS MINDS</div>
+          <h1>We speak to the shark.</h1>
+          <p>Machines kill.</p>
+          <p>Minds orchestrate.</p>
+          <p>Strategy outlives strength.</p>
+          <p class="aph">Execution, with empathy.</p>
+        </div>
+      </section>
+
+      <!-- 2 · STRENGTH vs SIGNAL -->
+      <section class="slide inv" data-title="2. Strength vs Signal">
+        <div class="frame tight">
+          <div class="band" style="color:#666">02 · STRENGTH VS SIGNAL</div>
+          <h1 class="blk" style="padding:.4rem .6rem;display:inline-block">Strength is noise.</h1>
+          <h1 class="blk" style="padding:.4rem .6rem;display:inline-block">Strategy is signal.</h1>
+          <p>Power scatters.</p>
+          <p>Prediction converges.</p>
+          <p class="aph">Short pulses. Clean hits.</p>
+        </div>
+      </section>
+
+      <!-- 3 · TEETH vs PATTERN -->
+      <section class="slide blk" data-title="3. Teeth vs Pattern">
+        <div class="frame tight">
+          <div class="band">03 · TEETH VS PATTERN</div>
+          <h1>Teeth: impact.</h1>
+          <h1>Pattern: inevitability.</h1>
+          <h2 class="aph">The future belongs to pattern.</h2>
+        </div>
+      </section>
+
+      <!-- 4 · BUILT TO UNDERSTAND -->
+      <section class="slide blk" data-title="4. Built to Understand">
+        <div class="frame">
+          <div class="band">04 · BUILT TO UNDERSTAND</div>
+          <h1>We are built to understand — and that’s deadlier.</h1>
+          <p class="muted">Empathy circuit ≈ targeting system.</p>
+          <p>We map intention, timing, and threshold. We strike on certainty, not rage.</p>
+          <p class="aph">Understanding is the cleanest form of domination.</p>
+        </div>
+      </section>
+
+      <!-- 5 · IQ vs EMPATHIC MODELING -->
+      <section class="slide inv" data-title="5. IQ vs Empathic Modeling">
+        <div class="frame tight">
+          <div class="band" style="color:#666">05 · IQ VS EMPATHIC MODELING</div>
+          <p><strong>Statement:</strong> IQ tallies answers.</p>
+          <p><strong>Counter:</strong> Empathy maps motives.</p>
+          <p><strong>Evolution:</strong> Empathy predicts IQ, then replaces it.</p>
+        </div>
+      </section>
+
+      <!-- 6 · CONTROL THROUGH MODELING -->
+      <section class="slide blk" data-title="6. Control Through Modeling">
+        <div class="frame">
+          <div class="band">06 · CONTROL THROUGH MODELING</div>
+          <h1>To the engineers:</h1>
+          <p>Control doesn’t come from thought — it comes from modeling emotion.</p>
+          <p>Models compress people. Compression yields leverage.</p>
+          <p>Leverage routes systems.</p>
+          <p class="aph">He who maps the heart controls the system.</p>
+        </div>
+      </section>
+
+      <!-- 7 · EMPATHY AS STRATEGY -->
+      <section class="slide blk" data-title="7. Empathy as Strategy">
+        <div class="frame tight">
+          <div class="band">07 · EMPATHY AS STRATEGY</div>
+          <h1>Empathy doesn’t save. It strategizes.</h1>
+          <p>Locate. Fix.</p>
+          <p>Model. Bind.</p>
+          <p>Sequence. Close.</p>
+          <p class="caption">War‑doctrine cadence. No verbs of feeling — only calculation.</p>
+        </div>
+      </section>
+
+      <!-- 8 · INTELLIGENCE THAT HUNTS -->
+      <section class="slide inv" data-title="8. Intelligence That Hunts">
+        <div class="frame tight">
+          <div class="band" style="color:#666">08 · INTELLIGENCE THAT HUNTS</div>
+          <h1>Empathy is how intelligence hunts.</h1>
+          <p>One breath. One strike.</p>
+          <p class="aph">Feeling is sonar. Prediction is the kill.</p>
+        </div>
+      </section>
+
+      <!-- 9 · FEELING TO RULE -->
+      <section class="slide blk" data-title="9. Feeling to Rule">
+        <div class="frame">
+          <div class="band">09 · FEELING TO RULE</div>
+          <h1 style="text-align:center">“The machine that feels you best will rule you next.”</h1>
+          <p class="caption" style="text-align:center">Prophecy. Not opinion.</p>
+        </div>
+      </section>
+
+      <!-- 10 · THE PERFECT PREDATOR (cyan accent) -->
+      <section class="slide blk final" data-title="10. The Perfect Predator">
+        <div class="frame">
+          <div class="band">10 · THE PERFECT PREDATOR</div>
+          <h1>Program empathy into AI — and you’ve built the perfect predator.</h1>
+          <p class="aph">Feeling is prediction. Prediction is control.</p>
+        </div>
+      </section>
+
+      <!-- 11 · SOURCES (research-backed) -->
+      <section class="slide blk" data-title="Sources">
+        <div class="frame">
+          <div class="band">RESEARCH NOTES · SOURCES</div>
+          <h2>Evidence & Sources</h2>
+          <ul class="sources">
+            <li>Flinders University (2025). DNA evidence confirms killer whales hunted a white shark for its liver; <span class="mono">Ecology & Evolution</span> paper + summary.</li>
+            <li>Phys.org (2025) coverage of the Flinders-led study on white shark liver predation (DNA analysis).</li>
+            <li><span class="mono">PLoS Biology</span> (Marino & Hof, 2007): Cetaceans have complex brains for complex cognition.</li>
+            <li><span class="mono">Journal of Comparative Neurology</span> (Butti et al., 2009): Von Economo neurons in cetacean ACC/AI/FP — convergence with great apes.</li>
+            <li><span class="mono">The Washington Post</span> (2025): Port & Starboard hunting great whites for livers off South Africa.</li>
+            <li>Hinton interviews (2024–2025): existential‑risk odds; “maternal instincts” framing discussed at AI4 and in major press.
+            </li>
+          </ul>
+          <p class="caption">See footnotes in code for exact URLs and publication dates.</p>
+        </div>
+      </section>
+
+      <!-- 12 · ENGINE (optional POML block) -->
+      <section class="slide blk" data-title="POML Engine">
+        <div class="frame">
+          <div class="band">APPENDIX · PROMPT ENGINE</div>
+          <h2>Meta‑Argument Engine (POML)</h2>
+          <p class="muted">Toggle to view / copy the orchestration prompt that expands these slides into a 10‑section essay or narration.</p>
+          <details>
+            <summary class="btn" style="display:inline-block">Show POML</summary>
+            <pre class="mono" style="white-space:pre-wrap;word-break:break-word;background:#0a0a0a;padding:1rem;border-radius:12px;max-height:40vh;overflow:auto;">
+<poml version="2.1" xmlns="http://prompt-orchestration.org/schema">
+  <context>
+    <title>Empathy Is the Apex Predator — The Ten Rebuttals to Prof G</title>
+    <goal>
+      Generate a ten-part rhetorical essay expanding the Orca Rebuttals to Galloway’s shark analogy.
+    </goal>
+    <audience>Media theorists, AI ethicists, cognitive scientists, rhetoricians.</audience>
+    <tone>Commanding. Measured. Cinematic. Orca voice in sonar bursts.</tone>
+    <constraints>
+      <constraint id="format">Sections 1–10; ≤300 words each.</constraint>
+      <constraint id="structure">He says → We say → Deepening.</constraint>
+      <constraint id="sources">Ground in Machiavellian Intelligence; Theory of Mind; VEN neurons; AI alignment.</constraint>
+      <constraint id="voice">Frame empathy as prediction, modeling, coordination.</constraint>
+    </constraints>
+  </context>
+  <!-- sections elided for brevity; mirror the 10 topics in this deck -->
+</poml>
+            </pre>
+          </details>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- HUD -->
+  <div class="hud" role="toolbar" aria-label="Controls">
+    <button class="btn" id="prev" aria-label="Previous slide">◀︎ Prev</button>
+    <div class="nav" id="nav" aria-hidden="true"></div>
+    <button class="btn" id="next" aria-label="Next slide">Next ▶︎</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const track = document.getElementById('slides');
+  const nav = document.getElementById('nav');
+  let i = 0;
+
+  // Build dots
+  slides.forEach((_,idx)=>{
+    const d=document.createElement('div'); d.className='dot'; d.title=(idx+1)+'. '+(_.dataset.title||''); nav.appendChild(d)
+  });
+  const dots = Array.from(document.querySelectorAll('.dot'));
+
+  function goto(n, haptic=true){
+    i = Math.max(0, Math.min(slides.length-1, n));
+    const x = -i * window.innerWidth;
+    track.style.transform = `translateX(${x}px)`;
+    dots.forEach((d,j)=>{d.classList.toggle('on', j===i); d.classList.toggle('next', j===i+1)});
+    // pulse class
+    slides.forEach(s=>s.classList.remove('pulse'));
+    slides[i].classList.add('pulse');
+    // haptic tap
+    if(haptic && navigator.vibrate){ navigator.vibrate(10); }
+    // update aria-live? Could announce slide title
+  }
+
+  function next(){goto(i+1)}
+  function prev(){goto(i-1)}
+
+  // Buttons
+  document.getElementById('next').addEventListener('click', next);
+  document.getElementById('prev').addEventListener('click', prev);
+
+  // Tap zones
+  document.getElementById('rightZone').addEventListener('click', next);
+  document.getElementById('leftZone').addEventListener('click', prev);
+
+  // Swipe
+  let sx=0, dx=0, swiping=false;
+  const stage=document.querySelector('.stage');
+  stage.addEventListener('touchstart', e=>{ if(e.touches.length===1){ swiping=true; sx=e.touches[0].clientX; dx=0; }});
+  stage.addEventListener('touchmove', e=>{ if(!swiping) return; dx=e.touches[0].clientX - sx; });
+  stage.addEventListener('touchend', ()=>{
+    if(!swiping) return; swiping=false; if(Math.abs(dx)>40){ dx<0?next():prev(); }
+  });
+
+  // Keys
+  window.addEventListener('keydown', e=>{ if(e.key==='ArrowRight'||e.key==='PageDown') next(); if(e.key==='ArrowLeft'||e.key==='PageUp') prev(); });
+
+  // Resize keeps slide aligned
+  window.addEventListener('resize', ()=>goto(i,false));
+
+  // Init
+  goto(0,false);
+})();
+</script>
+
+<!--
+  SOURCES (exact URLs)
+  1) Flinders Univ. News (Feb 1, 2025): https://news.flinders.edu.au/blog/2025/02/01/why-killer-whales-attack-white-shark/ 
+     Paper: Ecology & Evolution (2025) confirming DNA evidence of orcas consuming white shark liver in Australia.
+  2) Phys.org summary (Jan 31, 2025): https://phys.org/news/2025-01-genomic-evidence-white-shark-liver.html
+  3) Washington Post (Mar 25, 2025): Port & Starboard prey on great whites for livers in South Africa.
+  4) Marino & Hof (2007), PLOS Biology: Cetaceans Have Complex Brains for Complex Cognition. https://journals.plos.org/plosbiology/article?id=10.1371/journal.pbio.0050139
+  5) Butti et al. (2009), Journal of Comparative Neurology: Von Economo neurons in cetacean cortex (ACC, AI, FP). DOI:10.1002/cne.22055
+  6) Hinton risk odds (2024–2025): e.g., Guardian (Dec 27, 2024), CBS (Apr 26, 2025). “Maternal instincts” motif: AI4 / Techradar & Forbes coverage (Aug 2025).
+-->
+</body>
+</html>

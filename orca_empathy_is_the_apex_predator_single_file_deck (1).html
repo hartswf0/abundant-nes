@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
+<title>SEA SEQUENCER — Orca OS v1 (Chladni Sands)</title>
+<style>
+  :root{
+    --bg:#031018;         /* deep abyss */
+    --bg2:#061d2a;        /* mid blue */
+    --fg:#e8fbff;         /* sea foam */
+    --muted:#9bd2de;      
+    --accent:#00e5ff;     /* cyan */
+    --blood:#ff3355;      
+    --pad:clamp(12px,4vw,20px);
+    --gap:clamp(10px,3vw,16px);
+    --radius:18px;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+    --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    --sans: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, Noto Sans;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;background:var(--bg);color:var(--fg);font-family:var(--sans);}
+  body{overflow:hidden;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+
+  /* TWO EXACT HALVES */
+  #app{position:fixed;inset:0;display:grid;grid-template-rows:1fr 1fr;}
+
+  /* ====== TOP: OCEAN RESONANCE FIELD ====== */
+  #ocean{position:relative;overflow:hidden}
+  /* animated ocean gradient */
+  #ocean::before{content:"";position:absolute;inset:-20%;background:radial-gradient(120% 90% at 50% 10%, #0b2b3f 0%, #082233 30%, #041722 60%, #031018 80%);filter:contrast(110%) saturate(110%);animation:slowShift 30s linear infinite;}
+  @keyframes slowShift{0%{transform:translateY(0)}50%{transform:translateY(3%)}100%{transform:translateY(0)}}
+
+  /* canvas layers */
+  canvas#sands, canvas#waves{position:absolute;inset:0}
+
+  /* headline overlay (minimal) */
+  .tag{position:absolute;left:var(--pad);top:calc(env(safe-area-inset-top) + var(--pad));padding:.35rem .6rem;border:1px solid rgba(255,255,255,.12);border-radius:12px;font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);backdrop-filter:blur(2px);}
+
+  /* ====== BOTTOM: ALLEY — STACKS & CONTROLS ====== */
+  #alley{position:relative;border-top:1px solid rgba(255,255,255,.08);background:linear-gradient(#051622,#061b27);display:grid;grid-template-rows:auto 1fr;}
+  .alley-head{display:flex;align-items:center;gap:10px;padding:10px var(--pad);}
+  .btn{appearance:none;-webkit-tap-highlight-color:transparent;user-select:none;cursor:pointer;border:1px solid rgba(255,255,255,.12);background:#0a2331;color:var(--fg);padding:10px 12px;border-radius:14px;font-weight:700;box-shadow:var(--shadow)}
+  .btn:active{transform:translateY(1px)}
+  .tempo{display:flex;align-items:center;gap:10px;margin-left:auto}
+  .tempo input{width:140px}
+  .hush{color:var(--muted);font-size:12px}
+
+  .rail{position:relative;overflow-x:auto;overflow-y:hidden;padding:10px var(--pad) 14px var(--pad);display:flex;gap:12px;scroll-snap-type:x mandatory}
+
+  /* 3D-ish STACK (isometric cards) */
+  .stack{scroll-snap-align:start;flex:0 0 46vw;max-width:360px;min-width:260px; background:linear-gradient(180deg,#0e2938 0%, #0a1f2b 100%); border:1px solid rgba(255,255,255,.08); border-radius:18px; padding:12px; box-shadow:0 16px 40px rgba(0,0,0,.4); position:relative; perspective:800px}
+  .stack .layer{position:relative; transform-style:preserve-3d; height:220px; border-radius:14px; background:linear-gradient(180deg,#103349, #0a2432); border:1px solid rgba(255,255,255,.06); box-shadow:inset 0 0 0 1px rgba(255,255,255,.04);}
+  .stack .layer::before{content:""; position:absolute; inset:-2px; background:radial-gradient(120% 100% at 50% 0%, rgba(255,255,255,.12), rgba(255,255,255,0) 60%); border-radius:inherit; pointer-events:none}
+  .stack .cap{display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px}
+  .cap .name{font-weight:900; letter-spacing:.06em; text-transform:uppercase}
+  .cap .chip{font-family:var(--mono); font-size:12px; color:var(--muted)}
+
+  /* step grid inside layer */
+  .steps{position:absolute; inset:10px; display:grid; grid-template-columns:repeat(8,1fr); grid-template-rows:repeat(4,1fr); gap:6px; transform:rotateX(14deg) rotateY(-18deg) translateZ(0)}
+  .step{border:1px solid rgba(255,255,255,.08); border-radius:8px; background:rgba(0,0,0,.25); position:relative}
+  .step.on{background:rgba(0,229,255,.22); border-color:rgba(0,229,255,.5); box-shadow:0 0 0 2px rgba(0,229,255,.14) inset}
+  .playhead{position:absolute; top:8px; bottom:8px; width:3px; background:linear-gradient(var(--accent), transparent); left:0; transform:translateX(0); border-radius:3px; box-shadow:0 0 16px rgba(0,229,255,.66)}
+
+  /* small controls row */
+  .mini{display:flex; gap:8px; margin-top:10px}
+  .pill{border:1px solid rgba(255,255,255,.14); background:#0d2431; color:var(--fg); border-radius:12px; padding:6px 8px; font-size:12px}
+
+  /* THEME COLORS */
+  .c-cyan{--accent:#00e5ff}
+  .c-ice{--accent:#e8fbff}
+  .c-blood{--accent:#ff3355}
+
+  /* TOAST */
+  .toast{position:fixed; left:50%; transform:translateX(-50%); bottom:calc(env(safe-area-inset-bottom) + 10px); background:rgba(0,0,0,.6); border:1px solid rgba(255,255,255,.2); color:#fff; padding:8px 12px; border-radius:12px; font-size:12px; opacity:0; transition:opacity .25s}
+  .toast.on{opacity:1}
+
+  /* reduce motion */
+  @media (prefers-reduced-motion: reduce){ .steps{transform:none} #ocean::before{animation:none} }
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- OCEAN RESONANCE FIELD -->
+  <section id="ocean" aria-label="Resonance field">
+    <div class="tag">Sea Sequencer · Chladni Sands</div>
+    <canvas id="waves"></canvas>
+    <canvas id="sands"></canvas>
+  </section>
+
+  <!-- ALLEY: STACKS + CORE CONTROLS -->
+  <section id="alley" aria-label="Control alley">
+    <div class="alley-head">
+      <button class="btn" id="play">Play</button>
+      <button class="btn" id="stop">Stop</button>
+      <button class="btn" id="toggleTheme">Invert</button>
+      <span class="hush">Mode:</span>
+      <button class="btn" id="modeA">Chladni</button>
+      <button class="btn" id="modeB">Ripple</button>
+      <div class="tempo"><span class="hush">Tempo</span><input id="tempo" type="range" min="40" max="160" value="84"/></div>
+    </div>
+
+    <div class="rail" id="rail">
+      <!-- TRACK: LOW WHALE (infra) -->
+      <article class="stack c-cyan" data-track="low">
+        <div class="cap"><div class="name">Low Whale</div><div class="chip">20–60Hz</div></div>
+        <div class="layer">
+          <div class="playhead" data-ph></div>
+          <div class="steps" role="grid" aria-label="Low Whale pattern"></div>
+        </div>
+        <div class="mini">
+          <div class="pill" data-param="glide">Glide</div>
+          <div class="pill" data-param="vibrato">Vibrato</div>
+          <div class="pill" data-param="gain">Gain</div>
+        </div>
+      </article>
+
+      <!-- TRACK: HIGH WHALE (song) -->
+      <article class="stack c-ice" data-track="high">
+        <div class="cap"><div class="name">High Whale</div><div class="chip">300–1200Hz</div></div>
+        <div class="layer">
+          <div class="playhead" data-ph></div>
+          <div class="steps" role="grid" aria-label="High Whale pattern"></div>
+        </div>
+        <div class="mini">
+          <div class="pill" data-param="bend">Bend</div>
+          <div class="pill" data-param="trill">Trill</div>
+          <div class="pill" data-param="echo">Echo</div>
+        </div>
+      </article>
+
+      <!-- TRACK: SURF NOISE (sea) -->
+      <article class="stack c-blood" data-track="surf">
+        <div class="cap"><div class="name">Sea</div><div class="chip">Noise · BP</div></div>
+        <div class="layer">
+          <div class="playhead" data-ph></div>
+          <div class="steps" role="grid" aria-label="Sea pattern"></div>
+        </div>
+        <div class="mini">
+          <div class="pill" data-param="foam">Foam</div>
+          <div class="pill" data-param="swell">Swell</div>
+          <div class="pill" data-param="depth">Depth</div>
+        </div>
+      </article>
+    </div>
+  </section>
+</div>
+<div class="toast" id="toast">Saved</div>
+
+<script>
+(function(){
+  /* =====================
+     SCHEDULER + AUDIO CORE
+     ===================== */
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  let ctx=null, master=null;
+  const state={ playing:false, tempo:84, step:0, cols:8, rows:4, mode:'chladni', theme:0 };
+  const tracks={};
+
+  function initAudio(){
+    if(ctx) return; ctx = new AudioCtx(); master = ctx.createGain(); master.gain.value=0.9; master.connect(ctx.destination);
+    // tiny master space (feedback delay)
+    const fbDelay = ctx.createDelay(0.8); fbDelay.delayTime.value=0.28; const fbGain = ctx.createGain(); fbGain.gain.value=0.25; master.connect(fbDelay); fbDelay.connect(fbGain); fbGain.connect(master);
+  }
+
+  function mkLowWhale(){
+    const g = ctx.createGain(); g.gain.value=0.35; g.connect(master);
+    const o = ctx.createOscillator(); o.type='sine'; o.frequency.value=35; const lfo=ctx.createOscillator(); lfo.type='sine'; lfo.frequency.value=0.4; const lmod=ctx.createGain(); lmod.gain.value=8; lfo.connect(lmod); lmod.connect(o.frequency);
+    const bp = ctx.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=80; bp.Q.value=2.2; o.connect(bp); bp.connect(g); o.start(); lfo.start();
+    return {g,o,bp};
+  }
+  function mkHighWhale(){
+    const g = ctx.createGain(); g.gain.value=0.22; g.connect(master);
+    const o = ctx.createOscillator(); o.type='sine'; o.frequency.value=420; const lfo=ctx.createOscillator(); lfo.frequency.value=5.5; const lmod=ctx.createGain(); lmod.gain.value=12; lfo.connect(lmod); lmod.connect(o.frequency);
+    const bp = ctx.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=700; bp.Q.value=6; o.connect(bp); bp.connect(g); o.start(); lfo.start();
+    return {g,o,bp};
+  }
+  function mkSea(){
+    const g = ctx.createGain(); g.gain.value=0.18; g.connect(master);
+    // noise buffer
+    const buffer = ctx.createBuffer(1, ctx.sampleRate*2, ctx.sampleRate);
+    const data = buffer.getChannelData(0); for(let i=0;i<data.length;i++){ data[i]= (Math.random()*2-1)*0.6; }
+    const src = ctx.createBufferSource(); src.buffer=buffer; src.loop=true;
+    const bp = ctx.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=300; bp.Q.value=0.7;
+    const lfo=ctx.createOscillator(); lfo.frequency.value=0.08; const lmod=ctx.createGain(); lmod.gain.value=220; lfo.connect(lmod); lmod.connect(bp.frequency);
+    src.connect(bp); bp.connect(g); src.start(); lfo.start();
+    return {g,src,bp};
+  }
+
+  function ensureTrack(name){
+    if(tracks[name]) return tracks[name];
+    if(name==='low') tracks[name]=mkLowWhale();
+    if(name==='high') tracks[name]=mkHighWhale();
+    if(name==='surf') tracks[name]=mkSea();
+    return tracks[name];
+  }
+
+  // Sequencer patterns
+  const patterns={
+    low:  [1,0,0,0, 1,0,0,0],
+    high: [0,0,1,0, 0,0,1,0],
+    surf: [1,1,1,1, 0,0,1,0]
+  };
+
+  function trigger(name, col){
+    const t = ctx.currentTime; const p = ensureTrack(name);
+    if(name==='low'){
+      const base = 28 + (col%4)*4; // glide
+      p.o.frequency.cancelScheduledValues(t);
+      p.o.frequency.linearRampToValueAtTime(base, t+0.00);
+      p.o.frequency.linearRampToValueAtTime(base*1.6, t+0.45);
+      p.g.gain.cancelScheduledValues(t);
+      p.g.gain.setValueAtTime(0.0001, t);
+      p.g.gain.linearRampToValueAtTime(0.38, t+0.02);
+      p.g.gain.exponentialRampToValueAtTime(0.06, t+0.9);
+    }
+    if(name==='high'){
+      const notes=[420,520,660,880]; const f=notes[col%notes.length];
+      p.o.frequency.cancelScheduledValues(t);
+      p.o.frequency.setValueAtTime(f*0.9, t);
+      p.o.frequency.linearRampToValueAtTime(f*1.05, t+0.18);
+      p.g.gain.cancelScheduledValues(t);
+      p.g.gain.setValueAtTime(0.0001,t);
+      p.g.gain.linearRampToValueAtTime(0.24,t+0.01);
+      p.g.gain.exponentialRampToValueAtTime(0.04,t+0.6);
+    }
+    if(name==='surf'){
+      p.bp.Q.setTargetAtTime(1.0, t, 0.12);
+      p.bp.Q.setTargetAtTime(0.5, t+0.3, 0.24);
+      p.g.gain.cancelScheduledValues(t);
+      p.g.gain.setValueAtTime(0.16,t);
+      p.g.gain.exponentialRampToValueAtTime(0.08,t+0.5);
+    }
+  }
+
+  // Clock
+  let rafId=null, lastTick=0;
+  function tick(ts){
+    if(!state.playing){ rafId=requestAnimationFrame(tick); return; }
+    const spb = 60/state.tempo; const stepDur = spb/2; // 8th notes
+    const now = (performance.now()/1000);
+    if(now - lastTick >= stepDur){
+      lastTick = now;
+      const col = state.step % state.cols;
+      // trigger where pattern has 1
+      if(patterns.low[col]) trigger('low', col);
+      if(patterns.high[col]) trigger('high', col);
+      if(patterns.surf[col]) trigger('surf', col);
+      // move playheads
+      document.querySelectorAll('[data-ph]').forEach(ph=>{
+        const layer = ph.parentElement; const w = layer.clientWidth - 24; const x = 12 + (w*(col/(state.cols-1||1)));
+        ph.style.transform = `translateX(${x}px)`;
+      });
+      state.step++;
+    }
+    rafId=requestAnimationFrame(tick);
+  }
+
+  /* =====================
+     UI — STEPS & INTERACTION
+     ===================== */
+  function buildSteps(){
+    document.querySelectorAll('.stack').forEach(stack=>{
+      const steps = stack.querySelector('.steps'); steps.innerHTML='';
+      const name = stack.dataset.track; const patt = patterns[name];
+      for(let r=0;r<state.rows;r++){
+        for(let c=0;c<state.cols;c++){
+          const i=c; // simple per-column pattern
+          const div=document.createElement('button');
+          div.className='step'+(patt[i]? ' on':''); div.setAttribute('aria-pressed', patt[i]? 'true':'false');
+          div.addEventListener('click',()=>{ patt[i] = patt[i] ? 0 : 1; div.classList.toggle('on'); vibe([8]); saveLocal(); });
+          steps.appendChild(div);
+        }
+      }
+    });
+  }
+
+  // haptics
+  function vibe(p=[6]){ if('vibrate' in navigator) navigator.vibrate(p); }
+
+  // tempo
+  const tempo = document.getElementById('tempo'); tempo.addEventListener('input',()=>{ state.tempo = +tempo.value; });
+
+  // transport
+  document.getElementById('play').addEventListener('click',()=>{ initAudio(); ctx.resume(); state.playing=true; vibe([8,30,8]); });
+  document.getElementById('stop').addEventListener('click',()=>{ state.playing=false; state.step=0; vibe([6]); });
+
+  // themes
+  document.getElementById('toggleTheme').addEventListener('click',()=>{
+    state.theme = (state.theme+1)%2;
+    if(state.theme===1){ document.documentElement.style.setProperty('--bg','#f7fbff'); document.documentElement.style.setProperty('--bg2','#e8f4fb'); document.documentElement.style.setProperty('--fg','#061b27'); document.documentElement.style.setProperty('--muted','#21596a'); }
+    else{ document.documentElement.style.setProperty('--bg','#031018'); document.documentElement.style.setProperty('--bg2','#061d2a'); document.documentElement.style.setProperty('--fg','#e8fbff'); document.documentElement.style.setProperty('--muted','#9bd2de'); }
+  });
+
+  // mode
+  document.getElementById('modeA').addEventListener('click',()=>{ state.mode='chladni'; vibe([4]); });
+  document.getElementById('modeB').addEventListener('click',()=>{ state.mode='ripple'; vibe([4]); });
+
+  /* =====================
+     CHLADNI SANDS VISUAL
+     ===================== */
+  const waves = document.getElementById('waves'); const sands = document.getElementById('sands');
+  const ctxW = waves.getContext('2d'); const ctxS = sands.getContext('2d');
+  let W=0,H=0, particles=[];
+
+  function resize(){ W=waves.width=sands.width=waves.clientWidth; H=waves.height=sands.clientHeight=waves.clientHeight; mkParticles(); }
+  window.addEventListener('resize', resize, {passive:true});
+
+  function mkParticles(){
+    const n = Math.floor((W*H)/1800); particles = [];
+    for(let i=0;i<n;i++){
+      particles.push({x:Math.random()*W, y:Math.random()*H, vx:0, vy:0});
+    }
+  }
+
+  function field(x,y,t){
+    // standing wave superposition (Chladni-like)
+    const nx = x/W, ny = y/H; const m=2, n=3, k=4;
+    const a = Math.sin((m+1)*Math.PI*nx) * Math.sin((n+1)*Math.PI*ny);
+    const b = Math.sin((k)*Math.PI*nx)   * Math.sin((m)*Math.PI*ny + t*0.6);
+    return a - b*0.6; // node when ~0
+  }
+
+  function fieldRipple(x,y,t){
+    const cx=W/2, cy=H*0.6; const dx=x-cx, dy=y-cy; const r=Math.hypot(dx,dy); return Math.sin(r*0.04 - t*1.4);
+  }
+
+  function drawOcean(t){
+    ctxW.clearRect(0,0,W,H);
+    // Whitney rings
+    ctxW.globalAlpha = 0.30; ctxW.strokeStyle = 'rgba(232,251,255,0.28)';
+    for(let i=0;i<6;i++){
+      const r = (i+1)*H/12 + Math.sin(t*0.6+i)*6;
+      ctxW.beginPath(); ctxW.arc(W/2, H*0.62, r, 0, Math.PI*2); ctxW.stroke();
+    }
+    ctxW.globalAlpha = 1.0;
+  }
+
+  function stepSands(t){
+    ctxS.clearRect(0,0,W,H);
+    ctxS.fillStyle = 'rgba(232,251,255,0.9)';
+    const fn = state.mode==='chladni'? field : fieldRipple;
+    for(const p of particles){
+      const v = fn(p.x,p.y,t*0.001);
+      // particles drift toward nodes (|v| small)
+      const target = Math.sign(v); // direction of gradient approx
+      p.vx += (-v)*0.02 + (Math.random()-0.5)*0.02; 
+      p.vy += (v)*0.02 + (Math.random()-0.5)*0.02;
+      p.x += p.vx; p.y += p.vy;
+      // friction & wrap
+      p.vx *= 0.96; p.vy *= 0.96;
+      if(p.x<0) p.x+=W; if(p.x>W) p.x-=W; if(p.y<0) p.y+=H; if(p.y>H) p.y-=H;
+      // draw: brighter when near node |v| small
+      const alpha = Math.max(0, 0.9 - Math.abs(v));
+      if(alpha>0.6){ ctxS.globalAlpha = alpha; ctxS.fillRect(p.x, p.y, 1.3, 1.3); }
+    }
+    ctxS.globalAlpha = 1.0;
+  }
+
+  function loopVis(){ drawOcean(performance.now()/1000); stepSands(performance.now()); requestAnimationFrame(loopVis); }
+
+  /* =====================
+     LOCAL SAVE
+     ===================== */
+  const toast=document.getElementById('toast');
+  function saveLocal(){ localStorage.setItem('seaPatterns', JSON.stringify(patterns)); toast.classList.add('on'); setTimeout(()=>toast.classList.remove('on'), 600); }
+  function loadLocal(){ try{ const j=JSON.parse(localStorage.getItem('seaPatterns')); if(j){ Object.assign(patterns,j); } } catch(e){} }
+
+  /* =====================
+     BOOT
+     ===================== */
+  function boot(){
+    resize(); loadLocal(); buildSteps();
+    if(!rafId) rafId=requestAnimationFrame(tick);
+    loopVis();
+  }
+  boot();
+})();
+</script>
+</body>
+</html>

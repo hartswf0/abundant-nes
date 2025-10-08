@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>VOL‑MEDIA DECKS — Pure Stack Control</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;touch-action:none;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;background:#000;color:#fff;font-family:Inter,system-ui,sans-serif;overflow:hidden}
+#canvas{width:100vw;height:100vh;display:block}
+#hud{position:fixed;inset:0;pointer-events:none;z-index:10;}
+.stackBtn{pointer-events:auto;width:72px;height:72px;border:2px solid rgba(255,255,255,.18);border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;background:rgba(255,255,255,.03);box-shadow:0 0 0 1px rgba(255,255,255,.1), inset 0 0 12px rgba(255,255,255,.05);transition:all .15s;}
+.stackBtn .glyph{font-size:10px;letter-spacing:1px;opacity:.7}
+.stackBtn .layers{display:flex;flex-direction:column-reverse;gap:2px;height:30px;width:10px;}
+.stackBtn .layers .lay{flex:1;width:100%;background:rgba(255,255,255,.2);border-radius:2px}
+.corner{position:absolute;display:flex;flex-direction:column;gap:12px;}
+.corner.bl{bottom:20px;left:20px;flex-direction:row;gap:8px;align-items:center;}
+.corner.tr{top:20px;right:20px;}
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+<div id="hud">
+  <!-- Top Right Controls -->
+  <div class="corner tr">
+    <div class="stackBtn" id="gridBtn"><div class="glyph">GRID</div><div class="layers"></div><div class="legend">16×16</div></div>
+    <div class="stackBtn" id="packBtn"><div class="glyph">PACK</div><div class="layers"></div><div class="legend">P‑1</div></div>
+    <div class="stackBtn" id="aimBtn"><div class="glyph">AIM</div><div class="layers"></div><div class="legend">STD</div></div>
+    <div class="stackBtn" id="modeBtn"><div class="glyph">MODE</div><div class="layers"></div><div class="legend">GRID</div></div>
+  </div>
+  <!-- Bottom Left Dock (Play / Tempo / Params) -->
+  <div class="corner bl" id="bottomDock">
+    <div class="stackBtn" id="playStack"><div class="glyph">PLAY</div><div class="layers"></div></div>
+    <div class="stackBtn" id="tempoStack"><div class="glyph">TMP</div><div class="layers"></div><div class="legend">120</div></div>
+    <div class="stackBtn" id="paramDock"><div class="glyph">CTRL</div><div class="layers"></div></div>
+  </div>
+</div>
+<script>
+(()=>{
+const canvas=document.getElementById('canvas');const ctx=canvas.getContext('2d');let W,H;function resize(){W=innerWidth;H=innerHeight;canvas.width=W;canvas.height=H;}resize();addEventListener('resize',resize);
+const buzz=(p)=>{try{navigator.vibrate&&navigator.vibrate(p||10)}catch{}};
+let bpm=120,playing=false,cols=16,rows=8,grid=[];
+function makeGrid(){grid=[];for(let r=0;r<rows;r++){let row=[];for(let c=0;c<cols;c++){row.push({on:Math.random()<0.2,vel:Math.random()});}grid.push(row);} }
+makeGrid();
+let playhead=0,t=0,audioCtx=null;
+function ensureAudio(){if(!audioCtx){const AC=window.AudioContext||window.webkitAudioContext;audioCtx=new AC();}}
+function trig(r,c){if(!audioCtx)return;const o=audioCtx.createOscillator();const g=audioCtx.createGain();o.connect(g);g.connect(audioCtx.destination);o.type='sine';o.frequency.value=220+Math.random()*200;g.gain.value=0.1;const now=audioCtx.currentTime;o.start(now);o.stop(now+0.1);}
+function draw(){ctx.clearRect(0,0,W,H);const size=Math.min(W,H)*0.6;const cell=size/cols;const offX=(W-size)/2,offY=(H-size)/2;for(let r=0;r<rows;r++){for(let c=0;c<cols;c++){const x=offX+c*cell;const y=offY+r*cell;const st=grid[r][c];ctx.fillStyle=st.on?'#0ff':'#222';ctx.fillRect(x+2,y+2,cell-4,cell-4);if(playhead===c)ctx.strokeStyle='#fff',ctx.strokeRect(x+1,y+1,cell-2,cell-2);}}}
+function update(dt){if(playing){t+=dt*bpm/60;if(Math.floor(t)%cols!==playhead){playhead=Math.floor(t)%cols;for(let r=0;r<rows;r++){if(grid[r][playhead].on)trig(r,playhead);}buzz(4);}}}
+let last=performance.now();function loop(now){const dt=(now-last)/1000;last=now;update(dt);draw();requestAnimationFrame(loop);}requestAnimationFrame(loop);
+function buildLayers(el,lit){el.innerHTML='';for(let i=0;i<6;i++){const d=document.createElement('div');d.className='lay';if(i>=6-lit)d.style.background='linear-gradient(90deg,#0ff,#fff)';el.appendChild(d);}}
+['gridBtn','packBtn','aimBtn','modeBtn','playStack','tempoStack','paramDock'].forEach(id=>{const b=document.getElementById(id);buildLayers(b.querySelector('.layers'),3);});
+const playStack=document.getElementById('playStack');playStack.addEventListener('pointerdown',()=>{ensureAudio();playing=!playing;buildLayers(playStack.querySelector('.layers'),playing?6:2);buzz(15);});
+const tempoStack=document.getElementById('tempoStack');let tgrabbing=false,sy=0,sbpm=bpm;tempoStack.addEventListener('pointerdown',e=>{tgrabbing=true;sy=e.clientY;sbpm=bpm;tempoStack.setPointerCapture(e.pointerId);buzz(10);});tempoStack.addEventListener('pointermove',e=>{if(!tgrabbing)return;const dy=sy-e.clientY;bpm=Math.max(60,Math.min(200,sbpm+dy/2));tempoStack.querySelector('.legend').textContent=Math.round(bpm);});addEventListener('pointerup',()=>{tgrabbing=false;});
+})();
+</script>
+</body>
+</html>

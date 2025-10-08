@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>VOL‑MEDIA — Master Alley Stack (v1)</title>
+<style>
+  :root{
+    --bg:#000; --fg:#fff; --muted:#aab; --line:rgba(255,255,255,.16);
+    --glass:rgba(18,18,18,.78); --accent:#4ee6d8; --accent2:#ff7ad6;
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;overflow:hidden}
+
+  /* Stage */
+  #stage{position:fixed;inset:0}
+  canvas#board{position:absolute;inset:0;display:block;width:100%;height:100%}
+
+  /* Master Alley (thin, looping) */
+  #alley{position:fixed;top:0;bottom:0;left:0;width:64px;display:flex;flex-direction:column;align-items:center;gap:8px;padding:10px 6px 10px 6px;z-index:10;pointer-events:auto}
+  #alley::before{content:"";position:absolute;top:0;bottom:0;left:0;right:0;background:linear-gradient(180deg,rgba(255,255,255,.055),rgba(255,255,255,.02));backdrop-filter:blur(10px);border-right:1px solid var(--line)}
+  .slot{position:relative;width:52px;height:52px;border-radius:14px;border:1px solid var(--line);background:rgba(0,0,0,.45);display:grid;place-items:center;font-size:22px;cursor:pointer;z-index:1}
+  .slot:active{transform:translateY(1px)}
+  .slot .led{position:absolute;inset:0;border-radius:14px;box-shadow:0 0 0 rgba(0,0,0,0);opacity:.0;pointer-events:none}
+  .slot[data-focus="1"]{outline:2px solid var(--accent)}
+
+  /* Global cluster at bottom of alley */
+  #gcluster{margin-top:auto;display:grid;grid-template-columns:1fr 1fr;gap:8px;width:52px;z-index:1}
+  .mini{width:52px;height:36px;border-radius:10px;border:1px solid var(--line);background:rgba(0,0,0,.45);display:grid;place-items:center;font-size:18px;cursor:pointer}
+  .mini.small{height:36px;width:24px;border-radius:10px}
+
+  /* Sub‑Alley Deck (bottom, symbol-only) */
+  #deck{position:fixed;left:0;right:0;bottom:0;transform:translateY(110%);transition:transform .22s ease;z-index:12}
+  #deck.show{transform:translateY(0%)}
+  #deck .panel{margin:0 auto;background:rgba(18,18,18,.9);border:1px solid var(--line);border-top-left-radius:18px;border-top-right-radius:18px;max-width:860px;padding:10px 12px calc(12px + var(--safe-bottom));backdrop-filter:blur(8px)}
+  #deck .gr{display:grid;grid-template-columns:repeat(8,1fr);gap:10px}
+  .gbtn{height:44px;border-radius:12px;border:1px solid var(--line);background:rgba(0,0,0,.45);display:grid;place-items:center;font-size:18px;cursor:pointer}
+  .knob{height:44px;border-radius:12px;border:1px solid var(--line);background:linear-gradient(90deg,rgba(255,255,255,.08),rgba(255,255,255,.02));display:flex;align-items:center;padding:0 10px}
+  .knob input[type=range]{-webkit-appearance:none;appearance:none;width:100%}
+  .knob input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none;appearance:none;width:22px;height:22px;border-radius:50%;background:var(--accent);border:1px solid var(--line)}
+  .knob .sym{width:28px;text-align:center;font-size:16px;margin-right:8px}
+
+  /* Top HUD (minimal glyphs) */
+  #hud{position:fixed;top:8px;left:50%;transform:translateX(-50%);display:flex;gap:8px;z-index:9}
+  .pill{height:28px;min-width:28px;border-radius:999px;border:1px solid var(--line);background:rgba(0,0,0,.45);display:flex;align-items:center;gap:8px;padding:0 10px;font-size:14px}
+
+  /* Toast */
+  #toast{position:fixed;bottom:10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.86);border:1px solid var(--line);padding:6px 10px;border-radius:10px;font-size:12px;display:none;z-index:15}
+
+  /* Particle pointer blocker area for interactions in deck */
+  #scrim{position:fixed;inset:0;display:none;z-index:11}
+  #scrim.show{display:block}
+</style>
+</head>
+<body>
+  <div id="stage">
+    <canvas id="board" aria-hidden="false"></canvas>
+  </div>
+
+  <!-- Master Alley Stack (left) -->
+  <nav id="alley" aria-label="Master Alley">
+    <button class="slot" data-row="0" aria-label="Row 1"><span>◉</span><span class="led"></span></button>
+    <button class="slot" data-row="1" aria-label="Row 2"><span>◉</span><span class="led"></span></button>
+    <button class="slot" data-row="2" aria-label="Row 3"><span>◉</span><span class="led"></span></button>
+    <button class="slot" data-row="3" aria-label="Row 4"><span>◉</span><span class="led"></span></button>
+    <button class="slot" data-row="4" aria-label="Row 5"><span>◉</span><span class="led"></span></button>
+    <button class="slot" data-row="5" aria-label="Row 6"><span>◉</span><span class="led"></span></button>
+    <button class="slot" data-row="6" aria-label="Row 7"><span>◉</span><span class="led"></span></button>
+    <button class="slot" data-row="7" aria-label="Row 8"><span>◉</span><span class="led"></span></button>
+
+    <div id="gcluster">
+      <button class="mini" id="btnPlay" aria-label="Play">▶</button>
+      <button class="mini" id="btnOrbit" aria-label="Orbit">🌀</button>
+      <button class="mini" id="btnPackPrev" aria-label="Prev">◀</button>
+      <button class="mini" id="btnPackNext" aria-label="Next">▶</button>
+    </div>
+  </nav>
+
+  <!-- Top HUD (glyph pills) -->
+  <div id="hud">
+    <div class="pill" id="bpm">♩ 112</div>
+    <div class="pill" id="den">■×16</div>
+    <div class="pill" id="theme">☯︎</div>
+  </div>
+
+  <!-- Sub‑Alley Deck (symbol only) -->
+  <div id="deck" aria-hidden="true">
+    <div class="panel">
+      <div class="gr">
+        <button class="gbtn" id="d_sync" title="sync">∞</button>
+        <button class="gbtn" id="d_evo"  title="evo">✴︎</button>
+        <div class="knob"><div class="sym">🎚️</div><input id="d_lvl" type="range" min="0" max="1" step="0.01" value="0.7"/></div>
+        <div class="knob"><div class="sym">💧</div><input id="d_send" type="range" min="0" max="1" step="0.01" value="0.25"/></div>
+        <div class="knob"><div class="sym">⚡</div><input id="d_prob" type="range" min="0" max="1" step="0.01" value="1"/></div>
+        <div class="knob"><div class="sym">↔︎</div><input id="d_width" type="range" min="0" max="1" step="0.01" value="0.5"/></div>
+        <div class="knob"><div class="sym">⟰</div><input id="d_oct" type="range" min="0" max="1" step="0.01" value="0.5"/></div>
+        <div class="knob"><div class="sym">◷</div><input id="d_swg" type="range" min="0" max="1" step="0.01" value="0.5"/></div>
+      </div>
+    </div>
+  </div>
+  <div id="scrim"></div>
+
+  <div id="toast"></div>
+
+<script>
+(function(){
+  // ===== Basics
+  const cvs=document.getElementById('board'); const ctx=cvs.getContext('2d');
+  function rs(){ const dpr=Math.min(devicePixelRatio||1,2); cvs.width=innerWidth*dpr; cvs.height=innerHeight*dpr; cvs.style.width=innerWidth+'px'; cvs.style.height=innerHeight+'px'; ctx.setTransform(dpr,0,0,dpr,0,0);} rs(); addEventListener('resize',rs);
+  const toastEl=document.getElementById('toast'); function toast(t){ toastEl.textContent=t; toastEl.style.display='block'; clearTimeout(toast._id); toast._id=setTimeout(()=>toastEl.style.display='none',900); }
+  const hapt=(ms=10)=>{ try{navigator.vibrate&&navigator.vibrate(ms);}catch{} };
+
+  // ===== Model
+  const ROWS=8; let COLS=16; let bpm=112; let playing=false; let step=0; let pack=0;
+  const pattern=Array.from({length:ROWS},()=>Array(COLS).fill(0));
+  const rowColor=['#ff8844','#ff6688','#ffff66','#66ffcc','#99bbff','#c47dff','#88ffaa','#ffffff'];
+  const rowState=Array.from({length:ROWS},()=>({lvl:.7,send:.25,prob:1,width:.5,oct:.5,swg:.5,evo:false,sync:true,muted:false}));
+  let focusRow=0;
+
+  // ===== Audio (simple and light)
+  let AC=null, master=null, wet=null, dry=null; let started=false;
+  async function audioInit(){ if(AC) return true; const C=window.AudioContext||window.webkitAudioContext; if(!C) return false; AC=new C(); master=AC.createGain(); master.gain.value=.18; master.connect(AC.destination); wet=AC.createGain(); dry=AC.createGain(); wet.gain.value=.22; dry.gain.value=.78; wet.connect(master); dry.connect(master); return true; }
+  function mkEnv(){ const g=AC.createGain(); g.gain.value=0; return g; }
+  function noiseBuf(){ const b=AC.createBuffer(1, AC.sampleRate*1, AC.sampleRate); const d=b.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1; return b; }
+  // light voices
+  function kick(){ const o=AC.createOscillator(); o.type='sine'; const g=mkEnv(); o.connect(g).connect(dry); o.start(); const t=AC.currentTime; o.frequency.setValueAtTime(120,t); o.frequency.exponentialRampToValueAtTime(45,t+0.09); g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(.9,t+0.005); g.gain.exponentialRampToValueAtTime(0.0001,t+0.22); setTimeout(()=>o.stop(),260); }
+  function snare(){ const n=AC.createBufferSource(); n.buffer=noiseBuf(); const g=mkEnv(); n.connect(g).connect(dry); n.start(); const t=AC.currentTime; g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(.6,t+0.005); g.gain.exponentialRampToValueAtTime(0.0001,t+0.14); setTimeout(()=>n.stop(),200); }
+  function hat(){ const n=AC.createBufferSource(); n.buffer=noiseBuf(); const g=mkEnv(); n.connect(g).connect(dry); n.start(); const t=AC.currentTime; g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(.35,t+0.001); g.gain.exponentialRampToValueAtTime(0.0001,t+0.06); setTimeout(()=>n.stop(),120); }
+  function tone(freq=440,vel=.4){ const o=AC.createOscillator(); o.type=['sawtooth','triangle','square'][pack%3]; const g=mkEnv(); o.connect(g).connect(dry); o.start(); const t=AC.currentTime; o.frequency.setValueAtTime(freq,t); g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(vel,t+0.01); g.gain.exponentialRampToValueAtTime(0.0001,t+0.22); setTimeout(()=>o.stop(),260); }
+
+  // ===== Rendering (2D grid + particles)
+  const P=[]; function burst(x,y,c){ for(let i=0;i<10;i++){ P.push({x,y,dx:(Math.random()-0.5)*2,dy:(Math.random()-0.5)*2,life:1,col:c}); } }
+  function draw(){ ctx.clearRect(0,0,cvs.width, cvs.height); const w=innerWidth, h=innerHeight; const L=Math.min(w-90, h*1.2); const cols=COLS, rows=ROWS; const cell=L/cols; const gridX=80, gridY=(h - rows*cell)/2;
+    // grid
+    for(let r=0;r<rows;r++){
+      for(let c=0;c<cols;c++){
+        const x=gridX + c*cell, y=gridY + r*cell; const v=pattern[r][c]; ctx.fillStyle='rgba(255,255,255,'+(v?0.12:0.03)+')'; ctx.fillRect(x+4,y+4,cell-8,cell-8);
+        if(v){ ctx.strokeStyle=rowColor[r]; ctx.lineWidth=2; ctx.strokeRect(x+4,y+4,cell-8,cell-8); }
+      }
+    }
+    // step cursor
+    const sx=gridX + step*cell; ctx.fillStyle='rgba(255,255,255,.08)'; ctx.fillRect(sx, gridY, cell, rows*cell);
+    // particles
+    for(let i=P.length-1;i>=0;i--){ const p=P[i]; p.x+=p.dx; p.y+=p.dy; p.life-=0.02; if(p.life<=0) P.splice(i,1); else{ ctx.globalAlpha=Math.max(0,p.life); ctx.fillStyle=p.col; ctx.beginPath(); ctx.arc(p.x,p.y,2,0,Math.PI*2); ctx.fill(); ctx.globalAlpha=1; } }
+  }
+
+  // ===== Alley wiring (selection + redundancy)
+  const slots=[...document.querySelectorAll('#alley .slot')];
+  function focus(r){ focusRow=r; slots.forEach(s=>s.dataset.focus='0'); const el=slots[r]; el.dataset.focus='1'; hapt(8); showDeck(true); syncDeckFromRow(); }
+  slots.forEach(s=>{
+    s.addEventListener('click',()=>{ const r=+s.dataset.row; focus(r); toast('◉'+(r+1)); });
+    // hold → rapid pulse mirror
+    s.addEventListener('pointerdown',()=>{ const r=+s.dataset.row; const rect=s.getBoundingClientRect(); burst(rect.left+rect.width/2, rect.top+rect.height/2, rowColor[r]); });
+  });
+
+  // ===== Deck (sub‑alley) — symbol only
+  const deck=document.getElementById('deck'); const scrim=document.getElementById('scrim');
+  function showDeck(on){ deck.classList.toggle('show',!!on); deck.setAttribute('aria-hidden', on? 'false':'true'); scrim.classList.toggle('show',!!on); }
+  scrim.addEventListener('click',()=>showDeck(false));
+  function syncDeckFromRow(){ const st=rowState[focusRow]; d_lvl.value=st.lvl; d_send.value=st.send; d_prob.value=st.prob; d_width.value=st.width; d_oct.value=st.oct; d_swg.value=st.swg; d_evo.dataset.on=st.evo?1:0; d_sync.dataset.on=st.sync?1:0; }
+  function syncRowFromDeck(){ const st=rowState[focusRow]; st.lvl=+d_lvl.value; st.send=+d_send.value; st.prob=+d_prob.value; st.width=+d_width.value; st.oct=+d_oct.value; st.swg=+d_swg.value; st.evo=!!(+d_evo.dataset.on||0); st.sync=!!(+d_sync.dataset.on||0); }
+
+  const d_lvl=document.getElementById('d_lvl');
+  const d_send=document.getElementById('d_send');
+  const d_prob=document.getElementById('d_prob');
+  const d_width=document.getElementById('d_width');
+  const d_oct=document.getElementById('d_oct');
+  const d_swg=document.getElementById('d_swg');
+  const d_evo=document.getElementById('d_evo');
+  const d_sync=document.getElementById('d_sync');
+  [d_lvl,d_send,d_prob,d_width,d_oct,d_swg].forEach(inp=>inp.addEventListener('input',()=>{ syncRowFromDeck(); hapt(4); }));
+  d_evo.addEventListener('click',()=>{ d_evo.dataset.on = d_evo.dataset.on==='1'? '0':'1'; syncRowFromDeck(); burst(innerWidth*0.5, innerHeight-90, rowColor[focusRow]); });
+  d_sync.addEventListener('click',()=>{ d_sync.dataset.on = d_sync.dataset.on==='1'? '0':'1'; syncRowFromDeck(); });
+
+  // ===== Board interaction (tap cells)
+  cvs.addEventListener('pointerdown',(e)=>{
+    const w=innerWidth, h=innerHeight; const L=Math.min(w-90, h*1.2); const cell=L/COLS; const gridX=80, gridY=(h - ROWS*cell)/2;
+    const x=e.clientX, y=e.clientY; const c=Math.floor((x-gridX)/cell), r=Math.floor((y-gridY)/cell);
+    if(c>=0 && c<COLS && r>=0 && r<ROWS){ const val=pattern[r][c]; const n = val===0?1: val===1?2: val===2?0:1; pattern[r][c]=n; const cx=gridX + c*cell + cell/2, cy=gridY + r*cell + cell/2; burst(cx,cy,rowColor[r]); hapt(10); focus(r); draw(); }
+  });
+
+  // ===== Transport + HUD
+  const btnPlay=document.getElementById('btnPlay'); const btnOrbit=document.getElementById('btnOrbit');
+  const btnPackPrev=document.getElementById('btnPackPrev'); const btnPackNext=document.getElementById('btnPackNext');
+  document.getElementById('theme').addEventListener('click',()=>{ document.body.classList.toggle('light'); toast('☯︎'); });
+  btnPackPrev.addEventListener('click',()=>{ pack=(pack+2)%3; toast('◀'); });
+  btnPackNext.addEventListener('click',()=>{ pack=(pack+1)%3; toast('▶'); });
+  btnOrbit.addEventListener('click',()=>{ // playful effect: jitter particles
+    burst(innerWidth-40, 40, '#fff'); toast('🌀'); });
+
+  btnPlay.addEventListener('click', async ()=>{
+    if(!started){ const ok=await audioInit(); if(!ok) return; try{ if(AC.state==='suspended') await AC.resume(); }catch{} started=true; }
+    playing=!playing; btnPlay.textContent=playing?'⏸':'▶'; if(playing) toast('▶'); else toast('⏸');
+  });
+
+  // HUD text values (glyph+number OK here)
+  const bpmEl=document.getElementById('bpm'); const denEl=document.getElementById('den');
+  function setBPM(v){ bpm=v; bpmEl.textContent='♩ '+bpm; }
+  function setDEN(v){ COLS=v; denEl.textContent='■×'+COLS; for(let r=0;r<ROWS;r++){ pattern[r].length=COLS; for(let c=0;c<COLS;c++) if(typeof pattern[r][c]!=="number") pattern[r][c]=0; } draw(); }
+
+  // ===== Clock
+  let acc=0, last=performance.now();
+  function loop(){ const now=performance.now(); const dt=now-last; last=now; acc+=dt; const stepDur=(60000/bpm)/4; while(playing && acc>=stepDur){ acc-=stepDur; step=(step+1)%COLS; // triggers
+      for(let r=0;r<ROWS;r++){ const v=pattern[r][step]; if(v>0 && Math.random()<=rowState[r].prob){ if(!AC){/*no-op*/} else { if(r===0) kick(); else if(r===1) snare(); else if(r===2) hat(); else tone(220+ r*60, 0.2+v*0.2); } }
+      }
+      // alley LED pulse mirror
+      const s=slots[focusRow]; const led=s.querySelector('.led'); led.style.boxShadow=`0 0 22px 6px ${rowColor[focusRow]}`; led.style.opacity=.35; setTimeout(()=>{led.style.opacity=0;},90);
+    }
+    draw(); requestAnimationFrame(loop); }
+  requestAnimationFrame(loop);
+
+  // ===== Quick test harness
+  (function tests(){ try{ const results=[]; const ok=(n,p)=>results.push({test:n,pass:!!p});
+    ok('canvas exists', !!cvs && !!ctx);
+    ok('alley 8 rows', document.querySelectorAll('#alley .slot').length===8);
+    ok('deck present', !!document.getElementById('deck'));
+    setDEN(16); setBPM(112); ok('cols/bpm set', COLS===16 && bpm===112);
+    // simulate focus and open deck
+    slots[0].click(); ok('focus row 1', focusRow===0);
+    showDeck(true); ok('deck open', deck.classList.contains('show'));
+    showDeck(false); ok('deck close', !deck.classList.contains('show'));
+    console.table(results); toast('Self‑tests '+results.filter(r=>r.pass).length+'/'+results.length);
+  }catch(e){ console.error(e); } })();
+
+  // defaults
+  focus(0); setDEN(16); setBPM(112); draw();
+})();
+</script>
+</body>
+</html>

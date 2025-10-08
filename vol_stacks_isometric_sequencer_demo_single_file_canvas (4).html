@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>VOL‑Stacks — Isometric Sequencer (Single‑File)</title>
+<style>
+  /* ─────────────────────────────
+     CORE SKIN — black void, neon glow, no chrome
+     ───────────────────────────── */
+  :root{
+    --bg:#050507; --ink:#e8e8e8; --muted:#7a7a7a; --hud:#101218;
+    --glow:#ffffff; --accent:#89f5ff; --danger:#ff4d6d; --ok:#80ffcc;
+    --shadow:0 8px 28px rgba(0,0,0,.55), 0 2px 8px rgba(0,0,0,.3);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent; touch-action:none}
+  html,body{height:100%}
+  body{margin:0; background:var(--bg); color:var(--ink); font:14px/1.2 system-ui,Segoe UI,Inter,Roboto,Helvetica,Arial,sans-serif; overflow:hidden}
+  canvas#scene{position:fixed; inset:0; display:block}
+  /* HUD is screen-locked */
+  #hud{position:fixed; inset:0; pointer-events:none}
+  .corner{position:absolute; display:flex; gap:10px; align-items:end; pointer-events:auto}
+  .corner.tl{top:10px; left:10px}
+  .corner.tr{top:10px; right:10px}
+  .corner.bl{bottom:10px; left:10px}
+  .corner.br{bottom:10px; right:10px}
+
+  /* Stack buttons in HUD — text-minimal, stack-shaped controls */
+  .stackBtn{--w:44px; width:var(--w); height:88px; background:linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.0)); border:1px solid rgba(255,255,255,.18); border-radius:12px; box-shadow:var(--shadow); position:relative; overflow:hidden; display:grid; place-items:end center; padding:6px}
+  .stackBtn .layers{position:absolute; inset:8px 6px; display:flex; flex-direction:column; justify-content:flex-end; gap:3px}
+  .stackBtn .lay{height:6px; border-radius:3px; background:rgba(255,255,255,.15); filter:drop-shadow(0 0 6px rgba(255,255,255,.15))}
+  .stackBtn[data-active="1"]{outline:2px solid var(--accent);}
+  .stackBtn .glyph{position:absolute; top:6px; left:6px; font-size:10px; letter-spacing:.08em; color:var(--muted)}
+  .stackBtn .legend{position:absolute; bottom:4px; width:100%; text-align:center; font-size:10px; color:#bdbdbd; opacity:.8}
+  .stackBtn.accent{border-color:rgba(137,245,255,.55); box-shadow:0 0 0 1px rgba(137,245,255,.35), inset 0 0 24px rgba(137,245,255,.08), var(--shadow)}
+
+  /* Slim bar for transport & tempo */
+  .bar{background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.15); border-radius:12px; padding:6px 10px; display:flex; gap:10px; align-items:center; box-shadow:var(--shadow)}
+  .iconBtn{width:38px; height:38px; border-radius:10px; border:1px solid rgba(255,255,255,.18); background:rgba(255,255,255,.06); display:grid; place-items:center; cursor:pointer; user-select:none}
+  .iconBtn[data-on="1"]{outline:2px solid var(--ok)}
+  .label{font-size:11px; color:#bdbdbd}
+  .dial{width:120px; height:10px; border-radius:99px; background:rgba(255,255,255,.08); position:relative}
+  .dial .fill{position:absolute; left:0; top:0; bottom:0; width:30%; border-radius:99px; background:linear-gradient(90deg, var(--accent), #fff)}
+
+  /* Selection color pipe — HUD adopts selected color */
+  #colorPipe{position:fixed; left:0; right:0; bottom:0; height:3px; background:linear-gradient(90deg, #666, #aaa); opacity:.6; pointer-events:none}
+
+  /* Tiny on-canvas hints (optional) */
+  #hint{position:fixed; left:50%; transform:translateX(-50%); bottom:6px; font-size:11px; color:#9aa; letter-spacing:.04em; opacity:.7; pointer-events:none}
+
+  /* Mobile thumb-zone consideration */
+  @media (max-width:680px){
+    .stackBtn{--w:40px; height:76px}
+    .bar{gap:6px}
+    .dial{width:96px}
+  }
+</style>
+</head>
+<body>
+  <canvas id="scene"></canvas>
+  <div id="hud" aria-hidden="false">
+    <!-- TOP-LEFT: View presets -->
+    <div class="corner tl">
+      <div class="bar" id="viewBar">
+        <div class="iconBtn" data-view="iso" title="ISO">◧</div>
+        <div class="iconBtn" data-view="top" title="TOP">▭</div>
+        <div class="iconBtn" data-view="low" title="LOW">◩</div>
+        <div class="iconBtn" data-view="side" title="SIDE">▮</div>
+      </div>
+    </div>
+
+    <!-- TOP-RIGHT: Grid density + mode -->
+    <div class="corner tr" style="gap:12px">
+      <div class="stackBtn accent" id="gridBtn" title="Grid Density">
+        <div class="glyph">GRID</div>
+        <div class="layers" id="gridLayers"></div>
+        <div class="legend" id="gridLegend">16×16</div>
+      </div>
+      <div class="stackBtn" id="packBtn" title="Sound Pack">
+        <div class="glyph">PACK</div>
+        <div class="layers" id="packLayers"></div>
+        <div class="legend" id="packLegend">P‑1</div>
+      </div>
+      <div class="stackBtn" id="aimBtn" title="Target / Spread">
+        <div class="glyph">AIM</div>
+        <div class="layers" id="aimLayers"></div>
+        <div class="legend" id="aimLegend">STD</div>
+      </div>
+      <div class="stackBtn" id="modeBtn" title="Dock Mode">
+        <div class="glyph">MODE</div>
+        <div class="layers" id="modeLayers"></div>
+        <div class="legend" id="modeLegend">GRID</div>
+      </div>
+    </div>
+        <div class="layers" id="gridLayers"></div>
+        <div class="legend" id="gridLegend">16×16</div>
+      </div>
+      <div class="stackBtn" id="aimBtn" title="Target / Spread">
+        <div class="glyph">AIM</div>
+        <div class="layers" id="aimLayers"></div>
+        <div class="legend" id="aimLegend">STD</div>
+      </div>
+      <div class="stackBtn" id="modeBtn" title="Dock Mode">
+        <div class="glyph">MODE</div>
+        <div class="layers" id="modeLayers"></div>
+        <div class="legend" id="modeLegend">GRID</div>
+      </div>
+    </div>
+        <div class="layers" id="gridLayers"></div>
+        <div class="legend" id="gridLegend">16×16</div>
+      </div>
+      <div class="stackBtn" id="modeBtn" title="Dock Mode">
+        <div class="glyph">MODE</div>
+        <div class="layers" id="modeLayers"></div>
+        <div class="legend" id="modeLegend">GRID</div>
+      </div>
+    </div>
+
+    <!-- BOTTOM-LEFT: Transport + Tempo -->
+    <div class="corner bl">
+      <div class="bar">
+        <div class="iconBtn" id="playBtn" title="Play/Pause">▶</div>
+        <div class="label">Tempo</div>
+        <div class="dial" id="tempoDial"><div class="fill"></div></div>
+        <div class="label" id="bpmLbl">120 BPM</div>
+      </div>
+    </div>
+
+    <!-- BOTTOM-RIGHT: Param stacks (contextual) -->
+    <div class="corner br" id="dockParams" style="gap:12px"></div>
+  </div>
+  <div id="colorPipe"></div>
+  
+
+<script>
+(()=>{
+  // ================================================
+  // FIXED-VIEW, SQUARE-GRID, HAPTIC SEQUENCER
+  // Expressive Aesthetics Mode + DJ-Style Cue/Commit + Sound Packs
+  // ================================================
+  const canvas = document.getElementById('scene');
+  const ctx = canvas.getContext('2d');
+  const DPR = Math.max(1, devicePixelRatio||1);
+  let W=0,H=0; const resize=()=>{W=innerWidth;H=innerHeight;canvas.width=W*DPR;canvas.height=H*DPR;canvas.style.width=W+'px';canvas.style.height=H+'px';ctx.setTransform(DPR,0,0,DPR,0,0)}; addEventListener('resize',resize,{passive:true}); resize();
+
+  const buzz=(p)=>{ try{ if(navigator.vibrate) navigator.vibrate(p||8);}catch{} };
+
+  const ROW_COLORS=['#ff7a7a','#ffd27a','#a6ff7a','#7affdc','#7ab5ff','#c47aff','#ff7ad1','#7aff9d'];
+
+  const state={
+    gridOpts:[16,8,4,2,1],gridIdx:0,cols:16,rows:8,baseCell:28,
+    defaultLayers:10,
+    cam:{phi:Math.PI*0.2,theta:Math.PI*0.22},
+    playing:false,t:0,bpm:120,playhead:0,selection:null,
+    mode:'GRID', // GRID | SOUND | LOOK
+    scrubbing:false,lastScrubCol:-1,
+    focus:{tx:0,tz:0, sx:0, sz:0, scale:1, targetScale:1.0, lerp:0.18},
+    editor:false,
+    aimIdx:0, spreadFactor:[1.0,1.18,1.34], hitInflate:[18,28,36],
+    adjusting:{on:false, paramKey:null, value:0},
+    packIdx:0,
+    // DJ-style staging buffers for selected cell
+    staging:{sound:null, look:null, armed:false}
+  };
+
+  // HUD elements
+  const gridBtn=document.getElementById('gridBtn');
+  const gridLayersEl=document.getElementById('gridLayers');
+  const gridLegend=document.getElementById('gridLegend');
+  const packBtn=document.getElementById('packBtn');
+  const packLayersEl=document.getElementById('packLayers');
+  const packLegend=document.getElementById('packLegend');
+  const aimBtn=document.getElementById('aimBtn');
+  const aimLayersEl=document.getElementById('aimLayers');
+  const aimLegend=document.getElementById('aimLegend');
+  const modeBtn=document.getElementById('modeBtn');
+  const modeLayersEl=document.getElementById('modeLayers');
+  const modeLegend=document.getElementById('modeLegend');
+  const tempoDial=document.getElementById('tempoDial');
+  const bpmLbl=document.getElementById('bpmLbl');
+  const playBtn=document.getElementById('playBtn');
+  const dockParams=document.getElementById('dockParams');
+  const colorPipe=document.getElementById('colorPipe');
+
+  const buildLayers=(el,n=8,lit=4)=>{ el.innerHTML=''; for(let i=0;i<n;i++){ const d=document.createElement('div'); d.className='lay'; if(i>=n-lit) d.style.background='linear-gradient(90deg, var(--accent), #fff)'; el.appendChild(d);} };
+  buildLayers(gridLayersEl,6,6); buildLayers(modeLayersEl,6,3); buildLayers(aimLayersEl,6,2); buildLayers(packLayersEl,6,3);
+
+  // PARAM SETS
+  const SOUND_PARAMS=[{key:'vel',label:'VEL'},{key:'prob',label:'PRB'},{key:'len',label:'LEN'},{key:'pitch',label:'PIT'},{key:'pan',label:'PAN'},{key:'send',label:'SND'}];
+  const LOOK_PARAMS=[{key:'lum',label:'LUM'},{key:'sep',label:'SEP'},{key:'layers',label:'LAY'},{key:'halo',label:'HAL'},{key:'sat',label:'SAT'},{key:'twist',label:'TW'}];
+
+  // Grid data (with look fields)
+  function makeCell(r){
+    return { on:Math.random()<0.18, vel:0.7, prob:0.9, len:1, pitch:0, pan:(r-3.5)/3.5, send:0.2,
+             // look
+             lum:0.65, sep:1.0, layers:1.0, halo:0.5, sat:0.85, twist:0.0,
+             _layersCache:state.defaultLayers };
+  }
+  function makeGrid(cols){ const g=[]; for(let r=0;r<state.rows;r++){ const row=[]; for(let c=0;c<cols;c++){ row.push(makeCell(r)); } g.push(row);} return g; }
+  let grid=makeGrid(state.cols);
+
+  // Packs
+  const PACKS=[
+    {name:'P‑1', rows:(r)=> r%2? 'square':'sine', fxDelay:0.22},
+    {name:'P‑2', rows:(r)=> r%3? 'triangle':'sawtooth', fxDelay:0.28},
+    {name:'P‑3', rows:(r)=> ['sine','triangle','square','sawtooth'][r%4], fxDelay:0.18}
+  ];
+  function cyclePack(){ state.packIdx=(state.packIdx+1)%PACKS.length; const p=PACKS[state.packIdx]; packLegend.textContent=p.name; buildLayers(packLayersEl,6,3+state.packIdx); buzz(10); }
+
+  // Grid density
+  function setGridByIndex(idx){ state.gridIdx=(idx+state.gridOpts.length)%state.gridOpts.length; const size=state.gridOpts[state.gridIdx]; state.cols=size; grid=makeGrid(state.cols); gridLegend.textContent=(size===1?'1×1':`${size}×${size}`); const lit=1+(5-state.gridIdx); buildLayers(gridLayersEl,6,Math.max(2,Math.min(6,lit))); buzz(15); clearFocus(); }
+
+  // AIM control
+  function cycleAim(){ state.aimIdx=(state.aimIdx+1)%3; const names=['STD','WIDE','MAX']; aimLegend.textContent=names[state.aimIdx]; buildLayers(aimLayersEl,6,2+state.aimIdx*2); buzz(10); }
+
+  // MODE
+  function toggleMode(){ state.mode = state.mode==='GRID' ? 'SOUND' : (state.mode==='SOUND' ? 'LOOK' : 'GRID'); modeLegend.textContent=state.mode; buildLayers(modeLayersEl,6, state.mode==='GRID'?3: (state.mode==='SOUND'?5:4)); refreshDockParams(); buzz(10); }
+
+  // Dock params + CUE/COMMIT controls
+  function refreshDockParams(){
+    dockParams.innerHTML='';
+    const sel=state.selection; const isSel=!!sel; const activeColor=isSel? ROW_COLORS[sel.r%ROW_COLORS.length] : '#e5e5e5'; colorPipe.style.background=`linear-gradient(90deg, ${activeColor}, #fff)`;
+
+    // CUE + COMMIT blocks (left side of param dock when selected)
+    if(isSel){
+      const cue=document.createElement('div'); cue.className='stackBtn'; cue.innerHTML='<div class="glyph">CUE</div><div class="layers"></div><div class="legend">PRE</div>'; buildLayers(cue.querySelector('.layers'),6, state.staging.armed? 5:3);
+      cue.addEventListener('pointerdown', (e)=>{ e.preventDefault(); state.staging.armed=true; buzz(12); });
+      dockParams.appendChild(cue);
+
+      const commit=document.createElement('div'); commit.className='stackBtn'; commit.innerHTML='<div class="glyph">COM</div><div class="layers"></div><div class="legend">PUSH</div>'; buildLayers(commit.querySelector('.layers'),6,5);
+      commit.addEventListener('pointerdown', (e)=>{
+        e.preventDefault();
+        if(state.staging.armed){
+          const cell=grid[sel.r][sel.c];
+          if(state.staging.sound){ Object.assign(cell, state.staging.sound); }
+          if(state.staging.look){ Object.assign(cell, state.staging.look); cell._layersCache = calcLayersFrom(cell.layers); }
+          state.staging={sound:null,look:null,armed:false}; buzz(18);
+        }
+      });
+      dockParams.appendChild(commit);
+    }
+
+    const SET = state.mode==='LOOK'? LOOK_PARAMS : (state.mode==='SOUND'? SOUND_PARAMS : []);
+    const alpha=0.22; const dead=8;
+    SET.forEach(p=>{
+      const btn=document.createElement('div'); btn.className='stackBtn'; btn.innerHTML=`<div class=\"glyph\">${p.label}</div><div class=\"layers\"></div><div class=\"legend\"></div>`;
+      const layers=btn.querySelector('.layers');
+      let v=0.5;
+      if(isSel){
+        const cell=grid[sel.r][sel.c];
+        v = clamp01( state.mode==='LOOK' ? valueTo01(p.key, cell) : (p.key==='pitch'? (cell.pitch+12)/24 : p.key==='pan'? (cell.pan+1)/2 : cell[p.key]) );
+      }
+      buildLayers(layers,6, Math.round(1+v*5));
+
+      let grabbing=false, sy=0, sv=v, smooth=v, lastTick=-1;
+      btn.addEventListener('pointerdown',e=>{ grabbing=true; sy=e.clientY; sv=v; smooth=v; lastTick=Math.round(v*10); state.adjusting={on:true,paramKey:p.key,value:v}; btn.setPointerCapture(e.pointerId); buzz(12); e.preventDefault(); ensureAudio(); });
+      btn.addEventListener('pointermove',e=>{ if(!grabbing) return; const dy=sy-e.clientY; let dv=(Math.abs(dy)>dead? (dy>0? (dy-dead): (dy+dead)) : 0)/160; v=clamp01(sv + dv); smooth = smooth*(1-alpha) + v*alpha; buildLayers(layers,6, Math.round(1+smooth*5)); if(isSel){
+          const staged = state.mode==='LOOK' ? (state.staging.look = state.staging.look||{}) : (state.staging.sound = state.staging.sound||{});
+          if(state.mode==='LOOK'){ apply01ToLook(staged, p.key, smooth); state.focus.targetScale = Math.max(state.focus.targetScale, 1.8); } else { apply01ToSound(staged, p.key, smooth); }
+          // Audition when CUE armed
+          if(state.staging.armed && state.mode==='SOUND') { const cell = {...grid[sel.r][sel.c], ...state.staging.sound}; trig(sel.r, cell); }
+        } const tick=Math.round(smooth*10); if(tick!==lastTick){ buzz(3); lastTick=tick; } });
+      btn.addEventListener('pointerup',()=>{ grabbing=false; state.adjusting.on=false; buzz(8); });
+
+      dockParams.appendChild(btn);
+    });
+  }
+
+  function clamp01(x){ return Math.max(0, Math.min(1, x)); }
+  function valueTo01(key, cell){
+    switch(key){
+      case 'lum': return cell.lum;
+      case 'sep': return (cell.sep-0.5)/1.5; // map 0.5..2.0 -> 0..1
+      case 'layers': return cell.layers; // 0..1
+      case 'halo': return cell.halo;
+      case 'sat': return cell.sat;
+      case 'twist': return (cell.twist+1)/2; // -1..1 -> 0..1
+      default: return 0.5;
+    }
+  }
+  function apply01ToLook(obj, key, v){
+    if(key==='lum') obj.lum = v;
+    if(key==='sep') obj.sep = 0.5 + v*1.5; // 0.5..2.0
+    if(key==='layers') obj.layers = v; // 0..1
+    if(key==='halo') obj.halo = v;
+    if(key==='sat') obj.sat = v;
+    if(key==='twist') obj.twist = v*2-1; // -1..1
+  }
+  function apply01ToSound(obj, key, v){
+    if(key==='pitch') obj.pitch = Math.round((v*2-1)*12);
+    else if(key==='pan') obj.pan = (v*2-1);
+    else obj[key] = v;
+  }
+
+  // ===== Layout helpers =====
+  function gridSize(){ return Math.max(state.cols, state.rows); }
+  function spacing(){ const G=gridSize(); const fx=G/state.cols, fz=G/state.rows; const sF=state.spreadFactor[state.aimIdx]; return {dx:state.baseCell*fx*sF, dz:state.baseCell*fz*sF}; }
+
+  function isoProject(x,y,z){
+    const {phi,theta}=state.cam; const cy=Math.cos(theta), sy=Math.sin(theta); const cx=Math.cos(phi), sx=Math.sin(phi);
+    let X=x, Y=y, Z=z; let x1= X*cy + Z*sy; let z1= -X*sy + Z*cy; let y2= Y*cx - z1*sx;
+    x1 -= state.focus.sx; y2 -= state.focus.sz; return {x: W*0.5 + x1, y: H*0.5 + y2, depth:z1};
+  }
+  function cellCenter(c,r){ const {dx,dz}=spacing(); const width=(state.cols-1)*dx; const height=(state.rows-1)*dz; return { x:(c*dx - width/2), y:0, z:(r*dz - height/2) }; }
+
+  // Visual draw
+  function calcLayersFrom(v){ // map 0..1 to discrete layers 6..20
+    return Math.round(6 + v*14);
+  }
+  function drawStack(c,r,cell){
+    const base=cellCenter(c,r); const color=ROW_COLORS[r%ROW_COLORS.length]; const sel = state.selection && state.selection.r===r && state.selection.c===c;
+    // Select staging preview
+    const liveCell = sel ? {...cell, ...(state.staging.look||{}), ...(state.staging.sound||{})} : cell;
+
+    const baseP=isoProject(base.x, 0, base.z);
+    const lum=liveCell.lum; const sat=liveCell.sat; const halo=liveCell.halo; const sep=liveCell.sep; const twist=liveCell.twist;
+    const layers = sel ? calcLayersFrom(liveCell.layers) : (cell._layersCache||state.defaultLayers);
+    if(sel) liveCell._layersCache = layers;
+
+    const dim = state.editor && !sel ? 0.35 : 1.0;
+    // base shadow
+    ctx.save(); ctx.translate(baseP.x, baseP.y); ctx.globalAlpha=0.10*dim; ctx.fillStyle=color; roundedRect(-14,-8,28,16,6); ctx.fill(); ctx.restore();
+
+    for(let i=0;i<layers;i++){
+      const y=i*(8*sep);
+      const px=isoProject(base.x + Math.sin(i*0.15)*twist*10, -y, base.z);
+      const w=22, h=10, rads=5;
+      ctx.save(); ctx.translate(px.x, px.y);
+      ctx.globalAlpha = (0.12 + i*0.02) * lum * dim;
+      ctx.fillStyle = colorize(color, sat);
+      ctx.shadowColor = colorize(color, 1.0);
+      ctx.shadowBlur = 10*halo;
+      roundedRect(-w/2, -h/2, w, h, rads); ctx.fill();
+      if(sel && i===layers-1){ ctx.globalAlpha=0.95; ctx.strokeStyle='#fff'; ctx.lineWidth=1.6; roundedRect(-w/2,-h/2,w,h,rads); ctx.stroke(); }
+      ctx.restore();
+    }
+  }
+
+  function colorize(hex, sat){ // crude saturation by mix towards gray
+    const c=hexToRgb(hex); const g=0.3*c.r+0.59*c.g+0.11*c.b; const mix=(t,a,b)=>Math.round(a*(1-t)+b*t);
+    const r=mix(1-sat, c.r, g), g2=mix(1-sat, c.g, g), b=mix(1-sat, c.b, g); return `rgb(${r},${g2},${b})`;
+  }
+  function hexToRgb(h){ const n=parseInt(h.slice(1),16); return {r:(n>>16)&255, g:(n>>8)&255, b:n&255}; }
+  function roundedRect(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+
+  // Picking & Scrub
+  function pickCell(mx,my){ let best=null, bestD=1e9; const inflate=state.hitInflate[state.aimIdx]; for(let r=0;r<state.rows;r++){ for(let c=0;c<state.cols;c++){ const p=isoProject(cellCenter(c,r).x,0,cellCenter(c,r).z); const dx=mx-p.x, dy=my-p.y; const d=dx*dx+dy*dy - inflate*inflate; if(d<bestD){ bestD=d; best={r,c}; } } } return best; }
+
+  canvas.addEventListener('pointerdown',e=>{ const rect=canvas.getBoundingClientRect(); const mx=e.clientX-rect.left, my=e.clientY-rect.top; const hit=pickCell(mx,my); if(hit){ state.scrubbing=true; canvas.setPointerCapture(e.pointerId); handleSelectOrToggle(hit, true); scrubTo(hit.c, true); e.preventDefault(); }});
+  canvas.addEventListener('pointermove',e=>{ if(!state.scrubbing) return; const rect=canvas.getBoundingClientRect(); const mx=e.clientX-rect.left, my=e.clientY-rect.top; const hit=pickCell(mx,my); scrubTo(hit.c); });
+  addEventListener('pointerup',()=>{ state.scrubbing=false; state.lastScrubCol=-1; });
+
+  function handleSelectOrToggle(hit, allowToggle){ if(state.selection && state.selection.r===hit.r && state.selection.c===hit.c && allowToggle){ grid[hit.r][hit.c].on=!grid[hit.r][hit.c].on; buzz(16); } else { state.selection={r:hit.r,c:hit.c}; buzz(10); enterEditor(); refreshDockParams(); } }
+  function scrubTo(col, silent){ if(col===state.lastScrubCol) return; state.playhead=col; state.lastScrubCol=col; if(!silent) buzz(4); // audition current column with staged SOUND if armed
+    for(let r=0;r<state.rows;r++){ const cell0=grid[r][state.playhead]; const audition = (state.selection && r===state.selection.r && state.staging.armed && state.staging.sound)? {...cell0, ...state.staging.sound} : cell0; if(audition.on) trig(r, audition); } }
+
+  // Editor / Focus
+  function clearFocus(){ state.focus.targetScale=1; }
+  function focusOnSelection(){ if(!state.selection){ clearFocus(); return; } const sel=state.selection; const base=cellCenter(sel.c, sel.r); const anchorX=W*0.5; const anchorY=H*0.62; const p=isoProject(base.x, 0, base.z); state.focus.tx += (p.x - anchorX); state.focus.tz += (p.y - anchorY); state.focus.targetScale = Math.min(2.0, 1.0 + (16/state.cols)*0.24 * state.spreadFactor[state.aimIdx]); }
+  function enterEditor(){ state.editor=true; state.mode='LOOK'; modeLegend.textContent='LOOK'; buildLayers(modeLayersEl,6,4); focusOnSelection(); }
+  function exitEditor(){ state.editor=false; clearFocus(); state.staging={sound:null,look:null,armed:false}; }
+
+  // View presets
+  document.getElementById('viewBar').addEventListener('click',(e)=>{ const v=e.target.getAttribute('data-view'); if(!v) return; if(v==='iso'){ state.cam.theta=Math.PI*0.22; state.cam.phi=Math.PI*0.2; } if(v==='top'){ state.cam.theta=0; state.cam.phi=-Math.PI/2+0.12; } if(v==='low'){ state.cam.theta=Math.PI*0.22; state.cam.phi=-0.1; } if(v==='side'){ state.cam.theta=Math.PI/2; state.cam.phi=0.15; } buzz(6); });
+
+  // HUD buttons
+  gridBtn.addEventListener('pointerdown',e=>{ e.preventDefault(); setGridByIndex(state.gridIdx+1); });
+  aimBtn.addEventListener('pointerdown',e=>{ e.preventDefault(); cycleAim(); });
+  packBtn.addEventListener('pointerdown',e=>{ e.preventDefault(); cyclePack(); });
+  modeBtn.addEventListener('pointerdown',e=>{ e.preventDefault(); toggleMode(); });
+
+  let dialGrab=false,dialSX=0,dialStart=state.bpm; tempoDial.addEventListener('pointerdown',e=>{ dialGrab=true; dialSX=e.clientX; dialStart=state.bpm; tempoDial.setPointerCapture(e.pointerId); buzz(8); e.preventDefault(); });
+  tempoDial.addEventListener('pointermove',e=>{ if(!dialGrab) return; const dx=e.clientX-dialSX; state.bpm=Math.round(Math.max(50,Math.min(200,dialStart+dx*0.6))); bpmLbl.textContent=`${state.bpm} BPM`; tempoDial.querySelector('.fill').style.width=`${(state.bpm-50)/(200-50)*100}%`; });
+  addEventListener('pointerup',()=>{ if(dialGrab) buzz(6); dialGrab=false; },{passive:true});
+  playBtn.addEventListener('pointerdown',()=>{ state.playing=!state.playing; playBtn.dataset.on=state.playing?'1':'0'; if(state.playing) ensureAudio(); buzz(12); });
+
+  // Audio
+  const AC=(window.AudioContext||window.webkitAudioContext); let audioCtx=null, master=null, reverb=null; function ensureAudio(){ if(audioCtx) return; audioCtx=new AC(); master=audioCtx.createGain(); master.gain.value=0.22; master.connect(audioCtx.destination); reverb=audioCtx.createDelay(PACKS[state.packIdx].fxDelay); reverb.connect(master); }
+  function trig(row,cell){ if(!audioCtx) return; if(Math.random()>cell.prob) return; const o=audioCtx.createOscillator(); const g=audioCtx.createGain(); const p=audioCtx.createStereoPanner(); const base=[48,50,52,53,55,57,59,60][row%8]; const freq=440*Math.pow(2, ((base+cell.pitch)-69)/12); o.frequency.value=freq; g.gain.value=0; const v=cell.vel*(cell.on?1:0); const now=audioCtx.currentTime; const len=0.08+cell.len*0.24; g.gain.setTargetAtTime(v, now, 0.004); g.gain.setTargetAtTime(0.0001, now+len, 0.07); p.pan.value=cell.pan; o.type=PACKS[state.packIdx].rows(row); o.connect(g); g.connect(p); p.connect(master); p.connect(reverb); o.start(); o.stop(now+len+0.25); }
+
+  // Tick & Render
+  function update(dt){ if(state.playing){ const bps=state.bpm/60; state.t+=dt*bps; const nextCol=Math.floor(state.t)%state.cols; if(nextCol!==state.playhead){ state.playhead=nextCol; buzz(2); for(let r=0;r<state.rows;r++){ const cell=grid[r][state.playhead]; if(cell.on) trig(r,cell); } } } state.focus.sx += (state.focus.tx - state.focus.sx) * state.focus.lerp; state.focus.sz += (state.focus.tz - state.focus.sz) * state.focus.lerp; state.focus.scale += (state.focus.targetScale - state.focus.scale)* state.focus.lerp; }
+
+  function render(){ ctx.clearRect(0,0,W,H);
+    const minSide=Math.min(W,H); const cx=W*0.5, cy=H*0.5; const baseScale=minSide/Math.max(640, minSide) * state.focus.scale; ctx.save(); ctx.translate(cx,cy); ctx.scale(baseScale,baseScale); ctx.translate(-cx,-cy);
+
+    const order=[]; for(let r=0;r<state.rows;r++) for(let c=0;c<state.cols;c++) order.push({r,c}); order.sort((a,b)=>(a.r+a.c)-(b.r+b.c));
+
+    const phx=cellCenter(state.playhead,0).x; const p0=isoProject(phx,-120, cellCenter(0,0).z-120); const p1=isoProject(phx,220, cellCenter(state.cols-1,state.rows-1).z+120); ctx.save(); ctx.globalAlpha= state.editor ? 0.06 : 0.12; ctx.strokeStyle='#9ef'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(p0.x,p0.y); ctx.lineTo(p1.x,p1.y); ctx.stroke(); ctx.restore();
+
+    order.forEach(({r,c})=> drawStack(c,r, grid[r][c]));
+
+    ctx.restore();
+
+    if(state.selection){ const sel=state.selection; const base=cellCenter(sel.c,sel.r); const p=isoProject(base.x,0,base.z); ctx.save(); ctx.globalAlpha=0.3; ctx.strokeStyle='#fff'; ctx.lineWidth=1.8; ctx.beginPath(); ctx.arc(p.x,p.y,24*state.focus.scale,0,Math.PI*2); ctx.stroke(); ctx.restore(); }
+  }
+
+  let last=performance.now(); function loop(now){ const dt=Math.min(0.05,(now-last)/1000); last=now; update(dt); render(); requestAnimationFrame(loop);} requestAnimationFrame(loop);
+
+  canvas.addEventListener('dblclick', ()=>{ exitEditor(); buzz(12); });
+
+  refreshDockParams();
+})();
+</script>
+</body>
+</html>

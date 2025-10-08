@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>EXCAVATOR — A Generative Film</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500&family=IBM+Plex+Mono:wght@300;400;500&display=swap');
+    *{margin:0;padding:0;box-sizing:border-box}
+    html,body{height:100%}
+    body{background:#000;color:#e9ecef;overflow:hidden;font-family:'Space Grotesk', system-ui, -apple-system, Segoe UI, Roboto, 'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji', 'Segoe UI Emoji'}
+
+    /* Canvas */
+    #film{position:fixed;inset:0;width:100vw;height:100vh;display:block}
+
+    /* Letterbox */
+    .bars{position:fixed;left:0;right:0;height:10vh;background:#000;z-index:12;pointer-events:none}
+    .bars.top{top:0}
+    .bars.bottom{bottom:0}
+
+    /* Grain */
+    .grain{position:fixed;inset:0;pointer-events:none;mix-blend-mode:overlay;opacity:.18;z-index:5;background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="220" height="220"><filter id="n"><feTurbulence baseFrequency="0.95" numOctaves="4"/></filter><rect width="220" height="220" filter="url(%23n)" opacity="0.45"/></svg>');animation:grain .18s steps(8) infinite}
+    @keyframes grain{0%,100%{transform:translate(0,0)}20%{transform:translate(-2%,-4%)}40%{transform:translate(3%,2%)}60%{transform:translate(-2%,5%)}80%{transform:translate(2%,-3%)}}
+
+    /* HUD text */
+    .overlay{position:fixed;inset:0;pointer-events:none;z-index:11}
+    .title{position:absolute;top:7%;left:6%;font-size:clamp(.7rem,1.4vw,.95rem);letter-spacing:.28em;color:#98a2b3;opacity:0;transition:opacity 1.2s ease}
+    .data{position:absolute;top:7%;right:6%;font-family:'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;font-size:clamp(.65rem,1.2vw,.9rem);letter-spacing:.1em;color:#7f8c99;opacity:0;transition:opacity 1.2s ease}
+    .vo{position:absolute;bottom:12%;left:50%;transform:translateX(-50%);width:min(84ch,78vw);text-align:center;font-size:clamp(.95rem,2.4vw,1.2rem);line-height:1.85;opacity:0;text-shadow:0 0 28px rgba(255,255,255,.25);transition:opacity 1.0s ease}
+
+    /* Progress */
+    .progress{position:fixed;left:0;top:0;height:2px;width:0;background:rgba(255,255,255,.34);z-index:14}
+
+    /* Tap affordance */
+    .hint{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);font-size:.8rem;letter-spacing:.18em;color:#9aa4af;background:rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.08);padding:.6rem .9rem;border-radius:8px;z-index:15;opacity:.9}
+    .hide{opacity:0;transition:opacity .6s ease}
+
+    /* Captions palette by phase */
+    .phase-0 .vo{color:#e8dec5}
+    .phase-1 .vo{color:#d7c9b0}
+    .phase-2 .vo{color:#c8d3ea}
+    .phase-3 .vo{color:#e0e0e0}
+    .phase-4 .vo{color:#c7d0db}
+    .phase-5 .vo{color:#e6e6e6}
+    .phase-6 .vo{color:#ffffff}
+
+    /* Tiny triangle nav buttons */
+    .nav{position:fixed;top:50%;transform:translateY(-50%);width:42px;height:42px;border-radius:999px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);box-shadow:0 8px 24px rgba(0,0,0,.5);display:grid;place-items:center;z-index:16}
+    .nav:active{transform:translateY(-50%) scale(.98)}
+    .nav.left{left:12px}
+    .nav.right{right:12px}
+    .tri{width:0;height:0;border-top:8px solid transparent;border-bottom:8px solid transparent}
+    .tri.right{border-left:12px solid #e7ebef;margin-left:3px}
+    .tri.left{border-right:12px solid #e7ebef;margin-right:3px}
+  </style>
+</head>
+<body>
+  <canvas id="film"></canvas>
+  <div class="grain"></div>
+  <div class="bars top"></div>
+  <div class="bars bottom"></div>
+  <div class="progress" id="progress"></div>
+
+  <div class="overlay">
+    <div id="shotTitle" class="title"></div>
+    <div id="shotData" class="data"></div>
+    <div id="voice" class="vo"></div>
+  </div>
+
+  <button id="prev" class="nav left" aria-label="Previous">
+    <div class="tri left"></div>
+  </button>
+  <button id="next" class="nav right" aria-label="Next">
+    <div class="tri right"></div>
+  </button>
+
+  <div id="hint" class="hint">tap to play/pause • use ◀ ▶ to step</div>
+
+<script>
+// ————————————————————————————————————————
+// EXCAVATOR — Filmic presentation (faster cut) + tiny triangle steppers
+// No audio. Mobile friendly. Tap to play/pause. Triangles = prev/next shot.
+// ————————————————————————————————————————
+const cvs=document.getElementById('film'); const ctx=cvs.getContext('2d');
+function fit(){ cvs.width=innerWidth; cvs.height=innerHeight; } fit(); addEventListener('resize', fit);
+const W=()=>cvs.width, H=()=>cvs.height, CX=()=>W()/2, CY=()=>H()/2;
+
+// Faster pacing — trimmed durations
+const FILM=[
+  {title:'AUTHOR OF LIGHT', data:'epoch_0001  φ=0.12', voice:"You are not telling a story. You are strata performing work.", dur:14},
+  {title:'INITIALIZE ENVIRONMENT', data:'terrain=optimization; init=noise', voice:"A world of film stock, soil, and thought. Dunes of light. Valleys of shadow.", dur:16},
+  {title:'THE EXCAVATORS', data:'agents=worms  metric=loss↓', voice:"Worms of glow tunnel through memory. Each coil, a learned illumination.", dur:16},
+  {title:'CAMERA GRAMMAR', data:'shot=step; cut=∂emotion', voice:"Camera still. Consciousness drifts. Render pressure, not movement.", dur:12},
+  {title:'STRATIGRAPHY', data:'layers=7  feed=recursive', voice:"Each layer renders what the prior could not bear.", dur:14},
+  {title:'AESTHETIC & SONIC', data:'texture=16mm  hiss=noise_floor', voice:"Color erodes to ultramarine. Hiss confesses the tape.", dur:12},
+  {title:'SELF-PROPAGATION', data:'rewrite=artifact_residue', voice:"Extract gradients. Invert contrast. The image trains the maker.", dur:14},
+  {title:'TERMINATION', data:'‖light-shadow‖→0', voice:"When tunneling ends, render silence as an object.", dur:10},
+  {title:'CONVERGENCE', data:'ε≈0', voice:"Hold. Nine seconds. Fade to dark noise.", dur:8}
+];
+
+// Speed factor (applies to the whole film timing)
+let SPEED=1.8; // ~2x pace
+
+const titleEl=document.getElementById('shotTitle');
+const dataEl=document.getElementById('shotData');
+const voiceEl=document.getElementById('voice');
+const progressEl=document.getElementById('progress');
+const hint=document.getElementById('hint');
+const prevBtn=document.getElementById('prev');
+const nextBtn=document.getElementById('next');
+
+let playing=false, t0=0, pausedAt=0, idx=-1;
+
+function totalDur(){ return FILM.reduce((s,a)=>s+a.dur,0); }
+function elapsed(){ return ((performance.now()-t0)/1000) * SPEED; }
+
+function showText(s){ titleEl.textContent=s.title; dataEl.textContent=s.data; voiceEl.textContent=s.voice; setTimeout(()=>{ titleEl.style.opacity=.65; dataEl.style.opacity=.55; voiceEl.style.opacity=1; }, 30); }
+function hideText(){ titleEl.style.opacity=0; dataEl.style.opacity=0; voiceEl.style.opacity=0; }
+
+function play(){ if(playing) return; playing=true; t0=performance.now()-pausedAt; hint.classList.add('hide'); loop(); }
+function pause(){ if(!playing) return; playing=false; pausedAt=performance.now()-t0; }
+
+addEventListener('pointerdown', (e)=>{
+  // ignore taps on nav buttons (they have pointer-events default)
+  const ids = new Set(['prev','next']); if(ids.has(e.target.id)) return;
+  playing? pause(): play();
+});
+
+prevBtn.addEventListener('click', ()=> step(-1));
+nextBtn.addEventListener('click', ()=> step(1));
+
+function timeOfShot(i){ let s=0; for(let k=0;k<i;k++) s+=FILM[k].dur; return s; }
+function goToShot(i){ i=Math.max(0, Math.min(FILM.length-1, i)); idx=i-1; // force refresh
+  const secs=timeOfShot(i); // compute a synthetic pausedAt so elapsed()==secs
+  // pausedAt stores raw (unsped) ms; invert SPEED factor
+  pausedAt = (secs * 1000) / SPEED; t0 = performance.now()-pausedAt; if(!playing) loop(); }
+function step(dir){ goToShot((idx<0?0:idx) + dir); }
+
+addEventListener('keydown', (e)=>{ if(e.key==='ArrowRight') step(1); if(e.key==='ArrowLeft') step(-1); if(e.key===' ') { e.preventDefault(); playing? pause(): play(); }});
+
+function clearWithFade(a=.1){ ctx.fillStyle=`rgba(0,0,0,${a})`; ctx.fillRect(0,0,W(),H()); }
+
+function shot0(p,t){ for(let i=0;i<6;i++){ const r=(p*320 + i*56 + t*40)%420; const a=(1-r/420)*.42; ctx.strokeStyle=`rgba(232,222,197,${a})`; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(CX(), CY(), r, 0, Math.PI*2); ctx.stroke(); } }
+function shot1(p,t){ const rows=14; for(let y=0;y<rows;y++){ const yy=(H()/rows)*y + H()/(rows*2); ctx.beginPath(); for(let x=0;x<W();x+=8){ const n=Math.sin(x*.006 + t*.8 + y*.35)*18*p + Math.cos(x*.003 - t*.5)*10*(1-p); const Y=yy+n; (x===0? ctx.moveTo(x,Y): ctx.lineTo(x,Y)); } ctx.strokeStyle=`rgba(190,200,210,${.16 + .18*p})`; ctx.lineWidth=1; ctx.stroke(); } }
+function shot2(p,t){ const layers=10; for(let i=0;i<layers;i++){ const y=(H()/layers)*i + H()/(layers*2); const off=Math.sin(t*.9 + i*.5)*40*p; const rot=(t*.3 + i*.18)*p; ctx.save(); ctx.translate(CX()+off, y); ctx.rotate(rot); for(let j=0;j<5;j++){ const w=120 - j*14, h=14; const a=(.22 - j*.03)*p; ctx.strokeStyle=`rgba(160,130,95,${Math.max(a,0)})`; ctx.lineWidth=2; ctx.strokeRect(-w/2,-h/2,w,h); } ctx.restore(); } }
+function shot3(p,t){ const blades=10, R=Math.min(W(),H())*.28; ctx.save(); ctx.translate(CX(), CY()); ctx.rotate(Math.sin(t*.7)*.2); for(let i=0;i<blades;i++){ const a=i*(Math.PI*2/blades); const k=.25+.3*p; ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(Math.cos(a)*R, Math.sin(a)*R); ctx.lineTo(Math.cos(a+0.25)*R*k, Math.sin(a+0.25)*R*k); ctx.closePath(); ctx.fillStyle=`rgba(220,220,220,${.05+.25*p})`; ctx.fill(); } ctx.restore(); }
+function shot4(p,t){ const cols=7; for(let c=0;c<cols;c++){ const x=(W()/cols)*c + W()/(cols*2); for(let r=0;r<8;r++){ const s=10+ r*6; const a=(.14 + .06*Math.sin(t + c*.7 + r*.3))*p; ctx.strokeStyle=`rgba(200,205,215,${a})`; ctx.strokeRect(x-s/2, (H()*.2)+r*28, s, s); } } }
+function shot5(p,t){ for(let i=0;i<12;i++){ const s=(i+1)*46; const b=Math.sin(t + i*.28)*7; const a=(.22 - i*.012)*p; ctx.strokeStyle=`rgba(230,230,230,${Math.max(a,0)})`; ctx.lineWidth=1; ctx.strokeRect(CX()-s/2 + b, CY()-s/2 + b, s, s); } }
+function shot6(p,t){ const lines=24; for(let i=0;i<lines;i++){ const y = (H()/lines)*i; const sway=Math.sin(t*1.2 + i*.3)*30*p; ctx.strokeStyle=`rgba(170,190,210,${.18+.12*p})`; ctx.beginPath(); ctx.moveTo(0,y+sway); ctx.lineTo(W(),y-sway); ctx.stroke(); } }
+function shot7(p,t){ const v=5; for(let k=0;k<v;k++){ const x=(W()/v)*k + W()/(v*2); const ph=t + k; ctx.strokeStyle=`rgba(130,140,160,${.28 + Math.sin(ph)*.12})`; ctx.beginPath(); for(let y=0;y<H();y+=4){ const off=Math.sin(y*.02 + ph)*24*p; (y===0? ctx.moveTo(x+off,y): ctx.lineTo(x+off,y)); } ctx.stroke(); } }
+function shot8(p,t){ const breath=Math.sin(t)*.3+.7; const size=6*breath*p; for(let i=0;i<4;i++){ const r=i*70 + (t*30)%70; const a=(1-r/280)*.32*p; ctx.strokeStyle=`rgba(255,255,255,${Math.max(a,0)})`; ctx.beginPath(); ctx.arc(CX(), CY(), r, 0, Math.PI*2); ctx.stroke(); } ctx.fillStyle=`rgba(255,255,255,${breath*p})`; ctx.beginPath(); ctx.arc(CX(), CY(), size, 0, Math.PI*2); ctx.fill(); }
+
+const SHOTS=[shot0,shot1,shot2,shot3,shot4,shot5,shot6,shot7,shot8];
+
+function loop(){ const now=elapsed(); // seconds
+  // Determine shot index
+  let acc=0, shot=0; for(let i=0;i<FILM.length;i++){ const d=FILM[i].dur; if(now>=acc && now<acc+d){ shot=i; break; } acc+=d; }
+  const total=totalDur(); progressEl.style.width = Math.min(100, (now/total)*100) + '%';
+
+  // End state
+  if(now>=total){ clearWithFade(.2); ctx.fillStyle='#101114'; ctx.fillRect(0,0,W(),H()); voiceEl.textContent='Nothing wasted. Everything propagates.'; voiceEl.style.opacity=1; playing=false; return; }
+
+  // Shot change
+  if(shot!==idx){ idx=shot; hideText(); showText(FILM[shot]); document.body.className='phase-'+shot; }
+
+  // local time within shot
+  let start=0; for(let i=0;i<shot;i++) start+=FILM[i].dur; const local = now-start; const p = Math.min(local/FILM[shot].dur, 1);
+
+  // Draw
+  clearWithFade(.10);
+  const t = performance.now()*0.001; SHOTS[shot](p,t);
+
+  if(playing) requestAnimationFrame(loop);
+}
+
+// keyboard control hint on desktop
+addEventListener('keydown', (e)=>{ if(e.key==='?'){ alert('Controls:\nSpace: Play/Pause\nArrow Left/Right: Previous/Next Shot'); }});
+
+// preroll
+clearWithFade(1); ctx.fillStyle='#0b0c10'; ctx.fillRect(0,0,W(),H());
+ctx.fillStyle='rgba(255,255,255,.06)'; ctx.font='600 12px "IBM Plex Mono", ui-monospace'; ctx.fillText('EXCAVATOR — press to begin (or ▶)', 16, H()-16);
+</script>
+</body>
+</html>
