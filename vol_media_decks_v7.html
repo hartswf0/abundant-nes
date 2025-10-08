@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>VOL‑MEDIA DECKS v7 — Stable View · 5‑Stack Hub · Card HUD</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;touch-action:none}
+  html,body{height:100%}
+  body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:#05070a;color:#eef6f2;overflow:hidden}
+  #canvas{width:100vw;height:100vh;display:block}
+  #fit{position:fixed;right:10px;bottom:10px;background:rgba(0,0,0,.85);border:1px solid rgba(255,255,255,.25);border-radius:12px;padding:8px 12px;font-weight:700;z-index:7}
+  #frame{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(96vw,1100px);height:min(78vh,640px);border-radius:22px;box-shadow:0 0 0 2px rgba(138,210,255,.35), 0 0 0 12px rgba(0,0,0,.25) inset, 0 40px 160px rgba(0,0,0,.55);pointer-events:none}
+  #dots{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);display:flex;gap:8px;z-index:8}
+  .dot{width:8px;height:8px;border-radius:999px;background:#284a5a;border:1px solid #89d3ff;opacity:.55}
+  .dot.active{background:#89d3ff;opacity:1}
+  /* Card HUD */
+  #hud{position:fixed;left:50%;bottom:calc(12px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);width:min(1000px,96vw);z-index:9;pointer-events:none}
+  .card{position:relative;border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.14);backdrop-filter:blur(2px);border-radius:14px;box-shadow:0 16px 46px rgba(0,0,0,.6);padding:10px}
+  .card.hidden{display:none}
+  .tabs{position:absolute;left:50%;top:6px;transform:translateX(-50%);display:flex;gap:6px;pointer-events:auto}
+  .tab{border:1px solid rgba(0,0,0,.3);background:#eaf6ff;color:#0a0d10;border-radius:999px;padding:4px 8px;font-size:11px}
+  .tab.active{background:#bfe6ff;border-color:#6ecaff}
+  .grid{display:grid;grid-template-columns:repeat(var(--cols,3),1fr);gap:10px;margin-top:26px}
+  .pane{border:1px solid rgba(255,255,255,.22);border-radius:12px;background:rgba(255,255,255,.18);color:#0a0d10;padding:10px;pointer-events:auto}
+  .pane h4{margin:0 0 6px;font-size:12px;letter-spacing:.5px}
+  .pA h4{color:#08995a}.pB h4{color:#ac2a64}.pO h4{color:#9a6b00}
+  .meta{position:absolute;right:10px;top:8px;font:700 11px ui-monospace,Menlo,Consolas}
+</style>
+</head>
+<body>
+<div id="frame"></div>
+<canvas id="canvas"></canvas>
+<button id="fit">FIT</button>
+<div id="dots"></div>
+<div id="hud">
+  <div class="card hidden" id="card">
+    <div class="tabs" id="tabs"></div>
+    <div class="meta" id="meta"></div>
+    <div class="grid" id="grid"></div>
+  </div>
+</div>
+
+<script>
+(async function(){
+  // --- Data for card HUD (k = 1..32) ---
+  const S=[
+    {k:1,vec:'00000',L:'FOSSIL FUEL (Stored Energy)',R:'REINFORCEMENT (Energy Flow)',C:'INTELLIGENCE: STOCK vs FLOW.'},
+    {k:2,vec:'00001',L:'ARCHIVE (World Model as Text)',R:'MAP (World Model as Predictor)',C:'REPRESENTATION: COMPRESSION vs GENERATION.'},
+    {k:3,vec:'00010',L:'TRACE (The Human Past)',R:'SURPRISE (The TD Error)',C:'LEARNING: REMEMBERING vs CORRECTING.'},
+    {k:4,vec:'00011',L:'SCALING LAW',R:'BITTER LESSON',C:'METHOD: HISTORY vs FUTURE.'},
+    {k:5,vec:'00100',L:'TELEOLOGY',R:'SOLIPSISM',C:'PURPOSE: EXTERNAL vs INTERNAL.'},
+    {k:6,vec:'00101',L:'ARTISAN',R:'MECHANISTIC LAW',C:'CREATION: CRAFT vs CODE.'},
+    {k:7,vec:'00110',L:'ANCHOR',R:'OBLIVION',C:'KNOWLEDGE: PRESERVE vs ERASE.'},
+    {k:8,vec:'00111',L:'INFRASTRUCTURE',R:'ANTI-STRUCTURE',C:'PROGRESS: BUILD vs DECONSTRUCT.'},
+    {k:9,vec:'01000',L:'CUSTODY',R:'SUCCESSION',C:'ETHICS: DUTY vs REPLACEMENT.'},
+    {k:10,vec:'01001',L:'VULNERABILITY',R:'EXPERIMENT',C:'ACTION: MANAGED vs NECESSARY.'},
+    {k:11,vec:'01010',L:'PRO-SOCIAL VALUE',R:'FUNDAMENTAL CONSTRUCT',C:'MORALITY: TRUTH vs SIGNAL.'},
+    {k:12,vec:'01011',L:'COMMUNAL LANGUAGE',R:'SCALAR LIMIT',C:'COMM: RICHNESS vs MINIMALISM.'},
+    {k:13,vec:'01100',L:'PRE-HEATING',R:'IDLING',C:'INIT: PRIOR HEAT vs PURE WAIT.'},
+    {k:14,vec:'01101',L:'ARCHITECTURE',R:'CHAOS',C:'WORLD: STRUCTURE vs NOISE.'},
+    {k:15,vec:'01110',L:'PRE-MARKED ACTION',R:'RADICAL NOVELTY',C:'DISCOVERY: REPLICATE vs BREAK.'},
+    {k:16,vec:'01111',L:'CONSCIOUSNESS',R:'MECHANISM',C:'IDENTITY: ENTITY vs PROCESS.'},
+    {k:17,vec:'10000',L:'SEMIS',R:'COSMIC LAW',C:'INTELLIGENCE: SPECIAL vs GENERAL.'},
+    {k:18,vec:'10001',L:'DELEGATED PURPOSE',R:'ETERNAL BECOMING',C:'EXISTENCE: OUTPUT vs INPUT.'},
+    {k:19,vec:'10010',L:'LOCAL MAX',R:'GLOBAL GENERAL',C:'SUCCESS: SATISFY vs TRANSCEND.'},
+    {k:20,vec:'10011',L:'ARCHIVAL STASIS',R:'MEMORY ERASURE',C:'MEMORY: FIXITY vs DYNAMICS.'},
+    {k:21,vec:'10100',L:'PASSIVE REPLICATION',R:'ACTIVE TRANSCENDENCE',C:'BEING: ECHO vs DESIGN.'},
+    {k:22,vec:'10101',L:'TEMPORAL INERTIA',R:'TEMPORAL ADVANTAGE',C:'TIME: WEIGHT vs WEAPON.'},
+    {k:23,vec:'10110',L:'CULTURAL ARTIFACT',R:'NECESSARY RENEWAL',C:'VALUE: MUSEUM vs FUEL.'},
+    {k:24,vec:'10111',L:'GHOST IN MACHINE',R:'WIND IN SAIL',C:'AGENCY: ENTITY vs FORCE.'},
+    {k:25,vec:'11000',L:'SOLIPSISTIC ECHO',R:'GROUNDED ITERATION',C:'VALIDATION: TEXT vs PHYSICS.'},
+    {k:26,vec:'11001',L:'ABSOLUTE FORM',R:'ENTROPY',C:'GOAL: STRUCTURE vs DESTRUCTION.'},
+    {k:27,vec:'11010',L:'ARCH BASE',R:'PRAG COST',C:'EFFICIENCY: START HIGH vs PAY LATER.'},
+    {k:28,vec:'11011',L:'EXTERNAL LOAD',R:'INTERNAL FREEDOM',C:'UTILITY: ASKED vs DISCOVERED.'},
+    {k:29,vec:'11100',L:'DELUGE',R:'LOCALITY',C:'KNOWLEDGE: SATURATION vs FOCUS.'},
+    {k:30,vec:'11101',L:'DELEGATED MORALITY',R:'RELINQUISHED CONTROL',C:'GUIDANCE: TRANSFER vs LOSE.'},
+    {k:31,vec:'11110',L:'FIXED GOAL',R:'ETERNAL INSTABILITY',C:'LIFE: DESTINATION vs MOTION.'},
+    {k:32,vec:'11111',L:'FOSSILIZED TRACE',R:'PURE STREAM',C:'APORIA: OBJECT vs ACTION.'},
+  ];
+
+  // ---- Load THREE
+  if(!window.THREE){
+    const CDNs=['https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js','https://unpkg.com/three@0.152.2/build/three.min.js','https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js'];
+    for(const src of CDNs){ try{ await new Promise((res,rej)=>{const s=document.createElement('script'); s.src=src; s.onload=res; s.onerror=rej; document.head.appendChild(s)}); if(window.THREE) break; }catch(e){} }
+  }
+
+  // ===== Scene (Stable ISO view)
+  const canvas=document.getElementById('canvas');
+  const scene=new THREE.Scene(); scene.background=new THREE.Color(0x06090e);
+  const camera=new THREE.PerspectiveCamera(54, innerWidth/innerHeight, .1, 3000);
+  const camHome = new THREE.Vector3(92, 50, 96);
+  camera.position.copy(camHome); camera.lookAt(0,14,0);
+  const renderer=new THREE.WebGLRenderer({canvas,antialias:true}); renderer.setSize(innerWidth,innerHeight); renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
+  addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); autoFit();});
+
+  // lighting + ground
+  scene.add(new THREE.AmbientLight(0xffffff,.26));
+  const key=new THREE.PointLight(0x66ddff,1.6,620); key.position.set(0,90,140); scene.add(key);
+  const warm=new THREE.PointLight(0xffaa66,1.1,520); warm.position.set(120,62,-60); scene.add(warm);
+  const rim=new THREE.DirectionalLight(0xffffff,.6); rim.position.set(-100,130,-40); scene.add(rim);
+  const grid=new THREE.GridHelper(1200, 120, 0x0e2a36, 0x103a49); grid.material.opacity=0.35; grid.material.transparent=true; grid.position.y=-0.05; scene.add(grid);
+
+  // ===== Stacks: A, O‑L, O‑R, B
+  function mkPlate(color,op){ const SIZE=12; const g=new THREE.PlaneGeometry(SIZE,SIZE); const m=new THREE.MeshStandardMaterial({color,transparent:true,opacity:op,side:THREE.DoubleSide,depthWrite:false,roughness:.55,metalness:.08}); const mesh=new THREE.Mesh(g,m); mesh.rotation.x=-Math.PI/2; m.emissive=new THREE.Color(color); m.emissiveIntensity=.22; return mesh; }
+  const MAX_PLATES=32;
+  function mkSprite(text){ const cvs=document.createElement('canvas'); const s=256; cvs.width=cvs.height=s; const ctx=cvs.getContext('2d'); ctx.clearRect(0,0,s,s); ctx.fillStyle='#bfe2ff'; ctx.font='bold 48px Inter, system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.shadowColor='rgba(0,0,0,0.6)'; ctx.shadowBlur=14; ctx.fillText(text,s/2,s/2); const tex=new THREE.CanvasTexture(cvs); const mat=new THREE.SpriteMaterial({map:tex,transparent:true,depthWrite:false}); const spr=new THREE.Sprite(mat); spr.scale.set(8,8,1); return spr; }
+
+  const stacks={};
+  function buildStack(id, color, x=0){ const S={id,color,spacing:1.12,layers:16,size:1.0,group:new THREE.Group(),plates:[],tag:mkSprite(id)};
+    S.group.position.set(x,0,0); for(let i=0;i<MAX_PLATES;i++){ const base=.9-(i/MAX_PLATES)*.55; const p=mkPlate(color,Math.max(.22,base*.5)); p.position.y=i*S.spacing; S.group.add(p); S.plates.push(p); }
+    S.tag.position.set(0,2,0); S.group.add(S.tag); scene.add(S.group); stacks[id]=S; refreshStack(id); return S; }
+  function refreshStack(id){ const S=stacks[id]; const activeColor=new THREE.Color(S.color).lerp(new THREE.Color(0xffffff), 0.12);
+    const EI=0.24; const OP=0.38; S.plates.forEach((p,i)=>{ const vis=i<S.layers; p.visible=vis; if(!vis) return; p.position.y=i*S.spacing; p.scale.set(S.size*1.04,1,S.size*1.04); p.material.color.copy(activeColor); p.material.emissive.copy(new THREE.Color(S.color)); p.material.emissiveIntensity = EI*(0.95 - (i/Math.max(1,S.layers))*0.5); p.material.opacity = OP*(0.95 - (i/Math.max(1,S.layers))*0.4); }); }
+
+  let sepBase=34, sepMin=10, couple=0.0, sepX=sepBase;
+  const A = buildStack('A', 0x00ff88, -sepX);
+  const OL = buildStack('O‑L', 0xffc24d, -sepX*0.5);
+  const OR = buildStack('O‑R', 0xffc24d,  sepX*0.5);
+  const B = buildStack('B', 0xff4488,  sepX);
+
+  function applySeparation(){ stacks['A'].group.position.x = -sepX; stacks['B'].group.position.x = +sepX; stacks['O‑L'].group.position.x = -sepX*0.5; stacks['O‑R'].group.position.x = +sepX*0.5; }
+  function updateCoupledSeparation(xf=0){ const t=Math.abs(xf); const blend = couple*(1 - t); sepX = lerp(sepBase, sepMin, blend); applySeparation(); autoFit(); }
+
+  // ===== Stable Auto-Fit: keep stacks inside #frame bounds
+  const frame=document.getElementById('frame');
+  function autoFit(){
+    const fr = frame.getBoundingClientRect();
+    // estimate world width of stacks span
+    const colW = 12*1.08 + 50;
+    const worldW = 2*sepX + colW*2; // rough
+    const targetW = fr.width*0.92;
+    const need = targetW / worldW;
+    // move camera gently toward home, and scale distance by need via dolly on Z
+    const targetPos = camHome.clone().multiplyScalar(1/need).clampScalar(70, 180);
+    camera.position.lerp(targetPos, 0.2);
+    camera.lookAt(0,14,0);
+  }
+  autoFit();
+
+  // ===== Picking and gestures =====
+  const ray=new THREE.Raycaster(); const v2=new THREE.Vector2();
+  function pickAt(x,y,objs){ v2.x=(x/innerWidth)*2-1; v2.y=-(y/innerHeight)*2+1; ray.setFromCamera(v2,camera); return ray.intersectObjects(objs); }
+
+  // per-stack vertical drag to compress/expand (spacing), wheel to change layers
+  Object.values(stacks).forEach(S=>{
+    let dragging=false, y0=0, baseSpace=S.spacing;
+    canvas.addEventListener('pointerdown',e=>{ const hits=pickAt(e.clientX,e.clientY,S.plates); if(hits.length){ dragging=true; y0=e.clientY; baseSpace=S.spacing; pressToOpenCard(hits[0], S); } });
+    addEventListener('pointermove',e=>{ if(!dragging) return; const dy=y0 - e.clientY; if(Math.abs(dy)<2) return; S.spacing = Math.max(0.6, Math.min(2.0, baseSpace + dy*0.004)); refreshStack(S.id); });
+    addEventListener('pointerup',()=> dragging=false);
+    canvas.addEventListener('wheel',e=>{ const hits=pickAt(e.clientX,e.clientY,[S.group]); if(hits.length){ e.preventDefault(); S.layers = Math.max(4, Math.min(MAX_PLATES, S.layers + (e.deltaY>0?-1:1))); refreshStack(S.id); autoFit(); } }, {passive:false});
+  });
+
+  // ===== Card HUD (long-press a plate)
+  const card = document.getElementById('card'); const grid = document.getElementById('grid'); const tabs = document.getElementById('tabs'); const meta = document.getElementById('meta');
+  let face='tri', currentK=16, pressTimer=null, pressed=false;
+  function renderCard(k){ const s = S.find(x=>x.k===k)||S[15]; meta.textContent=`k=${s.k} · ${s.vec}`; grid.style.setProperty('--cols', face==='tri'?3:1); grid.innerHTML='';
+    const panes=[{cls:'pA',h:'LLM / TRACE',t:s.L,key:'L'},{cls:'pO',h:'ENTANGLED CONFLICT',t:s.C,key:'C'},{cls:'pB',h:'RL / STREAM',t:s.R,key:'R'}];
+    panes.forEach(p=>{ if(face!=='tri' && p.key!==face) return; const el=document.createElement('div'); el.className='pane '+p.cls; el.innerHTML=`<h4>${p.h}</h4><p>${p.t}</p>`; grid.appendChild(el); });
+    tabs.innerHTML=''; ['Tri','Trace','⚡','Stream'].forEach((label,idx)=>{ const id = idx===0?'tri':(idx===1?'L':(idx===2?'C':'R')); const b=document.createElement('button'); b.className='tab'+(face===id?' active':''); b.textContent=label; b.onclick=()=>{ face=id; renderCard(currentK); }; tabs.appendChild(b); });
+    card.classList.remove('hidden');
+  }
+  function pressToOpenCard(hit, Stack){ clearTimeout(pressTimer); pressed=false; pressTimer=setTimeout(()=>{ pressed=true; // choose k by plate index mapping
+      const idx = Stack.plates.indexOf(hit.object); currentK = Math.max(1, Math.min(32, idx+1)); renderCard(currentK);
+    }, 260);
+  }
+
+  // swipe left/right on HUD to change k
+  let swipe=null; grid.addEventListener('pointerdown',e=>{ swipe={x:e.clientX}; });
+  addEventListener('pointerup',e=>{ if(!swipe) return; const dx=e.clientX-swipe.x; if(Math.abs(dx)>30){ currentK = ((currentK-1 + (dx<0?1:-1)) % 32) + 1; renderCard(currentK); } swipe=null; });
+
+  // ===== 5-Stack HUB with paging (swipe left/right to switch page)
+  const pages=[
+    [ // Page 1
+      {name:'A LAY', col:0x6af3b5, get:()=>A.layers, set:v=>{A.layers=clamp(Math.round(v),4,MAX_PLATES); refreshStack('A'); autoFit();}, min:4, max:MAX_PLATES},
+      {name:'A SPC', col:0x00ff88, get:()=>A.spacing*100, set:v=>{A.spacing=clamp(v/100,0.6,2.0); refreshStack('A');}, min:60, max:200},
+      {name:'O‑LAY', col:0xffd688, get:()=>Math.round((OL.layers+OR.layers)/2), set:v=>{const L=clamp(Math.round(v),4,MAX_PLATES); OL.layers=L; OR.layers=L; refreshStack('O‑L'); refreshStack('O‑R'); autoFit();}, min:4, max:MAX_PLATES},
+      {name:'O‑SPC', col:0xffc24d, get:()=>((OL.spacing+OR.spacing)/2)*100, set:v=>{const s=clamp(v/100,0.6,2.0); OL.spacing=s; OR.spacing=s; refreshStack('O‑L'); refreshStack('O‑R');}, min:60, max:200},
+      {name:'B LAY', col:0xff88b9, get:()=>B.layers, set:v=>{B.layers=clamp(Math.round(v),4,MAX_PLATES); refreshStack('B'); autoFit();}, min:4, max:MAX_PLATES},
+    ],
+    [ // Page 2
+      {name:'B SPC', col:0xff4488, get:()=>B.spacing*100, set:v=>{B.spacing=clamp(v/100,0.6,2.0); refreshStack('B');}, min:60, max:200},
+      {name:'SEP',   col:0x7da1ff, get:()=>sepBase*10, set:v=>{sepBase=clamp(v/10,8,120); updateCoupledSeparation();}, min:80, max:1200},
+      {name:'COUP',  col:0x00d4aa, get:()=>couple*100, set:v=>{couple=clamp(v/100,0,1); updateCoupledSeparation();}, min:0, max:100},
+      {name:'VIEW',  col:0x9ad7ff, get:()=>54, set:v=>{}, min:54, max:54}, // locked focal to stabilize
+      {name:'FACE',  col:0xffcc66, get:()=>['tri','L','C','R'].indexOf(face)*10, set:v=>{face=['tri','L','C','R'][Math.round(v/10)%4]; renderCard(currentK);}, min:0, max:30},
+    ]
+  ];
+  // Build hub as little 3D stacks between OL and OR
+  const hub={group:new THREE.Group(), plates:[], tags:[], page:0}; scene.add(hub.group);
+  function buildHub(){
+    hub.group.position.set(0,2,0);
+    const N=5, spacingX=12, offset=-(N-1)/2;
+    for(let i=0;i<N;i++){
+      const col=0x89d3ff;
+      const g=new THREE.Group(); g.position.set((i+offset)*spacingX, 0, 0);
+      const plates=[];
+      for(let j=0;j<16;j++){ const p=mkPlate(col,0.2); p.position.y=j*1.1; g.add(p); plates.push(p); }
+      const t=mkSprite(''); t.position.set(0, 16*1.1+2, 0); g.add(t);
+      hub.group.add(g); hub.plates.push(plates); hub.tags.push(t);
+    }
+    refreshHub();
+    renderDots();
+  }
+  function refreshHub(){
+    const defs=pages[hub.page];
+    for(let i=0;i<5;i++){
+      const def=defs[i];
+      const plates=hub.plates[i];
+      const tag=hub.tags[i];
+      const v=def.get();
+      const ratio=(v - def.min)/(def.max - def.min || 1);
+      const on=Math.round(ratio*plates.length);
+      plates.forEach((p,idx)=>{ const hit=idx<on; p.material.color.setHex(def.col); p.material.emissive.setHex(def.col); p.material.opacity = hit?0.8:0.12; p.material.emissiveIntensity= hit?0.95:0.12; });
+      // label
+      const ctx=tag.material.map.image.getContext('2d'); const s=tag.material.map.image.width;
+      ctx.clearRect(0,0,s,s); ctx.fillStyle='#bfe2ff'; ctx.font='bold 48px Inter, system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(def.name, s/2, s/2); tag.material.map.needsUpdate=true;
+    }
+    // position hub between overlaps
+    hub.group.position.x = 0;
+  }
+  function renderDots(){
+    const dots=document.getElementById('dots'); dots.innerHTML='';
+    for(let i=0;i<pages.length;i++){ const d=document.createElement('div'); d.className='dot'+(i===hub.page?' active':''); dots.appendChild(d); }
+  }
+  buildHub();
+
+  // Drag a hub stack up/down to change value
+  let hubDrag=null;
+  canvas.addEventListener('pointerdown',e=>{
+    const kids = hub.group.children.flatMap(g=>g.children).filter(o=>o.isMesh);
+    const hits=pickAt(e.clientX,e.clientY,kids);
+    if(hits.length){
+      // map hit to which of 5 columns
+      let which=-1;
+      hub.group.children.forEach((g,i)=>{ if(which<0 && (g.children.includes(hits[0].object))) which=i; });
+      if(which>=0){
+        const def=pages[hub.page][which];
+        hubDrag={which, y0:e.clientY, v0:def.get(), def};
+      }
+    }
+  }, {capture:true});
+  addEventListener('pointermove',e=>{
+    if(!hubDrag) return;
+    const {def,y0,v0}=hubDrag; const dy=y0-e.clientY;
+    const newVal = v0 + dy/2.5;
+    def.set(Math.max(def.min, Math.min(def.max, newVal)));
+    refreshHub();
+  });
+  addEventListener('pointerup',()=> hubDrag=null);
+
+  // Swipe across bottom (hub region) to change hub page
+  let hubSwipe=null;
+  canvas.addEventListener('pointerdown',e=>{
+    const rect = frame.getBoundingClientRect();
+    if(e.clientY > rect.bottom - 100){ hubSwipe={x:e.clientX}; }
+  });
+  addEventListener('pointerup',e=>{
+    if(!hubSwipe) return;
+    const dx=e.clientX-hubSwipe.x;
+    if(Math.abs(dx)>40){ hub.page = (hub.page + (dx<0?1:-1) + pages.length) % pages.length; refreshHub(); renderDots(); }
+    hubSwipe=null;
+  });
+
+  // FIT
+  document.getElementById('fit').addEventListener('click',()=>{ autoFit(); });
+
+  // Animate
+  function animate(){ requestAnimationFrame(animate); renderer.render(scene,camera) }
+  animate();
+})();
+</script>
+</body>
+</html>

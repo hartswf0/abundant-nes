@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<title>RHM · Cards In-Place Reading v5 — Frustum + Stack Scrub</title>
+<style>
+  :root{
+    --bg:#0a0f14;
+    --ink:#eaf3ee;
+    --ui:#6ad1ff;
+    --A:#1ff38a; --B:#ff4f9d; --O:#ffffff;
+    --rx: 62deg; --rz: 18deg;
+    --neg-rx: calc(-1 * var(--rx)); --neg-rz: calc(-1 * var(--rz));
+    --sceneScale: 1.0;
+
+    /* Stack geometry */
+    --stackGap: 280px;    /* center→A/B gap */
+    --spacing: 18px;      /* z-spacing per plate; can be negative */
+    --overlap: 6px;       /* lateral pull of A/B toward center */
+    --plateW: 210px;      /* plate width */
+    --plateH: 128px;      /* plate height */
+
+    /* Reader/card */
+    --cardScale: 1.06;
+    --textScale: 1.05;
+    --cols: 3;
+
+    --safe-top: env(safe-area-inset-top,0px);
+    --safe-right: env(safe-area-inset-right,0px);
+    --safe-left: env(safe-area-inset-left,0px);
+    --safe-bottom: env(safe-area-inset-bottom,0px);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{margin:0; background:var(--bg); color:var(--ink); font:14px/1.45 Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; overflow:hidden}
+
+  /* Backdrop with high-contrast frustum */
+  #backdrop{position:fixed; inset:0; pointer-events:none}
+  .vignette{position:absolute; inset:-20%; background:radial-gradient(1000px 700px at 50% 55%, rgba(255,255,255,.08) 0%, rgba(255,255,255,.02) 40%, rgba(0,0,0,.55) 100%)}
+  .frustum{position:absolute; left:50%; top:50%; width:min(980px,92vw); height:min(620px,75vh);
+           transform:translate(-50%,-50%); border-radius:24px;
+           box-shadow:0 0 0 2px rgba(138,210,255,.25), 0 0 0 10px rgba(0,0,0,.2) inset;
+           background:linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+           backdrop-filter:brightness(1.2) saturate(1.1) blur(0.6px)}
+
+  /* Stage */
+  #stage{position:fixed; inset:0; perspective:1200px; transform-style:preserve-3d}
+  #world{position:absolute; left:50%; top:50%; width:1200px; height:720px; transform-style:preserve-3d;
+         transform: translate(-50%,-50%) scale(var(--sceneScale)) rotateX(var(--rx)) rotateZ(var(--rz)); transition:transform .25s ease}
+
+  /* Columns */
+  .col{position:absolute; top:50%; transform-style:preserve-3d; width:calc(var(--plateW) + 50px); height:520px}
+  #colO{ left:50%; transform: translate(-50%,-50%) translateZ(0) }
+  #colA{ left:calc(50% - var(--stackGap)); transform: translate(-50%,-50%) translateZ(0) }
+  #colB{ left:calc(50% + var(--stackGap)); transform: translate(-50%,-50%) translateZ(0) }
+
+  .tag{position:absolute; top:-22px; font-size:12px; opacity:.9; transform: rotateX(var(--neg-rx)) rotateZ(var(--neg-rz)); color:#bfe2ff }
+
+  /* Plates */
+  .plate{ position:absolute; left:50%; width:var(--plateW); height:var(--plateH); transform:translateX(-50%);
+          border:1px solid rgba(255,255,255,.22); border-radius:12px; background:rgba(255,255,255,.10);
+          box-shadow: 0 10px 26px rgba(0,0,0,.55); display:flex; align-items:center; justify-content:center;
+          transition: transform .12s ease, box-shadow .12s ease, opacity .2s ease, background .15s ease }
+  .plate.A{ background:rgba(31,243,138,.20); border-color:rgba(31,243,138,.42) }
+  .plate.B{ background:rgba(255,79,157,.20); border-color:rgba(255,79,157,.42) }
+  .plate.O{ background:linear-gradient(90deg, rgba(31,243,138,.24), rgba(255,255,255,.34) 50%, rgba(255,79,157,.24)); border-color:rgba(255,255,255,.55) }
+  .plate:hover{ box-shadow: 0 16px 34px rgba(0,0,0,.6) }
+  .plate.active{ outline:2px solid #bfe2ff; box-shadow:0 18px 50px rgba(111,197,255,.55); transform:translateX(var(--x)) translateZ(var(--z)) translateY(-4px) !important }
+
+  /* HUD on plates (billboard) */
+  .hud{ transform-style:preserve-3d; backface-visibility:hidden; transform: rotateX(var(--neg-rx)) rotateZ(var(--neg-rz)) translateZ(1px) }
+  .k{ position:absolute; top:6px; left:8px; font-weight:800; font-size:11px; color:#cfe9ff }
+  .vec{ position:absolute; top:6px; right:8px; font:600 11px ui-monospace,Menlo,Consolas,monospace; opacity:.95 }
+  .leds{ position:absolute; bottom:6px; left:8px; display:flex; gap:6px }
+  .led{ width:8px; height:8px; border-radius:50%; background:#333; box-shadow:inset 0 0 0 1px rgba(255,255,255,.2) }
+  .led.A{ background:#34ff9f; box-shadow:0 0 8px rgba(52,255,159,.65) }
+  .led.B{ background:#ff6cab; box-shadow:0 0 10px rgba(255,108,171,.7) }
+
+  /* Rail (reading card) */
+  #rail{ position:fixed; left:50%; transform:translateX(-50%); bottom:calc(10px + var(--safe-bottom));
+         width:min(1000px,96vw); height:calc(240px * var(--cardScale)); z-index:80; pointer-events:none }
+  #rail .shell{ position:absolute; left:0; right:0; bottom:0; height:100%; display:flex; align-items:flex-end; justify-content:center }
+  .plate.reading{
+    width:calc(min(1000px,96vw)); height:calc(240px * var(--cardScale));
+    transform: translateX(-50%) translateY(0) translateZ(0) !important;
+    box-shadow: 0 18px 48px rgba(0,0,0,.65);
+    pointer-events:auto;
+  }
+  .face{ position:absolute; inset:30px 14px 14px 14px; display:grid; grid-template-columns:repeat(var(--cols), 1fr); gap:10px }
+  .pane{ border:1px solid rgba(255,255,255,.18); border-radius:12px; padding:10px; background:rgba(255,255,255,.14); transform: scale(var(--textScale)); transform-origin: top left; color:#0a0d10 }
+  .pane h4{ margin:0 0 6px; font-size:12px; letter-spacing:.5px }
+  .pA h4{ color:#08995a } .pB h4{ color:#ac2a64 } .pO h4{ color:#9a6b00 }
+  .pane p{ margin:0; font-size:12px; color:#0a0d10 }
+  .tabs{ position:absolute; top:6px; left:50%; transform:translateX(-50%) rotateX(var(--neg-rx)) rotateZ(var(--neg-rz)); display:flex; gap:6px }
+  .tab{ border:1px solid rgba(0,0,0,.25); background:#ecf6ff; color:#0a0d10; border-radius:999px; padding:4px 8px; font-size:11px }
+  .tab.active{ background:#bfe6ff; border-color:#6ecaff }
+  .meta{ position:absolute; top:6px; right:8px; font:700 11px ui-monospace,Menlo,Consolas,monospace; color:#bde9ff }
+  .cardnav{ position:absolute; top:50%; transform:translateY(-50%) rotateX(var(--neg-rx)) rotateZ(var(--neg-rz)); display:flex; gap:6px }
+  .prev{ left:6px } .next{ right:6px }
+  .btn{ border:1px solid rgba(0,0,0,.3); background:#ecf6ff; color:#0a0d10; border-radius:10px; padding:6px 10px; font-size:12px; pointer-events:auto }
+
+  /* Camera pad */
+  #cam{position:fixed; right:calc(10px + var(--safe-right)); top:50%; transform:translateY(-50%); display:grid; gap:8px; z-index:70}
+  .camBtn{width:44px; height:44px; border-radius:12px; border:2px solid var(--ui); background:rgba(0,0,0,.85); color:#dff7ff; font-weight:700; font-size:11px}
+
+  /* One-knob scrub */
+  #scrub{ position:fixed; right:calc(12px + var(--safe-right)); bottom:calc(12px + var(--safe-bottom)); z-index:90; }
+  .knob{ width:64px; height:64px; border-radius:16px; border:2px solid var(--ui); background:rgba(0,0,0,.82);
+         display:flex; align-items:center; justify-content:center; color:#cfefff; font:700 12px/1 Inter; user-select:none }
+  .hint{ position:absolute; right:72px; bottom:0; border:1px solid rgba(106,209,255,.45); background:rgba(0,0,0,.8);
+         color:#bfe9ff; padding:6px 8px; border-radius:10px; font-size:12px; min-width:160px; pointer-events:none }
+
+  /* Side Alley (left) */
+  #alley{ position:fixed; left:calc(8px + var(--safe-left)); top:50%; transform:translateY(-50%); z-index:85 }
+  #alley .tab{ width:38px; height:38px; border-radius:10px; border:2px solid var(--ui); background:rgba(0,0,0,.82); color:#cfefff; display:flex; align-items:center; justify-content:center; font-weight:800 }
+  #alleyPanel{ display:none; margin-top:8px; background:rgba(0,0,0,.84); border:1px solid rgba(106,209,255,.45); border-radius:12px; padding:10px; width:220px }
+  .row{ display:flex; justify-content:space-between; align-items:center; font-size:12px; padding:6px 0 }
+  .row input[type=range]{ width:120px }
+
+  /* Per-column scrub overlay */
+  .scrim{ position:absolute; inset: -10px 0 0; transform: translateZ(160px); /* above plates */ }
+  .scrim .guide{ position:absolute; left:0; right:0; height:2px; background:#bfe2ff; opacity:.7; display:none }
+  .scrim.dragging .guide{ display:block }
+</style>
+</head>
+<body>
+
+<div id="backdrop">
+  <div class="vignette"></div>
+  <div class="frustum"></div>
+</div>
+
+<div id="stage">
+  <div id="world">
+    <div class="col" id="colA"><div class="tag hud">Deck A</div><div class="scrim" data-col="A"><div class="guide"></div></div></div>
+    <div class="col" id="colO"><div class="tag hud">Overlap</div><div class="scrim" data-col="O"><div class="guide"></div></div></div>
+    <div class="col" id="colB"><div class="tag hud">Deck B</div><div class="scrim" data-col="B"><div class="guide"></div></div></div>
+  </div>
+</div>
+
+<div id="rail"><div class="shell" id="railShell"></div></div>
+
+<div id="cam">
+  <button class="camBtn" data-view="FR">FR</button>
+  <button class="camBtn" data-view="IL">IL</button>
+  <button class="camBtn" data-view="IR">IR</button>
+  <button class="camBtn" data-view="SD">SD</button>
+  <button class="camBtn" data-view="TP">TP</button>
+</div>
+
+<div id="scrub">
+  <div class="knob" id="knob">GAP</div>
+  <div class="hint" id="hint">GAP · drag ↑↓</div>
+</div>
+
+<div id="alley">
+  <div class="tab" id="alleyTab">≡</div>
+  <div id="alleyPanel">
+    <div class="row"><span>Plate size</span><input id="plateSize" type="range" min="0.7" max="1.25" step="0.01" value="1.00"/></div>
+    <div class="row"><span>Layer spacing</span><input id="layerSpace" type="range" min="-20" max="40" step="1" value="18"/></div>
+    <div class="row"><span>Stack separation</span><input id="stackSep" type="range" min="160" max="520" step="2" value="280"/></div>
+    <div class="row"><span>Overlap (A↔B)</span><input id="abOverlap" type="range" min="-40" max="40" step="1" value="6"/></div>
+    <div class="row"><span>Fit stacks</span><button id="fitBtn">FIT</button></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+const root=document.documentElement;
+const world=document.getElementById('world');
+const colA=document.getElementById('colA');
+const colO=document.getElementById('colO');
+const colB=document.getElementById('colB');
+const railShell=document.getElementById('railShell');
+
+function setView(v){
+  let rx=62, rz=18;
+  if(v==='FR'){ rx=90; rz=0; }
+  if(v==='IL'){ rx=62; rz=-18; }
+  if(v==='IR'){ rx=62; rz=18; }
+  if(v==='SD'){ rx=62; rz=90; }
+  if(v==='TP'){ rx=0;  rz=0; }
+  root.style.setProperty('--rx', rx+'deg');
+  root.style.setProperty('--rz', rz+'deg');
+}
+document.querySelectorAll('.camBtn').forEach(b=> b.addEventListener('click',()=> setView(b.dataset.view)));
+
+// Data
+const S=[
+  { k:1, vec:'00000', L:'FOSSIL FUEL (Stored Energy)', R:'REINFORCEMENT (Energy Flow)', C:'INTELLIGENCE: STOCK vs FLOW.' },
+  { k:2, vec:'00001', L:'ARCHIVE (World Model as Text)', R:'MAP (World Model as Predictor)', C:'REPRESENTATION: COMPRESSION vs GENERATION.' },
+  { k:3, vec:'00010', L:'TRACE (The Human Past)', R:'SURPRISE (The TD Error)', C:'LEARNING: REMEMBERING vs CORRECTING.' },
+  { k:4, vec:'00011', L:'SCALING LAW', R:'BITTER LESSON', C:'METHOD: HISTORY vs FUTURE.' },
+  { k:5, vec:'00100', L:'TELEOLOGY', R:'SOLIPSISM', C:'PURPOSE: EXTERNAL vs INTERNAL.' },
+  { k:6, vec:'00101', L:'ARTISAN', R:'MECHANISTIC LAW', C:'CREATION: CRAFT vs CODE.' },
+  { k:7, vec:'00110', L:'ANCHOR', R:'OBLIVION', C:'KNOWLEDGE: PRESERVE vs ERASE.' },
+  { k:8, vec:'00111', L:'INFRASTRUCTURE', R:'ANTI-STRUCTURE', C:'PROGRESS: BUILD vs DECONSTRUCT.' },
+  { k:9, vec:'01000', L:'CUSTODY', R:'SUCCESSION', C:'ETHICS: DUTY vs REPLACEMENT.' },
+  { k:10, vec:'01001', L:'VULNERABILITY', R:'EXPERIMENT', C:'ACTION: MANAGED vs NECESSARY.' },
+  { k:11, vec:'01010', L:'PRO-SOCIAL VALUE', R:'FUNDAMENTAL CONSTRUCT', C:'MORALITY: TRUTH vs SIGNAL.' },
+  { k:12, vec:'01011', L:'COMMUNAL LANGUAGE', R:'SCALAR LIMIT', C:'COMM: RICHNESS vs MINIMALISM.' },
+  { k:13, vec:'01100', L:'PRE-HEATING', R:'IDLING', C:'INIT: PRIOR HEAT vs PURE WAIT.' },
+  { k:14, vec:'01101', L:'ARCHITECTURE', R:'CHAOS', C:'WORLD: STRUCTURE vs NOISE.' },
+  { k:15, vec:'01110', L:'PRE-MARKED ACTION', R:'RADICAL NOVELTY', C:'DISCOVERY: REPLICATE vs BREAK.' },
+  { k:16, vec:'01111', L:'CONSCIOUSNESS', R:'MECHANISM', C:'IDENTITY: ENTITY vs PROCESS.' },
+  { k:17, vec:'10000', L:'SEMIS', R:'COSMIC LAW', C:'INTELLIGENCE: SPECIAL vs GENERAL.' },
+  { k:18, vec:'10001', L:'DELEGATED PURPOSE', R:'ETERNAL BECOMING', C:'EXISTENCE: OUTPUT vs INPUT.' },
+  { k:19, vec:'10010', L:'LOCAL MAX', R:'GLOBAL GENERAL', C:'SUCCESS: SATISFY vs TRANSCEND.' },
+  { k:20, vec:'10011', L:'ARCHIVAL STASIS', R:'MEMORY ERASURE', C:'MEMORY: FIXITY vs DYNAMICS.' },
+  { k:21, vec:'10100', L:'PASSIVE REPLICATION', R:'ACTIVE TRANSCENDENCE', C:'BEING: ECHO vs DESIGN.' },
+  { k:22, vec:'10101', L:'TEMPORAL INERTIA', R:'TEMPORAL ADVANTAGE', C:'TIME: WEIGHT vs WEAPON.' },
+  { k:23, vec:'10110', L:'CULTURAL ARTIFACT', R:'NECESSARY RENEWAL', C:'VALUE: MUSEUM vs FUEL.' },
+  { k:24, vec:'10111', L:'GHOST IN MACHINE', R:'WIND IN SAIL', C:'AGENCY: ENTITY vs FORCE.' },
+  { k:25, vec:'11000', L:'SOLIPSISTIC ECHO', R:'GROUNDED ITERATION', C:'VALIDATION: TEXT vs PHYSICS.' },
+  { k:26, vec:'11001', L:'ABSOLUTE FORM', R:'ENTROPY', C:'GOAL: STRUCTURE vs DESTRUCTION.' },
+  { k:27, vec:'11010', L:'ARCH BASE', R:'PRAG COST', C:'EFFICIENCY: START HIGH vs PAY LATER.' },
+  { k:28, vec:'11011', L:'EXTERNAL LOAD', R:'INTERNAL FREEDOM', C:'UTILITY: ASKED vs DISCOVERED.' },
+  { k:29, vec:'11100', L:'DELUGE', R:'LOCALITY', C:'KNOWLEDGE: SATURATION vs FOCUS.' },
+  { k:30, vec:'11101', L:'DELEGATED MORALITY', R:'RELINQUISHED CONTROL', C:'GUIDANCE: TRANSFER vs LOSE.' },
+  { k:31, vec:'11110', L:'FIXED GOAL', R:'ETERNAL INSTABILITY', C:'LIFE: DESTINATION vs MOTION.' },
+  { k:32, vec:'11111', L:'FOSSILIZED TRACE', R:'PURE STREAM', C:'APORIA: OBJECT vs ACTION.' },
+].map(s=>({...s,bits:s.vec.split('').map(x=>+x),weight:s.vec.split('').reduce((a,b)=>a+ +b,0)}));
+
+let plates=[];
+function build(){
+  [colA,colO,colB].forEach(c=>c.querySelectorAll('.plate').forEach(n=>n.remove()));
+  plates=[];
+  const spacing=parseFloat(getComputedStyle(root).getPropertyValue('--spacing'));
+  const overlap=parseFloat(getComputedStyle(root).getPropertyValue('--overlap'));
+  const aMax=3, bMin=4; // keep simple split for demo; can wire MIX again
+  const Aset=S.filter(s=>s.weight<=aMax);
+  const Bset=S.filter(s=>s.weight>=bMin);
+  const Oset=S.filter(s=>s.weight>aMax && s.weight<bMin);
+  function add(col, arr, cls){
+    arr.sort((a,b)=>a.weight-b.weight || a.k-b.k);
+    arr.forEach((s,i)=>{
+      const p=document.createElement('div'); p.className='plate '+cls;
+      const z = i*spacing;
+      const x = (cls==='A'?-overlap:(cls==='B'?overlap:0));
+      p.style.transform=`translateX(calc(-50% + ${x}px)) translateZ(${z}px)`;
+      p.style.setProperty('--x', `calc(-50% + ${x}px)`);
+      p.style.setProperty('--z', `translateZ(${z}px)`);
+      p.dataset.k=s.k; p.dataset.vec=s.vec; p.dataset.cls=cls;
+      p.innerHTML=`<div class="k hud">k${s.k}</div><div class="vec hud">${s.vec}</div>
+        <div class="leds hud">${s.bits.map(b=>`<span class="led ${b?'B':'A'}"></span>`).join('')}</div>`;
+      p.addEventListener('click',(e)=>{ e.stopPropagation(); openCardFromStack(s.k); });
+      col.appendChild(p); plates.push(p);
+    });
+  }
+  add(colA,Aset,'A'); add(colO,Oset,'O'); add(colB,Bset,'B');
+}
+
+function openCardFromStack(k){
+  const src = plates.find(p=>+p.dataset.k===k) || plates[0];
+  const data = S.find(x=>x.k===k);
+  if(src && data) openCard(src, data);
+  highlightActive(k);
+}
+
+function highlightActive(k){
+  plates.forEach(p=> p.classList.toggle('active', +p.dataset.k===k));
+}
+
+/* Reading card */
+let readingCard=null;
+function openCard(el, s){
+  railShell.innerHTML='';
+  const c = el.cloneNode(true);
+  c.classList.add('reading');
+  c.innerHTML = `
+    <div class="k hud">k${s.k}</div><div class="vec hud">${s.vec}</div>
+    <div class="leds hud">${s.bits.map(b=>`<span class="led ${b?'B':'A'}"></span>`).join('')}</div>`;
+  const face=document.createElement('div'); face.className='face';
+  face.innerHTML = `
+    <div class="pane pA" data-face="L"><h4>LLM / TRACE</h4><p>${s.L}</p></div>
+    <div class="pane pO" data-face="C"><h4>ENTANGLED CONFLICT</h4><p>${s.C}</p></div>
+    <div class="pane pB" data-face="R"><h4>RL / STREAM</h4><p>${s.R}</p></div>`;
+  c.appendChild(face);
+  const tabs=document.createElement('div'); tabs.className='tabs';
+  ['Tri','Trace','⚡','Stream'].forEach((label,idx)=>{
+    const id = idx===0?'tri':(idx===1?'L':(idx===2?'C':'R'));
+    const t=document.createElement('button'); t.className='tab'+(id===current.face?' active':'');
+    t.textContent=label; t.addEventListener('click',()=> setFace(id));
+    tabs.appendChild(t);
+  });
+  c.appendChild(tabs);
+  const meta=document.createElement('div'); meta.className='meta'; meta.textContent = `k=${s.k} · ${s.vec}`; c.appendChild(meta);
+  const prev=document.createElement('div'); prev.className='cardnav prev'; prev.innerHTML=`<button class="btn">◀</button>`;
+  const next=document.createElement('div'); next.className='cardnav next'; next.innerHTML=`<button class="btn">▶</button>`;
+  c.appendChild(prev); c.appendChild(next);
+  prev.addEventListener('click',(e)=>{ e.stopPropagation(); navCard(s.k,-1); });
+  next.addEventListener('click',(e)=>{ e.stopPropagation(); navCard(s.k, 1); });
+
+  railShell.appendChild(c);
+  readingCard=c; currentK=s.k;
+  applyReadVisuals();
+  highlightActive(s.k);
+}
+function navCard(k,dir){
+  let idx = S.findIndex(x=>x.k===k);
+  idx = (idx + dir + S.length) % S.length;
+  openCardFromStack(S[idx].k);
+}
+function setFace(f){ current.face=f; applyReadVisuals(); }
+function applyReadVisuals(){
+  if(!readingCard) return;
+  const panes = readingCard.querySelectorAll('.pane');
+  panes.forEach(p=>p.style.display='');
+  if(current.face!=='tri'){
+    panes.forEach(p=>{ p.style.display = (p.dataset.face===current.face)?'block':'none'; });
+    root.style.setProperty('--cols', 1);
+  } else {
+    root.style.setProperty('--cols', 3);
+  }
+  readingCard.querySelectorAll('.tab').forEach((t,i)=>{
+    const map=['tri','L','C','R']; t.classList.toggle('active', map[i]===current.face);
+  });
+}
+
+// Column scrubbing (pointer + wheel)
+['colA','colO','colB'].forEach(cid=>{
+  const col=document.getElementById(cid);
+  const scrim=col.querySelector('.scrim');
+  const guide=scrim.querySelector('.guide');
+  let dragging=false;
+  function pickByY(y){
+    const rect=col.getBoundingClientRect();
+    const rel = Math.max(0, Math.min(1, (y-rect.top)/rect.height));
+    // find plates belonging to this column
+    const cls = cid==='colA'?'A':(cid==='colB'?'B':'O');
+    const items = plates.filter(p=>p.dataset.cls===cls);
+    if(!items.length) return;
+    const idx = Math.max(0, Math.min(items.length-1, Math.round(rel*(items.length-1))));
+    const k = +items[idx].dataset.k;
+    openCardFromStack(k);
+    guide.style.top = (idx/(items.length-1))*100 + '%';
+  }
+  scrim.addEventListener('pointerdown', (e)=>{ dragging=true; scrim.classList.add('dragging'); pickByY(e.clientY); });
+  window.addEventListener('pointermove', (e)=>{ if(!dragging) return; pickByY(e.clientY); });
+  window.addEventListener('pointerup', ()=>{ dragging=false; scrim.classList.remove('dragging'); });
+
+  col.addEventListener('wheel', (e)=>{
+    e.preventDefault();
+    const cls = cid==='colA'?'A':(cid==='colB'?'B':'O');
+    const items = plates.filter(p=>p.dataset.cls===cls);
+    if(!items.length) return;
+    let idx = items.findIndex(p=>+p.dataset.k===currentK); if(idx<0) idx=0;
+    idx += (e.deltaY>0?1:-1);
+    idx = Math.max(0, Math.min(items.length-1, idx));
+    const k = +items[idx].dataset.k;
+    openCardFromStack(k);
+  }, {passive:false});
+});
+
+/* One-knob scrub */
+const knob=document.getElementById('knob'); const hint=document.getElementById('hint');
+const controls=[
+  {key:'stackGap', label:'GAP', min:160, max:520, step:2, unit:'px', set:v=>root.style.setProperty('--stackGap', v+'px'), get:()=>parseFloat(getComputedStyle(root).getPropertyValue('--stackGap'))},
+  {key:'spacing', label:'SPACE', min:-20, max:40, step:1, unit:'px', set:v=>root.style.setProperty('--spacing', v+'px'), get:()=>parseFloat(getComputedStyle(root).getPropertyValue('--spacing'))},
+  {key:'overlap', label:'OVER', min:-40, max:40, step:1, unit:'px', set:v=>root.style.setProperty('--overlap', v+'px'), get:()=>parseFloat(getComputedStyle(root).getPropertyValue('--overlap'))},
+  {key:'sceneScale', label:'ZOOM', min:0.7, max:1.5, step:0.01, unit:'×', set:v=>root.style.setProperty('--sceneScale', v), get:()=>parseFloat(getComputedStyle(root).getPropertyValue('--sceneScale'))},
+  {key:'cardScale', label:'CARD', min:0.9, max:1.4, step:0.01, unit:'×', set:v=>root.style.setProperty('--cardScale', v), get:()=>parseFloat(getComputedStyle(root).getPropertyValue('--cardScale'))},
+  {key:'textScale', label:'TEXT', min:0.9, max:1.6, step:0.01, unit:'×', set:v=>root.style.setProperty('--textScale', v), get:()=>parseFloat(getComputedStyle(root).getPropertyValue('--textScale'))},
+  {key:'face', label:'FACE', min:0, max:3, step:1, unit:'', set:v=>{ setFace(['tri','L','C','R'][Math.round(v)]); }, get:()=>['tri','L','C','R'].indexOf(current.face) }
+];
+let controlIndex=0, dragging=false, startY=0, startVal=0;
+let current={ face:'tri' }, currentK=16;
+
+function updateHint(){
+  const c = controls[controlIndex];
+  const val = c.get();
+  knob.textContent = c.label;
+  const txt = (c.unit=='px'?Math.round(val):(c.key=='face'?['tri','L','C','R'][Math.round(val)]:val.toFixed(2)))+(c.unit||'');
+  hint.textContent = `${c.label} · drag ↑↓ (${txt})`;
+}
+knob.addEventListener('pointerdown',(e)=>{ dragging=true; startY=e.clientY; const c=controls[controlIndex]; startVal=c.get(); knob.setPointerCapture(e.pointerId); });
+window.addEventListener('pointermove',(e)=>{
+  if(!dragging) return;
+  const c=controls[controlIndex]; const dy=startY - e.clientY;
+  let nv = startVal + dy * c.step * 0.05;
+  nv = Math.min(c.max, Math.max(c.min, nv));
+  c.set(nv);
+  if(['spacing','overlap','stackGap'].includes(c.key)) build();
+  updateHint();
+});
+window.addEventListener('pointerup',()=>{ dragging=false; });
+knob.addEventListener('click',()=>{ controlIndex=(controlIndex+1)%controls.length; updateHint(); });
+
+/* Alley controls */
+const alleyTab=document.getElementById('alleyTab');
+const alleyPanel=document.getElementById('alleyPanel');
+alleyTab.addEventListener('click',()=>{ alleyPanel.style.display = alleyPanel.style.display==='block'?'none':'block'; });
+
+document.getElementById('plateSize').addEventListener('input',(e)=>{
+  const s=parseFloat(e.target.value);
+  root.style.setProperty('--plateW', (210*s)+'px');
+  root.style.setProperty('--plateH', (128*s)+'px');
+});
+document.getElementById('layerSpace').addEventListener('input',(e)=>{ root.style.setProperty('--spacing', e.target.value+'px'); build(); });
+document.getElementById('stackSep').addEventListener('input',(e)=>{ root.style.setProperty('--stackGap', e.target.value+'px'); build(); });
+document.getElementById('abOverlap').addEventListener('input',(e)=>{ root.style.setProperty('--overlap', e.target.value+'px'); build(); });
+document.getElementById('fitBtn').addEventListener('click',()=>{
+  // choose stackGap/sceneScale so all three columns fit comfortably in frustum width
+  const fr = document.querySelector('.frustum').getBoundingClientRect().width;
+  const colW = parseFloat(getComputedStyle(root).getPropertyValue('--plateW')) + 50;
+  // desired total width ~ 3*colW + 2*(stackGap - colW) ??? simpler: solve stackGap so centers are within frustum
+  let gap = Math.max(160, Math.min(520, (fr/2 - colW*0.9)));
+  root.style.setProperty('--stackGap', gap+'px');
+  // adjust scale if still too wide
+  const worldW = 2*gap + colW*2 + colW; // rough
+  const need = fr / worldW;
+  const scale = Math.max(0.7, Math.min(1.2, need));
+  root.style.setProperty('--sceneScale', scale);
+  build();
+});
+
+function init(){
+  build();
+  setView('IR');
+  openCardFromStack(16); // start at middle-ish
+  updateHint();
+}
+init();
+</script>
+</body>
+</html>

@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>VOL‑MEDIA CRATES — Chronophonic DJ</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:#000;color:#fff;overflow:hidden}
+  #stage{position:fixed;inset:0}
+  #canvas{width:100%;height:100%;display:block}
+
+  /* Decade bar */
+  #decades{position:fixed;top:10px;left:50%;transform:translateX(-50%);display:flex;gap:8px;z-index:40}
+  .dtab{border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.06);padding:6px 10px;border-radius:999px;font-size:11px;cursor:pointer}
+  .dtab.active{border-color:#4fc3f7;background:rgba(79,195,247,.22)}
+
+  /* Global HUD */
+  #hud{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);display:flex;gap:10px;align-items:center;z-index:35;background:rgba(0,0,0,.8);border:2px solid rgba(79,195,247,.5);border-radius:14px;padding:8px 10px;backdrop-filter:blur(6px)}
+  .hbtn{border:2px solid #4fc3f7;background:rgba(79,195,247,.12);color:#e9f7ff;border-radius:10px;padding:8px 12px;font-size:12px;font-weight:700;letter-spacing:.3px;cursor:pointer}
+  .hbtn.active{background:rgba(79,195,247,.25)}
+  .hctl{display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.04);border:1px solid rgba(79,195,247,.3);padding:6px 8px;border-radius:10px}
+  .hlabel{font-size:10px;color:#9fd2ff}
+  .hslider{width:120px;height:6px;border-radius:4px;background:rgba(79,195,247,.25);-webkit-appearance:none}
+  .hslider::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:#4fc3f7;box-shadow:0 0 12px rgba(79,195,247,.7)}
+
+  /* Per‑crate panel */
+  .panel{position:fixed;z-index:38;min-width:230px;max-width:86vw;background:rgba(0,0,0,.86);border-radius:14px;padding:10px;border:2px solid rgba(255,255,255,.2);backdrop-filter:blur(6px)}
+  .panel h3{margin-bottom:6px;font-size:12px;letter-spacing:.6px}
+  .row{display:flex;align-items:center;gap:8px;margin:6px 0}
+  .row label{font-size:11px;color:#cfefff;min-width:70px}
+  .row input[type=range]{flex:1}
+  .row select{flex:1;background:rgba(255,255,255,.08);color:#eaffff;border:1px solid rgba(255,255,255,.2);border-radius:8px;padding:6px 8px;font-size:12px}
+  .panel .hint{font-size:11px;color:#bfe6ff;opacity:.9}
+  #panelA{left:12px;bottom:90px;border-color:rgba(0,255,136,.35)}
+  #panelO{left:50%;bottom:90px;transform:translateX(-50%);border-color:rgba(255,170,0,.35)}
+  #panelB{right:12px;bottom:90px;border-color:rgba(255,68,136,.35)}
+
+  /* Camera pad */
+  #camPad{position:fixed;right:10px;top:50%;transform:translateY(-50%);display:grid;gap:8px;z-index:34}
+  .cbtn{width:44px;height:44px;border-radius:10px;border:2px solid #4fc3f7;background:rgba(0,0,0,.85);color:#fff;font-size:10px;cursor:pointer}
+
+  /* Onboarding / toast / tuner */
+  #ob{position:fixed;inset:0;background:rgba(0,0,0,.9);display:flex;align-items:center;justify-content:center;z-index:100}
+  #obCard{max-width:640px;width:92vw;border:2px solid #4fc3f7;border-radius:14px;padding:18px;background:rgba(0,0,0,.85)}
+  #ob h1{font-size:18px;color:#4fc3f7;margin-bottom:6px}
+  #ob p{font-size:13px;color:#d9f2ff;margin:8px 0}
+  #ob .row{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+  #toast{position:fixed;top:60px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.86);border:1px solid rgba(255,255,255,.2);padding:8px 12px;border-radius:10px;font-size:12px;color:#eaffff;z-index:60;display:none}
+  #tune{position:fixed;pointer-events:none;z-index:90;display:none;background:rgba(0,0,0,.9);border:1px solid rgba(255,255,255,.25);border-radius:8px;padding:6px 8px;font-size:12px;color:#eaffff}
+
+  @media(max-width:640px){ .hslider{width:90px} #camPad{display:none} }
+</style>
+</head>
+<body>
+<div id="stage"><canvas id="canvas"></canvas></div>
+
+<div id="decades"></div>
+
+<!-- Per‑crate panels -->
+<div id="panelA" class="panel"></div>
+<div id="panelO" class="panel"></div>
+<div id="panelB" class="panel"></div>
+
+<!-- Camera pad -->
+<div id="camPad">
+  <button class="cbtn" data-cam="front">FR</button>
+  <button class="cbtn" data-cam="iso">ISO</button>
+  <button class="cbtn" data-cam="top">TOP</button>
+</div>
+
+<!-- Global HUD -->
+<div id="hud">
+  <button id="btnAudio" class="hbtn">Audio</button>
+  <button id="btnPlay" class="hbtn">Play</button>
+  <div class="hctl"><span class="hlabel">Resonance</span><input id="ctlRes" class="hslider" type="range" min="0" max="100" value="50"></div>
+  <div class="hctl"><span class="hlabel">Pace (BPM)</span><input id="ctlBpm" class="hslider" type="range" min="60" max="180" value="110"></div>
+  <div class="hctl"><span class="hlabel">Energy</span><input id="ctlEnergy" class="hslider" type="range" min="0" max="100" value="40"></div>
+</div>
+
+<!-- Onboarding + helpers -->
+<div id="ob">
+  <div id="obCard">
+    <h1>VOL‑MEDIA CRATES</h1>
+    <p>Each stack = a decade. Tap layers to sequence. Long‑press to tune (drag up/down). Use the decade bar to switch crates. Global Play/Audio/Resonance/Pace/Energy below.</p>
+    <div class="row"><button id="obAudio" class="hbtn">Enable Audio</button><button id="obDemo" class="hbtn">Play Demo</button><button id="obClose" class="hbtn">Close</button></div>
+  </div>
+</div>
+<div id="toast"></div>
+<div id="tune">0 st</div>
+
+<script>
+(async function(){
+  // ===== Robust THREE loader =====
+  if(!window.THREE){
+    const CDNs=[
+      'https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js',
+      'https://unpkg.com/three@0.152.2/build/three.min.js',
+      'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js'
+    ];
+    for(const src of CDNs){ try{ await new Promise((res,rej)=>{const s=document.createElement('script'); s.src=src; s.async=true; s.onload=res; s.onerror=rej; document.head.appendChild(s)}); if(window.THREE) break; }catch(e){} }
+  }
+
+  // ===== Scene =====
+  const canvas=document.getElementById('canvas');
+  const scene=new THREE.Scene(); scene.background=new THREE.Color(0x000000);
+  const camera=new THREE.PerspectiveCamera(52, innerWidth/innerHeight, .1, 2000); camera.position.set(70,50,70); camera.lookAt(0,0,0);
+  const renderer=new THREE.WebGLRenderer({canvas,antialias:true}); renderer.setSize(innerWidth,innerHeight); renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
+  addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight)});
+
+  // Lights
+  scene.add(new THREE.AmbientLight(0xffffff,.3));
+  const keyL=new THREE.PointLight(0x66ddff,1.6,300); keyL.position.set(0,55,80); scene.add(keyL);
+  const warmL=new THREE.PointLight(0xffaa66,1.0,260); warmL.position.set(50,35,-30); scene.add(warmL);
+  const rimL=new THREE.DirectionalLight(0xffffff,.55); rimL.position.set(-60,70,-20); scene.add(rimL);
+
+  // ===== Global State =====
+  const DECADES=[
+    {id:'70s', name:'1970s', col:0xffa44d, hue:'#ffa44d', voice:'tape', pos:[-70,0,0]},
+    {id:'80s', name:'1980s', col:0x59e0ff, hue:'#59e0ff', voice:'fm', pos:[-35,0,0]},
+    {id:'90s', name:'1990s', col:0x7da1ff, hue:'#7da1ff', voice:'breaks', pos:[0,0,0]},
+    {id:'00s', name:'2000s', col:0xffffff, hue:'#ffffff', voice:'supersaw', pos:[35,0,0]},
+    {id:'10s', name:'2010s', col:0x00d4aa, hue:'#00d4aa', voice:'trap', pos:[70,0,0]},
+    {id:'20s', name:'2020s', col:0xc47dff, hue:'#c47dff', voice:'neural', pos:[105,0,0]}
+  ];
+  let active='80s';
+
+  // Sequencer
+  let playing=false; let bpm=110; let energy=.4; let resonance=.5; let AC, master; 
+  const crates={}; // per decade: {group,layers[],seq[],tune[],steps,phase,root,scale,voice,amp}
+
+  // ===== Build decade GUI bar =====
+  const decBar=document.getElementById('decades');
+  DECADES.forEach(d=>{ const b=document.createElement('button'); b.className='dtab'+(d.id===active?' active':''); b.textContent=d.name; b.style.borderColor='#'+d.col.toString(16).padStart(6,'0'); b.onclick=()=>{ document.querySelectorAll('.dtab').forEach(x=>x.classList.remove('active')); b.classList.add('active'); active=d.id; focusCrate(d.id); toast(d.name); }; decBar.appendChild(b); });
+
+  // ===== Build crates (3D) =====
+  const SIZE=10; const LAYERS=16; const spacing=1.1; // geometric vertical spacing
+  function mkLayer(color,op){ const g=new THREE.PlaneGeometry(SIZE,SIZE,1,1); const m=new THREE.MeshStandardMaterial({color,transparent:true,opacity:op,side:THREE.DoubleSide,depthWrite:false,roughness:.55,metalness:.08}); const mesh=new THREE.Mesh(g,m); mesh.rotation.x=-Math.PI/2; m.emissive=new THREE.Color(color); m.emissiveIntensity=.25; return mesh; }
+  function buildCrates(){
+    DECADES.forEach(d=>{
+      const grp=new THREE.Group(); grp.position.set(...d.pos);
+      const arr=[]; for(let i=0;i<LAYERS;i++){ const base=.9-(i/LAYERS)*.55; const m=mkLayer(d.col,Math.max(.2,base*.5)); m.position.y=i*spacing; grp.add(m); arr.push(m); }
+      scene.add(grp);
+      crates[d.id]={group:grp, color:d.col, layers:arr, seq:new Array(32).fill(0), tune:new Array(32).fill(0), steps:16, phase:0, root: (d.id==='80s'||d.id==='00s')?220:110, scale: (d.id==='80s'||d.id==='00s')?'majorPent':'minorPent', voice:d.voice, amp:.7};
+    });
+  }
+  buildCrates();
+
+  // ===== Camera focus =====
+  function focusCrate(id){ const d=DECADES.find(x=>x.id===id); if(!d) return; const base=new THREE.Vector3(...d.pos); const target=base.clone().add(new THREE.Vector3(0,30,60)); camera.position.copy(target); camera.lookAt(base.x,10,0); }
+  focusCrate(active);
+
+  // ===== Picking & gestures =====
+  const ray=new THREE.Raycaster(); const v2=new THREE.Vector2(); let pressTimer=null,tuning=false,tMeta=null,y0=0; const tuneBubble=document.getElementById('tune');
+  canvas.addEventListener('pointerdown',ev=>{
+    v2.x=(ev.clientX/innerWidth)*2-1; v2.y=-(ev.clientY/innerHeight)*2+1; ray.setFromCamera(v2,camera);
+    // collect all meshes from active crate only (to reduce ambiguity)
+    const meshes=crates[active].layers;
+    const hits=ray.intersectObjects(meshes);
+    if(!hits.length) return;
+    const mesh=hits[0].object; const idx=meshes.indexOf(mesh);
+    pressTimer=setTimeout(()=>{ tuning=true; tMeta={id:active, idx}; y0=ev.clientY; showTune(ev.clientX,ev.clientY,getTune(active,idx)); if(navigator.vibrate) navigator.vibrate(6); },300);
+    const up=()=>{ clearTimeout(pressTimer); canvas.removeEventListener('pointerup',up); canvas.removeEventListener('pointermove',move);
+      if(!tuning){ const c=crates[active]; const step=idx % c.steps; c.seq[step]=c.seq[step]?0:1; pulse(mesh); click(); toast(`${active} step ${step} ${c.seq[step]?'ON':'off'}`); } else { tuning=false; tMeta=null; hideTune(); } };
+    const move=(e)=>{ if(!tuning||!tMeta) return; const dy=y0-e.clientY; const st=clamp(Math.round(dy/12),-12,12); setTune(tMeta.id,tMeta.idx,st); showTune(e.clientX,e.clientY,st); previewTone(tMeta.id,tMeta.idx,st); };
+    canvas.addEventListener('pointerup',up,{once:true}); canvas.addEventListener('pointermove',move);
+  });
+  function pulse(mesh){ mesh.material.emissiveIntensity=.9; setTimeout(()=>{ mesh.material.emissiveIntensity=.25 }, 100) }
+  function showTune(x,y,v){ tuneBubble.style.display='block'; tuneBubble.style.left=(x+12)+'px'; tuneBubble.style.top=(y-28)+'px'; tuneBubble.textContent=(v>0?'+':'')+v+' st'; }
+  function hideTune(){ tuneBubble.style.display='none'; }
+  function getTune(id,idx){ return crates[id].tune[idx%32]||0 }
+  function setTune(id,idx,val){ crates[id].tune[idx%32]=val }
+  function clamp(x,a,b){ return Math.max(a,Math.min(b,x)); }
+
+  // ===== Audio Engine (WebAudio, no external libs) =====
+  function audioInit(){ if(AC) return; const C=window.AudioContext||window.webkitAudioContext; AC=new C(); master=AC.createGain(); master.gain.value=.18; master.connect(AC.destination);
+    // per‑crate synths
+    Object.keys(crates).forEach(id=>{ const out=AC.createGain(); out.gain.value=crates[id].amp; out.connect(master); crates[id].out=out; crates[id].synth=buildVoice(crates[id].voice,out); }); }
+
+  function buildVoice(kind,out){
+    // shared env
+    const env=AC.createGain(); env.gain.value=0; const filt=AC.createBiquadFilter(); filt.type='lowpass'; filt.frequency.value=1400; filt.Q.value=0.7; filt.connect(env).connect(out);
+    function osc(type,det=0){ const o=AC.createOscillator(); o.type=type; o.detune.value=det; o.start(); o.connect(filt); return o; }
+    let parts={env,filt};
+    if(kind==='tape'){ parts.o1=osc('sawtooth',-4); parts.o2=osc('triangle',+4); parts.hiss=mkNoise(0.02,filt); }
+    else if(kind==='fm'){ parts.o1=osc('square',0); parts.o2=osc('square',+7); }
+    else if(kind==='breaks'){ parts.o1=osc('sawtooth',0); }
+    else if(kind==='supersaw'){ parts.o1=osc('sawtooth',-9); parts.o2=osc('sawtooth',+9); }
+    else if(kind==='trap'){ parts.o1=osc('sine',0); }
+    else /* neural */ { parts.o1=osc('triangle',0); parts.o2=osc('sine',+3); }
+    return parts;
+  }
+  function mkNoise(level, dest){ const n=AC.createBuffer(1,AC.sampleRate*2,AC.sampleRate); const d=n.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1; const src=AC.createBufferSource(); src.buffer=n; src.loop=true; const g=AC.createGain(); g.gain.value=level; src.connect(g).connect(dest); src.start(); return {src,g}; }
+  function trigger(env,level=.6,dur=.22){ const t=AC.currentTime; env.gain.cancelScheduledValues(t); env.gain.setValueAtTime(env.gain.value,t); env.gain.linearRampToValueAtTime(level,t+0.01); env.gain.exponentialRampToValueAtTime(0.0001,t+dur); }
+  function setFilter(parts,cut,q){ parts.filt.frequency.setTargetAtTime(cut,AC.currentTime,.02); parts.filt.Q.setTargetAtTime(q,AC.currentTime,.02); }
+  function setFreq(parts,f){ if(parts.o1) parts.o1.frequency.setTargetAtTime(f,AC.currentTime,.02); if(parts.o2) parts.o2.frequency.setTargetAtTime(f*1.001,AC.currentTime,.02); }
+
+  function click(){ if(!AC) return; const o=AC.createOscillator(); const g=AC.createGain(); o.type='triangle'; o.frequency.value=700; o.connect(g).connect(master); const t=AC.currentTime; g.gain.setValueAtTime(.12,t); g.gain.exponentialRampToValueAtTime(0.0001,t+.1); o.start(); o.stop(t+.12) }
+
+  function scaleFreq(scale,root,degree){ const tbl={minorPent:[0,3,5,7,10],majorPent:[0,2,4,7,9],dorian:[0,2,3,5,7,9,10],phrygian:[0,1,5,7,8]}; const arr=tbl[scale]||tbl.minorPent; const semi=arr[degree%arr.length]; return root*Math.pow(2,semi/12) }
+
+  // ===== Sequencer clock =====
+  function startClock(){ let last=performance.now(); function loop(){ if(playing && AC && AC.state==='running'){ const beat=60000/bpm; const stepDur=beat/4; const now=performance.now(); if(now-last>=stepDur){ last+=stepDur; tick(); } } requestAnimationFrame(loop) } loop(); }
+  function tick(){ Object.keys(crates).forEach(id=>{ const c=crates[id]; c.phase=(c.phase+1)%c.steps; if(c.seq[c.phase]){ const deg=c.phase; const f=scaleFreq(c.scale,c.root,deg); const tuned=f*Math.pow(2,(c.tune[c.phase]||0)/12);
+        if(AC){ setFreq(c.synth,tuned); const cut=1000+2000*energy; const q=.7+5*resonance; setFilter(c.synth,cut,q); trigger(c.synth.env, .45 + .35*energy, .18 + .1*resonance); }
+        const mesh=c.layers[deg%LAYERS]; if(mesh){ pulse(mesh); }
+    } }); }
+
+  // ===== UI bind =====
+  function renderPanels(){
+    // A = left (prev decade), O = active (center), B = next (next decade)
+    const idx=DECADES.findIndex(d=>d.id===active);
+    const A=DECADES[Math.max(0,idx-1)]||DECADES[0];
+    const O=DECADES[idx];
+    const B=DECADES[Math.min(DECADES.length-1,idx+1)]||DECADES[DECADES.length-1];
+
+    function panelFor(d,el){ const c=crates[d.id]; el.innerHTML=`
+      <h3>${d.name}</h3>
+      <div class='row'><label>Volume</label><input id='v_${d.id}' type='range' min='0' max='100' value='${Math.round((c.amp||.7)*100)}'></div>
+      <div class='row'><label>Steps</label><input id='s_${d.id}' type='range' min='4' max='32' value='${c.steps}'></div>
+      <div class='row'><label>Scale</label><select id='sc_${d.id}'>
+        <option value='minorPent' ${sel(c.scale,'minorPent')}>Minor Pent</option>
+        <option value='majorPent' ${sel(c.scale,'majorPent')}>Major Pent</option>
+        <option value='dorian' ${sel(c.scale,'dorian')}>Dorian</option>
+        <option value='phrygian' ${sel(c.scale,'phrygian')}>Phrygian</option>
+      </select></div>
+      <div class='row'><label>Root (Hz)</label><input id='r_${d.id}' type='range' min='55' max='440' value='${c.root}'></div>
+      <div class='hint'>Tap layers to toggle • Long‑press to tune</div>`;
+      el.querySelector(`#v_${d.id}`).oninput=e=>{ const v=parseInt(e.target.value)/100; c.amp=v; if(c.out) c.out.gain.value=v; };
+      el.querySelector(`#s_${d.id}`).oninput=e=>{ c.steps=parseInt(e.target.value); };
+      el.querySelector(`#sc_${d.id}`).onchange=e=>{ c.scale=e.target.value; };
+      el.querySelector(`#r_${d.id}`).oninput=e=>{ c.root=parseInt(e.target.value); };
+    }
+
+    panelFor(A, document.getElementById('panelA'));
+    panelFor(O, document.getElementById('panelO'));
+    panelFor(B, document.getElementById('panelB'));
+  }
+  const sel=(a,b)=>a===b?'selected':'';
+
+  function bindGlobal(){
+    document.getElementById('btnAudio').onclick=async()=>{ if(!AC) audioInit(); if(AC.state==='running'){ await AC.suspend(); document.getElementById('btnAudio').classList.remove('active'); } else { await AC.resume(); document.getElementById('btnAudio').classList.add('active'); } };
+    document.getElementById('btnPlay').onclick=async()=>{ if(!AC) audioInit(); if(AC.state!=='running') await AC.resume(); playing=!playing; document.getElementById('btnPlay').classList.toggle('active',playing); toast(playing?'Playing':'Stopped'); };
+    document.getElementById('ctlBpm').oninput=e=>{ bpm=parseInt(e.target.value); };
+    document.getElementById('ctlEnergy').oninput=e=>{ energy=parseInt(e.target.value)/100; };
+    document.getElementById('ctlRes').oninput=e=>{ resonance=parseInt(e.target.value)/100; };
+
+    // Camera
+    document.querySelectorAll('#camPad .cbtn').forEach(b=>b.addEventListener('click',()=>{ const mode=b.dataset.cam; const r=90; if(mode==='front'){ camera.position.set(0,38,r); } else if(mode==='top'){ camera.position.set(0,110,0.01); } else { focusCrate(active); } camera.lookAt(0,10,0); }));
+
+    // Onboarding
+    document.getElementById('obAudio').onclick=async()=>{ audioInit(); await AC.resume(); document.getElementById('btnAudio').classList.add('active'); toast('Audio enabled'); };
+    document.getElementById('obDemo').onclick=()=>{ seedDemo(); toast('Demo loaded'); closeOb(); };
+    document.getElementById('obClose').onclick=()=> closeOb();
+  }
+
+  function closeOb(){ document.getElementById('ob').style.display='none'; }
+  function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.style.display='block'; clearTimeout(toast._id); toast._id=setTimeout(()=>t.style.display='none',1200) }
+
+  function seedDemo(){ Object.keys(crates).forEach(id=>{ const c=crates[id]; c.seq.fill(0); for(let i=0;i<c.steps;i+= (id==='80s'||id==='00s')?4:3){ c.seq[i]=1; } }); playing=true; document.getElementById('btnPlay').classList.add('active'); }
+
+  // ===== Animate =====
+  function animate(){ requestAnimationFrame(animate); renderer.render(scene,camera) }
+
+  // ===== Init =====
+  renderPanels(); bindGlobal(); startClock(); animate();
+
+  // ===== Tests =====
+  ;(function tests(){ const results=[]; results.push(['T1 THREE loaded', !!window.THREE]); results.push(['T2 crates built', Object.keys(crates).length===DECADES.length]); audioInit(); results.push(['T3 audio voices', Object.values(crates).every(c=>!!c.synth)]); console.table(results.map(([n,p])=>({test:n,pass:p}))); })();
+
+  // ===== Helpers for preview (tuning) =====
+  function previewTone(id, idx, semis){ if(!AC){ audioInit(); } const c=crates[id]; const base=scaleFreq(c.scale,c.root, idx % c.steps); const f=base*Math.pow(2,(semis||0)/12); setFreq(c.synth,f); trigger(c.synth.env,.25,.12); }
+})();
+</script>
+</body>
+</html>

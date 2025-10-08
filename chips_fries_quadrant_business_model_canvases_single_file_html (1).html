@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Snackable Gen‑AI Platforms — Chips × Fries Quadrant + BMC + Thick Profiles</title>
+<style>
+  :root{
+    --bg:#0b0b0e; --panel:#15161a; --ink:#e9edf5; --muted:#9aa3b2; --accent:#ffd34d; --accent2:#e52e2e; --grid:#2a2d35;
+    --chip1:#ffd34d; --chip2:#ff9f1a; --chip3:#8bd0ff; --chip4:#b0ff87;
+    --ok:#b0ff87; --warn:#ffd34d; --risk:#ff7979;
+    --link:#8bd0ff;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; background:
+      radial-gradient(1200px 600px at 80% -10%, #ffefb0 0%, rgba(255,239,176,0.0) 60%),
+      radial-gradient(1000px 500px at 0% 120%, #ffe08222 0%, transparent 60%),
+      var(--bg);
+    color:var(--ink); font: 500 16px/1.45 system-ui, -apple-system, Segoe UI, Roboto, Inter, "Helvetica Neue", Arial, "Apple Color Emoji","Segoe UI Emoji";
+    padding:16px; scroll-behavior:smooth;
+  }
+  a{ color:var(--link); text-decoration:none }
+  a:hover{ text-decoration:underline }
+  .card{width:min(1120px, 100%); margin:0 auto; background:linear-gradient(180deg, #1b1d22 0%, #121419 90%);
+    border:1px solid #2a2d35; border-radius:18px; box-shadow:0 20px 60px #0007; overflow:hidden}
+  header{padding:16px clamp(16px,4vw,28px) 8px; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap}
+  .brand{display:flex; align-items:center; gap:12px}
+  .chipLogo{width:44px; height:44px; border-radius:50%; background: radial-gradient(120% 120% at 30% 20%, #fff5bf 0%, #ffd34d 40%, #ffb300 100%);
+    border:2px solid #f7c53a; box-shadow: inset 0 2px 6px #0003, 0 6px 18px #0006; position:relative}
+  .chipLogo::after{content:""; position:absolute; inset:10% 14% auto auto; width:36%; height:36%; background: radial-gradient(100% 100% at 50% 50%, #fff8 0%, transparent 70%); border-radius:50%}
+  h1{margin:0; font-size: clamp(18px, 3.6vw, 24px); letter-spacing:.2px; font-weight:800; background:linear-gradient(180deg,#fff 0%, #e9edf5 100%); -webkit-background-clip:text; background-clip:text; color:transparent}
+  .sub{color:var(--muted); font-size: clamp(12px, 2.6vw, 14px); margin-top:2px}
+  .controls{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
+  .pill{display:inline-flex; align-items:center; gap:8px; background:#0f1116; border:1px solid #2c3038; border-radius:999px; padding:8px 12px; color:#dfe6f3}
+  .pill input[type="checkbox"]{ accent-color: var(--accent); width:18px; height:18px; }
+  .legend{ display:flex; gap: 10px; flex-wrap: wrap}
+  .key{display:flex; align-items:center; gap:8px; padding:6px 10px; border-radius:10px; border:1px solid #2a2d35; background:#0e1015; font-size:13px; color:#d9e1f2}
+  .dot{width:14px; height:14px; border-radius:50%; flex:0 0 auto; box-shadow:0 0 0 2px #0007}
+  .k1{ background: var(--chip1) } .k2{ background: var(--chip2) } .k3{ background: var(--chip3) } .k4{ background: var(--chip4) }
+  .canvasWrap{position:relative; width:100%; aspect-ratio: 16/10; max-height: 64vh; background:
+      radial-gradient(800px 320px at 90% -20%, #ffcb3f11 0%, transparent 70%),
+      linear-gradient(180deg,#17191f 0%, #121419 100%);
+    border-top:1px solid #262a33}
+  canvas{ width:100%; height:100%; display:block }
+  .tooltip{position:absolute; min-width: 240px; max-width: 86vw; background:#0b0d12; color:#f0f4ff; border:1px solid #2f3542; border-radius:12px; padding:10px 12px; box-shadow:0 14px 36px #000a; pointer-events:none; transform: translate(-50%, calc(-100% - 14px)); opacity:0; transition: opacity .15s ease, transform .15s ease}
+  .tooltip.visible{ opacity:1; transform: translate(-50%, calc(-100% - 10px)) }
+  .tooltip h3{ margin:0 0 6px; font-size:14px }
+  .tooltip p{ margin:0; font-size:12px; color:#c7cfdd }
+  footer{padding:10px clamp(16px,4vw,28px) 18px; color:#9aa3b2; font-size:12px; display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap}
+  .axisLabel{ color:#b8c3d9; font-size:12px }
+
+  /* ===== Details / BMC ===== */
+  .details{padding:18px clamp(16px,4vw,28px) 22px; border-top:1px solid #262a33; background:#0f1116}
+  .tabs{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px}
+  .tab{cursor:pointer; user-select:none; padding:8px 12px; border-radius:12px; border:1px solid #2d323b; background:#13161c; color:#dfe6f3; font-weight:700; font-size:14px}
+  .tab.active{background:#1c212a; border-color:#3b4150; box-shadow:0 6px 18px #0006}
+  .pane{display:none}
+  .pane.active{display:block}
+  .gridBMC{display:grid; grid-template-columns:repeat(12, 1fr); gap:10px}
+  .b{background:#0d0f14; border:1px solid #282d37; border-radius:12px; padding:10px}
+  .b h4{margin:0 0 6px; font-size:13px; color:#f0f4ff}
+  .b p, .b ul{margin:0; font-size:12px; color:#c7cfdd}
+  .b ul{padding-left:18px}
+  .tag{display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; margin-right:6px}
+  .t-ok{background:#122315; color:#b7ffb7; border:1px solid #234a28}
+  .t-warn{background:#2a220d; color:#ffe099; border:1px solid #5b3f0b}
+  .t-risk{background:#2a0f10; color:#ffb0b0; border:1px solid #5b1b1b}
+  .pair{display:flex; gap:10px; align-items:center; margin:8px 0}
+  .pair .dot{width:10px; height:10px}
+
+  /* ===== Thick Profiles ===== */
+  .profiles{padding:22px clamp(16px,4vw,28px) 26px; border-top:1px solid #262a33; background:#0e1015}
+  .profiles h2{margin:0 0 12px; font-size:18px}
+  .profile{background:#0b0d12; border:1px solid #2a2f3a; border-radius:14px; padding:14px; margin:12px 0}
+  .profile h3{margin:0 0 8px; font-size:16px}
+  blockquote{margin:8px 0; padding:8px 10px; background:#0f1218; border-left:3px solid #334; color:#d9e1f2; font-size:13px}
+  .fn{ color:#b0c7ff; cursor:pointer }
+
+  /* ===== Sources Drawer ===== */
+  .sourcesBtn{position:sticky; bottom:10px; float:right; margin:16px; background:#0f1116; color:#eaf1ff; border:1px solid #3a3f4c; border-radius:999px; padding:10px 14px; cursor:pointer}
+  .drawer{position:fixed; inset:auto 0 0 0; max-height:70vh; transform:translateY(105%); transition:.25s transform ease; background:#0b0d12; border-top:1px solid #2b303b; box-shadow:0 -18px 40px #000a; overflow:auto}
+  .drawer.open{ transform:translateY(0) }
+  .drawer header{display:flex; justify-content:space-between; align-items:center; padding:10px 16px}
+  .src{padding:8px 16px; border-top:1px dashed #2a2f3a; color:#c7cfdd; font-size:13px}
+  .src a{ color:#8bd0ff }
+
+  /* ===== Print ===== */
+  @media print{
+    body{ background:white; color:black }
+    .card{ box-shadow:none; border:none }
+    .canvasWrap, .controls, .sourcesBtn{ display:none }
+    .profile, .b{ break-inside:avoid }
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <header>
+      <div class="brand">
+        <div class="chipLogo" aria-hidden="true"></div>
+        <div>
+          <h1>Snackable Gen‑AI Platforms: Chips × Fries Quadrant</h1>
+          <div class="sub">Y‑axis: Community Depth ↑ · X‑axis: Platform Scale → · Hover/tap for blurbs</div>
+        </div>
+      </div>
+      <div class="controls">
+        <label class="pill"><input id="snackMode" type="checkbox" /> 🍿 Snack Mode (use food icons)</label>
+        <div class="legend" aria-label="Legend">
+          <div class="key"><span class="dot k1"></span> Sora 2 = Lay’s</div>
+          <div class="key"><span class="dot k2"></span> MidJourney = Waffle House</div>
+          <div class="key"><span class="dot k3"></span> Nano Banana = Chiquita/United Fruit</div>
+          <div class="key"><span class="dot k4"></span> Meta Vibes = McDonald’s</div>
+        </div>
+      </div>
+    </header>
+
+    <div class="canvasWrap">
+      <canvas id="quad" aria-label="2x2 comparison canvas" role="img"></canvas>
+      <div id="tip" class="tooltip" role="dialog" aria-live="polite"></div>
+    </div>
+
+    <footer>
+      <div class="axisLabel">Quadrants: (I) High Depth × High Scale — (II) High Depth × Low Scale — (III) Low Depth × Low Scale — (IV) Low Depth × High Scale</div>
+      <div>Toggle Snack Mode for 🍌🍟🍿🍔 markers. <button class="pill" onclick="window.print()">🖨️ Print / Save PDF</button></div>
+    </footer>
+
+    <!-- ================= Details / BMC ================= -->
+    <section class="details">
+      <div class="tabs" id="tabs">
+        <button class="tab active" data-pane="sora">Sora 2 → Lay’s</button>
+        <button class="tab" data-pane="mj">MidJourney → Waffle House</button>
+        <button class="tab" data-pane="vibes">Meta Vibes → McDonald’s</button>
+        <button class="tab" data-pane="nano">Nano Banana → Chiquita</button>
+      </div>
+
+      <!-- SORA -->
+      <div class="pane active" id="pane-sora">
+        <div class="pair"><span class="dot k1"></span><strong>Sora 2 (OpenAI)</strong> mapped to <strong>Lay’s (CPG)</strong></div>
+        <div class="gridBMC" aria-label="Business Model Canvas for Sora">
+          <div class="b" style="grid-column: span 3"><h4>Customer Segments</h4><ul><li>Mass consumers posting short AI videos</li><li>Creators & brands seeking snackable content</li><li>Developers/Studios via API</li></ul></div>
+          <div class="b" style="grid-column: span 3"><h4>Value Proposition</h4><ul><li>Packaged, repeatable creation: “Betcha can’t post just one”</li><li>Remix & Cameos → identity + virality</li><li>High realism + low friction</li></ul></div>
+          <div class="b" style="grid-column: span 2"><h4>Channels</h4><ul><li>Mobile app feed (owned)</li><li>Exports to TikTok/IG/YouTube</li><li>API/SDK partnerships</li></ul></div>
+          <div class="b" style="grid-column: span 2"><h4>Revenue Streams</h4><ul><li>Freemium → subscription/credits</li><li>API usage (enterprise)</li><li>Brand placements/ads (later)</li></ul></div>
+          <div class="b" style="grid-column: span 2"><h4>Key Resources</h4><ul><li>Video models & inference infra</li><li>Trust & Safety + rights tooling</li><li>Creator network + data network effects</li></ul></div>
+          <div class="b" style="grid-column: span 3"><h4>Key Activities</h4><ul><li>Model iteration & QA for quality</li><li>Feed curation & anti‑slop ranking</li><li>Rights mgmt (Cameos, revocable consent)</li></ul></div>
+          <div class="b" style="grid-column: span 3"><h4>Key Partners</h4><ul><li>Creators, labels, studios</li><li>Cloud/GPU vendors</li><li>Distribution platforms</li></ul></div>
+          <div class="b" style="grid-column: span 6"><h4>Costs</h4><ul><li>GPU inference + storage/CDN</li><li>Moderation & abuse handling</li><li>Consumer marketing & incentives</li></ul></div>
+          <div class="b" style="grid-column: span 6"><h4>Risks & Moat</h4><p><span class="tag t-warn">Risk:</span> feed fatigue; identity abuse; rights disputes.<br><span class="tag t-ok">Moat:</span> integrated creation→feed loop; data/UX; safety tooling; API reach.</p></div>
+        </div>
+      </div>
+
+      <!-- MIDJOURNEY -->
+      <div class="pane" id="pane-mj">
+        <div class="pair"><span class="dot k2"></span><strong>MidJourney (Discord)</strong> mapped to <strong>Waffle House (hospitality/community)</strong></div>
+        <div class="gridBMC" aria-label="Business Model Canvas for MidJourney">
+          <div class="b" style="grid-column: span 3"><h4>Customer Segments</h4><ul><li>Artists, designers, enthusiasts</li><li>Agencies/brands experimenting</li><li>Educators & hobbyist communities</li></ul></div>
+          <div class="b" style="grid-column: span 3"><h4>Value Proposition</h4><ul><li>Always‑on “diner booth” for creative craft</li><li>Community critique, prompt remix culture</li><li>Distinct aesthetic control</li></ul></div>
+          <div class="b" style="grid-column: span 2"><h4>Channels</h4><ul><li>Discord servers</li><li>Web gallery</li><li>Exports to social/portfolio sites</li></ul></div>
+          <div class="b" style="grid-column: span 2"><h4>Revenue Streams</h4><ul><li>Subscriptions (tiers)</li><li>Enterprise/team licenses</li></ul></div>
+          <div class="b" style="grid-column: span 2"><h4>Key Resources</h4><ul><li>Models & GPU fleet</li><li>Discord community norms</li><li>Prestige brand & style corpus</li></ul></div>
+          <div class="b" style="grid-column: span 3"><h4>Key Activities</h4><ul><li>Model training + style evolution</li><li>Community moderation & events</li><li>Education, docs, prompt tooling</li></ul></div>
+          <div class="b" style="grid-column: span 3"><h4>Key Partners</h4><ul><li>Discord (platform)</li><li>GPU/cloud providers</li><li>Artist communities/contests</li></ul></div>
+          <div class="b" style="grid-column: span 6"><h4>Costs</h4><ul><li>GPU inference & training</li><li>Community ops & moderation</li><li>Research staff & grants</li></ul></div>
+          <div class="b" style="grid-column: span 6"><h4>Risks & Moat</h4><p><span class="tag t-warn">Risk:</span> Discord dependency; niche ceiling; copycat models.<br><span class="tag t-ok">Moat:</span> culture depth; craft prestige; prompt etiquette & norms.</p></div>
+        </div>
+      </div>
+
+      <!-- META VIBES -->
+      <div class="pane" id="pane-vibes">
+        <div class="pair"><span class="dot k4"></span><strong>Meta Vibes</strong> mapped to <strong>McDonald’s (distribution/ads)</strong></div>
+        <div class="gridBMC" aria-label="Business Model Canvas for Meta Vibes">
+          <div class="b" style="grid-column: span 3"><h4>Customer Segments</h4><ul><li>Mainstream social users</li><li>Creators remixed by templates</li><li>Advertisers seeking reach</li></ul></div>
+          <div class="b" style="grid-column: span 3"><h4>Value Proposition</h4><ul><li>Turnkey AI shorts in the feed</li><li>Network distribution at massive scale</li><li>Low‑lift creation on templates</li></ul></div>
+          <div class="b" style="grid-column: span 2"><h4>Channels</h4><ul><li>Instagram/Facebook/Meta AI app</li><li>Cross‑posting & DMs</li></ul></div>
+          <div class="b" style="grid-column: span 2"><h4>Revenue Streams</h4><ul><li>Ads (impressions + targeting)</li><li>Branded templates & commerce</li></ul></div>
+          <div class="b" style="grid-column: span 2"><h4>Key Resources</h4><ul><li>Social graphs + engagement data</li><li>Ad stack & measurement</li><li>AI gen pipeline</li></ul></div>
+          <div class="b" style="grid-column: span 3"><h4>Key Activities</h4><ul><li>Template creation & A/B ranking</li><li>Safety & authenticity controls</li><li>Creator incentives & rev‑share</li></ul></div>
+          <div class="b" style="grid-column: span 3"><h4>Key Partners</h4><ul><li>Brands & agencies</li><li>Music/licensing partners</li><li>Device OEMs/carriers</li></ul></div>
+          <div class="b" style="grid-column: span 6"><h4>Costs</h4><ul><li>Compute, storage, distribution</li><li>Trust & Safety at scale</li><li>Creator funds & incentives</li></ul></div>
+          <div class="b" style="grid-column: span 6"><h4>Risks & Moat</h4><p><span class="tag t-warn">Risk:</span> AI‑slop fatigue; regulatory scrutiny; creator backlash.<br><span class="tag t-ok">Moat:</span> social graph + ad stack + habit loops.</p></div>
+        </div>
+      </div>
+
+      <!-- NANO BANANA -->
+      <div class="pane" id="pane-nano">
+        <div class="pair"><span class="dot k3"></span><strong>Nano Banana (Google)</strong> mapped to <strong>Chiquita/United Fruit (commodity funnel)</strong></div>
+        <div class="gridBMC" aria-label="Business Model Canvas for Nano Banana">
+          <div class="b" style="grid-column: span 3"><h4>Customer Segments</h4><ul><li>Casual users chasing edits/memes</li><li>Influencers doing before/after</li><li>Developers via AI Studio/Vertex</li></ul></div>
+          <div class="b" style="grid-column: span 3"><h4>Value Proposition</h4><ul><li>Free samples → instant fun edits</li><li>Identity consistency across edits</li><li>Easiest on‑ramp into Gemini stack</li></ul></div>
+          <div class="b" style="grid-column: span 2"><h4>Channels</h4><ul><li>Gemini app, AI Studio</li><li>Vertex AI (enterprise)</li></ul></div>
+          <div class="b" style="grid-column: span 2"><h4>Revenue Streams</h4><ul><li>Indirect ads/search lift</li><li>Cloud/API consumption</li></ul></div>
+          <div class="b" style="grid-column: span 2"><h4>Key Resources</h4><ul><li>Google infra + data</li><li>Gemini model family</li><li>Distribution surfaces (Android/YouTube)</li></ul></div>
+          <div class="b" style="grid-column: span 3"><h4>Key Activities</h4><ul><li>Feature launches that spark memes</li><li>Editing consistency R&D</li><li>Partner templates & growth</li></ul></div>
+          <div class="b" style="grid-column: span 3"><h4>Key Partners</h4><ul><li>Android OEMs, carriers</li><li>Cloud customers</li><li>Creators/YouTube</li></ul></div>
+          <div class="b" style="grid-column: span 6"><h4>Costs</h4><ul><li>Model compute & storage</li><li>Growth/marketing</li><li>Safety & compliance</li></ul></div>
+          <div class="b" style="grid-column: span 6"><h4>Risks & Moat</h4><p><span class="tag t-warn">Risk:</span> novelty decay; weak community stickiness.<br><span class="tag t-ok">Moat:</span> distribution, infra scale, low CAC via Google surfaces.</p></div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ================= Thick Profiles with Quotes ================= -->
+    <section class="profiles" id="profiles">
+      <h2>Thick Supply‑Chain Profiles (with quotes & data)</h2>
+
+      <article class="profile" id="prof-sora">
+        <h3>🍿 Sora ⇄ Lay’s (Frito‑Lay)</h3>
+        <ul>
+          <li><strong>Scale & distribution:</strong> Frito‑Lay runs “the <em>largest</em> direct‑store‑delivery network in North America… nearly <strong>15,000 routes</strong>… <strong>500,000+</strong> weekly service calls… ~<strong>315,000</strong> customers.” <span class="fn" data-src="pepsico_dsd">[source]</span></li>
+          <li><strong>Farm‑level control:</strong> India program supplies ~<strong>55–58%</strong> of chip‑grade potatoes via <em>contract farming</em> with specified seed/agronomy and buy‑back at agreed specs. <span class="fn" data-src="pepsico_india_55">[source]</span> <span class="fn" data-src="pepsico_india_50">[+]</span></li>
+          <li><strong>Raw volume:</strong> Corporate celebration noted “<strong>2+ billion lbs</strong>” of potatoes used for Lay’s in a year, across “<strong>80+</strong> farms / <strong>27</strong> states.” <span class="fn" data-src="lays_2b_lb">[source]</span></li>
+        </ul>
+        <blockquote>“In 2008 alone, more than <strong>2 billion pounds</strong> of potatoes were used [for Lay’s].” <span class="fn" data-src="lays_2b_lb">[ref]</span></blockquote>
+      </article>
+
+      <article class="profile" id="prof-mj">
+        <h3>🧇 MidJourney ⇄ Waffle House</h3>
+        <ul>
+          <li><strong>Idaho potatoes:</strong> Hashbrown supply is sourced via <em>Basic American Foods</em> from Idaho family farms; Idaho grows about a <em>third</em> of U.S. potatoes. <span class="fn" data-src="wh_baf">[source]</span></li>
+          <li><strong>Resilience playbook:</strong> The chain’s crisis logistics made FEMA’s “<em>Waffle House Index</em>” shorthand for real‑time continuity. <span class="fn" data-src="wh_index">[source]</span></li>
+        </ul>
+        <blockquote>“A case study of disaster preparedness… preparation, cooperation and organization within its supply chain.” <span class="fn" data-src="wh_index">[ref]</span></blockquote>
+      </article>
+
+      <article class="profile" id="prof-meta">
+        <h3>🍔 Meta ⇄ McDonald’s</h3>
+        <ul>
+          <li><strong>Standardized inputs:</strong> Fries use four named varieties — <em>Russet Burbank, Ranger Russet, Umatilla Russet, Shepody</em> — blanched, dried, flash‑frozen. <span class="fn" data-src="mcd_varieties">[source]</span></li>
+          <li><strong>Shock case:</strong> BC flood + pandemic logistics led Japan to <em>ration fries</em>; similar shortages appeared elsewhere. <span class="fn" data-src="mcd_ration">[source]</span></li>
+          <li><strong>Demand signal:</strong> Lamb Weston reports U.S. <em>fry attachment rate</em> ≈ <strong>+2 pp</strong> vs. pre‑pandemic. <span class="fn" data-src="lamb_fry">[source]</span></li>
+        </ul>
+        <blockquote>“World Famous Fries… [are] blanched… then flash frozen.” <span class="fn" data-src="mcd_varieties">[ref]</span></blockquote>
+      </article>
+
+      <article class="profile" id="prof-nano">
+        <h3>🍌 Google “Nano Banana” ⇄ United‑Fruit‑style Banana Chain</h3>
+        <ul>
+          <li><strong>Cold chain physics:</strong> Harvested green; shipped weeks in reefers at ~13–14 °C; ripened with <em>ethylene</em> at destination. <span class="fn" data-src="banana_eth">[source]</span> <span class="fn" data-src="banana_reefers">[+]</span></li>
+          <li><strong>Market structure:</strong> From an **80%** “big‑five” share to **~39% (Europe)** as supermarkets took control of sourcing and price discipline. <span class="fn" data-src="banana_80">[source]</span> <span class="fn" data-src="banana_39">[+]</span></li>
+          <li><strong>Upstream squeeze:</strong> Inputs up **to 130%**; producer share down **20–50%** in real terms. <span class="fn" data-src="banana_costs">[source]</span></li>
+        </ul>
+        <blockquote>“Ethylene is used to trigger the ripening process once bananas reach their destination.” <span class="fn" data-src="banana_eth">[ref]</span></blockquote>
+      </article>
+
+      <button class="sourcesBtn" id="openSources">📚 Sources</button>
+    </section>
+  </div>
+
+  <!-- ================= Sources Drawer ================= -->
+  <div class="drawer" id="drawer" aria-label="Sources drawer" role="dialog">
+    <header>
+      <strong>Sources (click to open)</strong>
+      <button class="pill" id="closeSources">Close</button>
+    </header>
+    <div id="srcList"></div>
+  </div>
+
+<script>
+/* ========= Data (0..100) ========= */
+const items = [
+  { id:'sora', name:'Sora 2 (OpenAI) · Lay\'s', color:getCSS('--chip1'), snack:'🍿', x:82, y:68, blurb:'Packaged product + feed. High realism, remix & Cameos. Quality control fights AI‑slop.' },
+  { id:'mj', name:'MidJourney (Discord) · Waffle House', color:getCSS('--chip2'), snack:'🧇', x:54, y:84, blurb:'Cult craft diner. Deep community, prompt etiquette, strong loyalty; niche ceiling.' },
+  { id:'nano', name:'Nano Banana (Google) · Chiquita', color:getCSS('--chip3'), snack:'🍌', x:76, y:34, blurb:'Free fruit funnel. Viral edits drive acquisition → Gemini/Vertex; retention risk.' },
+  { id:'vibes', name:'Meta Vibes · McDonald\'s', color:getCSS('--chip4'), snack:'🍔', x:92, y:48, blurb:'Distribution machine. Templates in feed; ads + reach; fatigue/regulatory risk.' }
+];
+
+/* ========= Sources ========= */
+const SOURCES = {
+  // Lay's / Sora
+  pepsico_dsd: {title:"Frito‑Lay DSD scale (corporate overview)", url:"https://www.pepsico.com/brands/frito-lay"},
+  pepsico_india_55: {title:"PepsiCo India contract farming share (~55–58%)", url:"https://www.iisd.org/itn/en/2011/05/05/pepsico-india-contract-farming"},
+  pepsico_india_50: {title:"PepsiCo India case: ~50% contract farming", url:"https://www.odi.org/en/publications/contract-farming-in-india-pepsico"},
+  lays_2b_lb: {title:"Lay's: 2+ billion lbs / 80+ farms / 27 states (corporate story)", url:"https://stories.pepsicojobs.com/blog/2020/09/04/see-yourself-inside-lays/"},
+
+  // Waffle House / MidJourney
+  wh_baf: {title:"Waffle House potatoes via Basic American Foods (Idaho)", url:"https://www.mashed.com/1958806/what-state-supplies-waffle-house-potatoes-idaho-local/"},
+  wh_index: {title:"Supply Chain Dive: Waffle House Index and disaster ops", url:"https://www.supplychaindive.com/news/waffle-house-index-hurricane-supply-chain-natural-disaster/435659/"},
+
+  // McDonald's / Meta
+  mcd_varieties: {title:"McDonald’s fries: varieties & process (corporate site)", url:"https://www.mcdonalds.com/us/en-us/about-our-food/whats-in-your-food/ingredients/what-are-mcdonalds-fries-made-of.html"},
+  mcd_ration: {title:"VICE: Fry rationing (Japan) after BC floods + pandemic", url:"https://www.vice.com/en/article/french-fries-shortage-mcdonalds/"},
+  lamb_fry: {title:"Lamb Weston: fry attachment rate above pre‑pandemic (CNBC)", url:"https://www.cnbc.com/2024/04/05/demand-for-french-fries-reflects-resilient-consumer-as-so-called-fry-attachment-rate-holds-steady.html"},
+
+  // Bananas / Google
+  banana_eth: {title:"FAO: Ethylene ripening and temperature controls", url:"https://www.fao.org/3/y4893e/y4893e08.htm"},
+  banana_reefers: {title:"SupplyChainToday: reefer shipping and spoilage risk", url:"https://www.supplychaintoday.com/banana-supply-chain/"},
+  banana_80: {title:"Banana Link: big five once controlled ~80% of trade", url:"https://www.bananalink.org.uk/wp-content/uploads/2019/04/banana_value_chain_research_FINAL_WEB.pdf"},
+  banana_39: {title:"IISD/ITC: retailer dominance; big five ~39% share (Europe)", url:"https://www.iisd.org/sites/default/files/publications/banana-value-chains-europe.pdf"},
+  banana_costs: {title:"BananaLink: input costs +130%, origin share −20–50%", url:"https://www.bananalink.org.uk/wp-content/uploads/2019/04/banana_value_chain_research_FINAL_WEB.pdf"}
+};
+
+/* ========= Canvas Setup ========= */
+const canvas = document.getElementById('quad');
+const tip = document.getElementById('tip');
+const snackToggle = document.getElementById('snackMode');
+const ctx = canvas.getContext('2d', { alpha:true });
+let state = { snack:false, hover:null };
+window.addEventListener('resize', draw, { passive:true });
+snackToggle.addEventListener('change', ()=>{ state.snack = snackToggle.checked; draw(); });
+canvas.addEventListener('mousemove', onPointer);
+canvas.addEventListener('mouseleave', ()=>{ state.hover = null; tip.classList.remove('visible'); draw(); });
+canvas.addEventListener('click', onPointer);
+
+function getCSS(varName){ return getComputedStyle(document.documentElement).getPropertyValue(varName).trim(); }
+function dprScale(){ const dpr = devicePixelRatio || 1; const { width, height } = canvas.getBoundingClientRect(); canvas.width = Math.round(width * dpr); canvas.height = Math.round(height * dpr); ctx.setTransform(dpr,0,0,dpr,0,0); return { w: width, h: height }; }
+
+/* ========= Drawing ========= */
+function draw(){
+  const { w, h } = dprScale(); ctx.clearRect(0,0,w,h);
+  const pad = Math.min(w,h) * 0.09; const left = pad, right = w - pad, top = pad, bottom = h - pad; const gridW = right - left, gridH = bottom - top;
+  ctx.save(); const grid = getCSS('--grid'); ctx.strokeStyle = grid; ctx.lineWidth = 1;
+  roundRect(ctx, left, top, gridW, gridH, 16); ctx.stroke();
+  ctx.setLineDash([6,6]); ctx.beginPath(); ctx.moveTo(left + gridW/2, top); ctx.lineTo(left + gridW/2, bottom); ctx.moveTo(left, top + gridH/2); ctx.lineTo(right, top + gridH/2); ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle = '#c9d3e7'; ctx.font = '12px system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial'; ctx.textAlign = 'center'; ctx.fillText('Platform Scale →', left + gridW/2, bottom + 24); ctx.save(); ctx.translate(left - 26, top + gridH/2); ctx.rotate(-Math.PI/2); ctx.fillText('Community Depth ↑', 0, 0); ctx.restore();
+  cornerTag('High Depth · High Scale', right-6, top+16, 'end'); cornerTag('High Depth · Low Scale', left+6, top+16, 'start'); cornerTag('Low Depth · Low Scale', left+6, bottom-10, 'start'); cornerTag('Low Depth · High Scale', right-6, bottom-10, 'end');
+  items.forEach(pt=>{ const px = left + (pt.x/100)*gridW; const py = bottom - (pt.y/100)*gridH; pt._px = px; pt._py = py; const hovered = state.hover && state.hover.id === pt.id; const r = hovered ? 16 : 12; ctx.save(); ctx.shadowColor = '#000a'; ctx.shadowBlur = 18; ctx.shadowOffsetY = 6; if(state.snack){ drawSnack(ctx, pt.snack, px, py, r, pt.color); } else { drawChipMarker(ctx, px, py, r, pt.color); } ctx.restore(); ctx.font = '600 12px system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial'; ctx.textAlign = 'center'; ctx.fillStyle = '#eef3ff'; const label = pt.name; const yOff = hovered ? -22 : -18; drawLabelBG(ctx, label, px, py + yOff); });
+  ctx.restore();
+}
+function cornerTag(text, x, y, align='start'){ ctx.save(); ctx.font = '11px system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial'; ctx.fillStyle = '#9aa3b2'; ctx.textAlign = align; ctx.fillText(text, x, y); ctx.restore(); }
+function drawChipMarker(ctx, x, y, r, color){ const grd = ctx.createRadialGradient(x-r*0.4, y-r*0.6, r*0.2, x, y, r); grd.addColorStop(0, '#fff7cc'); grd.addColorStop(0.45, color); grd.addColorStop(1, shade(color, -18)); ctx.fillStyle = grd; roundedBlob(ctx, x, y, r); ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = shade(color, -28); ctx.stroke(); ctx.beginPath(); ctx.fillStyle = 'rgba(255,255,255,.5)'; ctx.ellipse(x - r*0.35, y - r*0.55, r*0.35, r*0.22, -0.8, 0, Math.PI*2); ctx.fill(); }
+function drawSnack(ctx, emoji, x, y, r, color){ ctx.beginPath(); ctx.arc(x, y, r+2, 0, Math.PI*2); ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.fill(); ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fillStyle = color + 'cc'; ctx.fill(); ctx.font = `${Math.round(r*1.2)}px \"Apple Color Emoji\",\"Segoe UI Emoji\",system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(emoji, x, y+0.5); }
+function drawLabelBG(ctx, text, x, y){ const padX = 8; const m = ctx.measureText(text); const w = m.width + padX*2, h = 20; const rx = 8; ctx.save(); ctx.translate(x - w/2, y - h/2); ctx.fillStyle = '#0b0d12cc'; roundRect(ctx, 0, 0, w, h, rx); ctx.fill(); ctx.strokeStyle = '#2a2f3a'; ctx.lineWidth = 1; roundRect(ctx, 0, 0, w, h, rx); ctx.stroke(); ctx.fillStyle = '#eaf1ff'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText(text, 8, h/2); ctx.restore(); }
+function roundedBlob(ctx, x, y, r){ const k = 0.5523; const rx = r * 1.25, ry = r * 0.9; ctx.beginPath(); ctx.moveTo(x, y - ry); ctx.bezierCurveTo(x + k*rx, y - ry, x + rx, y - k*ry, x + rx, y); ctx.bezierCurveTo(x + rx, y + k*ry, x + k*rx, y + ry, x, y + ry); ctx.bezierCurveTo(x - k*rx, y + ry, x - rx, y + k*ry, x - rx, y); ctx.bezierCurveTo(x - rx, y - k*ry, x - k*rx, y - ry, x, y - ry); }
+function roundRect(ctx, x, y, w, h, r=8){ const rr = Math.min(r, w/2, h/2); ctx.beginPath(); ctx.moveTo(x+rr, y); ctx.arcTo(x+w, y, x+w, y+h, rr); ctx.arcTo(x+w, y+h, x, y+h, rr); ctx.arcTo(x, y+h, x, y, rr); ctx.arcTo(x, y, x+w, y, rr); ctx.closePath(); }
+
+/* ========= Interactions ========= */
+function onPointer(ev){ const rect = canvas.getBoundingClientRect(); const px = (ev.clientX - rect.left); const py = (ev.clientY - rect.top); const hover = items.find(it=>{ const dx = px - it._px; const dy = py - it._py; const rr = 18; return dx*dx + dy*dy <= rr*rr; }); if(hover){ state.hover = hover; tip.innerHTML = `<h3>${hover.name}</h3><p>${hover.blurb}</p><p><strong>Scale:</strong> ${hover.x} · <strong>Depth:</strong> ${hover.y}</p>`; tip.style.left = hover._px + 'px'; tip.style.top = hover._py + 'px'; tip.classList.add('visible'); } else { state.hover = null; tip.classList.remove('visible'); } draw(); }
+
+/* ========= Tabs ========= */
+const tabs = document.getElementById('tabs');
+tabs.addEventListener('click', (e)=>{ const btn = e.target.closest('.tab'); if(!btn) return; document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active')); btn.classList.add('active'); const id = btn.dataset.pane; document.querySelectorAll('.pane').forEach(p=>p.classList.remove('active')); document.getElementById(`pane-${id}`).classList.add('active'); });
+
+/* ========= Sources Drawer ========= */
+const drawer = document.getElementById('drawer');
+const srcList = document.getElementById('srcList');
+document.getElementById('openSources').addEventListener('click', ()=> drawer.classList.add('open'));
+document.getElementById('closeSources').addEventListener('click', ()=> drawer.classList.remove('open'));
+
+// render sources
+srcList.innerHTML = Object.entries(SOURCES).map(([k,v],i)=>`<div class='src'><strong>[${i+1}]</strong> ${v.title} — <a href='${v.url}' target='_blank' rel='noopener'>${v.url}</a></div>`).join('');
+
+// footnote clicks → open drawer and scroll
+Array.from(document.querySelectorAll('.fn')).forEach(el=>{
+  el.addEventListener('click', ()=>{
+    drawer.classList.add('open');
+    const keys = Object.keys(SOURCES);
+    const idx = keys.indexOf(el.dataset.src);
+    if(idx>-1){ const target = srcList.children[idx]; target?.scrollIntoView({behavior:'smooth'}); target?.classList.add('pulse'); setTimeout(()=>target?.classList.remove('pulse'), 1200); }
+  });
+});
+
+</script>
+</body>
+</html>

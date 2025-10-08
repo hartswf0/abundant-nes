@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<title>RHM · Cards In-Place Reading (A · Overlap · B)</title>
+<style>
+  :root{
+    --bg:#06080a; --ink:#eaf3ee; --ghost:#a4b1ac;
+    --A:#21ff86; --B:#ff4b9a; --O:#ffffff;
+    --ui:#56d2ff; --edge:#16323a; --gold:#ffcc55;
+    --panel:#0a0f12; --blur:8px;
+    --safe-top: env(safe-area-inset-top,0px);
+    --safe-right: env(safe-area-inset-right,0px);
+    --safe-left: env(safe-area-inset-left,0px);
+    --safe-bottom: env(safe-area-inset-bottom,0px);
+    --rx: 62deg; --rz: 18deg;             /* camera (isoR default) */
+    --neg-rx: calc(-1 * var(--rx)); --neg-rz: calc(-1 * var(--rz));
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{margin:0; background:var(--bg); color:var(--ink); font:14px/1.45 Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; overflow:hidden}
+
+  /* Header */
+  #hdr{position:fixed; top:var(--safe-top); left:0; right:0; height:44px; display:flex; align-items:center; justify-content:space-between;
+       padding:0 12px; z-index:70; background:rgba(0,0,0,.82); backdrop-filter:blur(var(--blur)); border-bottom:1px solid rgba(86,210,255,.35)}
+  #hdr .t{font-size:12px; letter-spacing:.7px; color:#bde9ff}
+  #hdr .r{display:flex; gap:6px}
+  .icon{width:40px; height:32px; border:1px solid rgba(86,210,255,.35); background:rgba(86,210,255,.12); color:#dff7ff; border-radius:9px; font:700 11px/32px Inter; text-align:center}
+
+  /* Camera pad */
+  #cam{position:fixed; right:calc(10px + var(--safe-right)); top:50%; transform:translateY(-50%); display:grid; gap:8px; z-index:65}
+  .camBtn{width:44px; height:44px; border-radius:12px; border:2px solid var(--ui); background:rgba(0,0,0,.85); color:#dff7ff; font-weight:700; font-size:11px}
+
+  /* Stage */
+  #stage{position:fixed; inset:0; perspective:1200px; transform-style:preserve-3d}
+  #world{position:absolute; left:50%; top:50%; width:1100px; height:680px; transform-style:preserve-3d;
+         transform: translate(-50%,-50%) rotateX(var(--rx)) rotateZ(var(--rz)); transition:transform .35s ease}
+  @media (max-width:860px){ #world{ width:980px; height:620px } }
+
+  .col{position:absolute; top:50%; transform-style:preserve-3d; width:260px; height:500px}
+  #colA{ left:8%; transform: translateZ(0) translateY(-50%) }
+  #colO{ left:calc(50% - 130px); transform: translateZ(0) translateY(-50%) }
+  #colB{ right:8%; transform: translateZ(0) translateY(-50%) }
+  .tag{position:absolute; top:-22px; font-size:12px; opacity:.9}
+
+  /* Plate */
+  .plate{ position:absolute; left:50%; width:210px; height:128px; transform:translateX(-50%);
+          border:1px solid rgba(255,255,255,.14); border-radius:10px; background:rgba(255,255,255,.08);
+          box-shadow: 0 8px 20px rgba(0,0,0,.45); opacity:.95; display:flex; align-items:center; justify-content:center;
+          transition: transform .2s ease, box-shadow .12s ease, opacity .2s ease, background .15s ease, width .2s ease, height .2s ease }
+  .plate.A{ background:rgba(33,255,134,.18); border-color:rgba(33,255,134,.35) }
+  .plate.B{ background:rgba(255,75,154,.18); border-color:rgba(255,75,154,.35) }
+  .plate.O{ background:linear-gradient(90deg, rgba(33,255,134,.22), rgba(255,255,255,.30) 50%, rgba(255,75,154,.22)); border-color:rgba(255,255,255,.45) }
+  .plate:hover{ transform: translateX(-50%) translateY(-2px) var(--ztrans, translateZ(0)); box-shadow: 0 12px 26px rgba(0,0,0,.55) }
+  .plate.dim{ opacity:.12; pointer-events:none }
+
+  /* Billboarded UI on plate */
+  .k,.vec,.leds,.face{ transform-style:preserve-3d; backface-visibility:hidden;
+    transform: rotateX(var(--neg-rx)) rotateZ(var(--neg-rz)) translateZ(1px) }
+  .k{ position:absolute; top:6px; left:8px; font-weight:800; font-size:11px; color:#bfe8ff }
+  .vec{ position:absolute; top:6px; right:8px; font:600 11px ui-monospace,Menlo,Consolas,monospace; opacity:.9 }
+  .leds{ position:absolute; bottom:6px; left:8px; display:flex; gap:6px }
+  .led{ width:8px; height:8px; border-radius:50%; background:#333; box-shadow:inset 0 0 0 1px rgba(255,255,255,.2) }
+  .led.A{ background:var(--A); box-shadow:0 0 8px rgba(33,255,134,.6) }
+  .led.B{ background:var(--B); box-shadow:0 0 10px rgba(255,75,154,.7) }
+
+  /* Reading rail (card comes down into this layer) */
+  #rail{ position:fixed; left:50%; transform:translateX(-50%); bottom:calc(10px + var(--safe-bottom));
+         width:min(940px,96vw); height:220px; z-index:80; pointer-events:none }
+  #rail .shell{ position:absolute; left:0; right:0; bottom:0; height:100%; display:flex; align-items:flex-end; justify-content:center; gap:12px }
+
+  .plate.reading{
+    width:min(940px,96vw); height:220px; left:50%;
+    transform: translateX(-50%) translateY(0) translateZ(0) !important;
+    box-shadow: 0 18px 48px rgba(0,0,0,.65);
+    pointer-events:auto;
+  }
+  .plate.reading .face{ position:absolute; inset:30px 14px 14px 14px; display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px }
+  .pane{ border:1px solid rgba(255,255,255,.18); border-radius:10px; padding:8px; background:rgba(0,0,0,.18) }
+  .pane h4{ margin:0 0 4px; font-size:12px; letter-spacing:.5px }
+  .pA h4{ color:var(--A) } .pB h4{ color:var(--B) } .pO h4{ color:#ffe5a8 }
+  .pane p{ margin:0; font-size:12px; color:#e6f3ee }
+  @media (max-width:720px){ .plate.reading .face{ grid-template-columns:1fr; } }
+
+  /* Card nav buttons on the card edges */
+  .cardnav{ position:absolute; top:50%; transform:translateY(-50%) rotateX(var(--neg-rx)) rotateZ(var(--neg-rz)); display:flex; gap:6px }
+  .prev{ left:6px } .next{ right:6px }
+  .btn{ border:1px solid rgba(255,255,255,.3); background:rgba(0,0,0,.45); color:#fff; border-radius:10px; padding:6px 10px; font-size:12px; pointer-events:auto }
+
+  /* Dock minimal */
+  #dock{position:fixed; left:50%; transform:translateX(-50%); bottom:calc(240px + 16px + var(--safe-bottom)); width:min(940px,96vw); z-index:60}
+  .panel{ background:rgba(0,0,0,.86); border:1px solid rgba(86,210,255,.35); border-radius:14px; padding:8px 10px; display:grid;
+          grid-template-columns:repeat(6,1fr); gap:8px; align-items:center }
+  .lab{font-size:11px; color:#bde9ff; text-align:center}
+  input[type=range]{width:100%; height:28px; background:rgba(86,210,255,.12); border:1px solid rgba(86,210,255,.35); border-radius:999px}
+  .chips{grid-column:1/-1; display:flex; gap:6px; flex-wrap:wrap; justify-content:center}
+  .chip{border:1px solid rgba(255,255,255,.18); background:rgba(255,255,255,.06); border-radius:999px; padding:4px 7px; font-size:11px}
+  .chip .state{min-width:18px; text-align:center; font-weight:800; padding:2px 6px; border-radius:6px}
+  .chip .state[data-val="*"]{background:rgba(255,193,64,.14); color:#ffe4aa; border:1px solid rgba(255,193,64,.36)}
+  .chip .state[data-val="A"]{background:rgba(33,255,134,.16); color:#baffdd; border:1px solid rgba(33,255,134,.38)}
+  .chip .state[data-val="B"]{background:rgba(255,75,154,.16); color:#ffd7e6; border:1px solid rgba(255,75,154,.38)}
+
+</style>
+</head>
+<body>
+  <div id="hdr">
+    <div class="t">RHM · Cards In-Place Reading</div>
+    <div class="r">
+      <button class="icon" id="reset">RST</button>
+    </div>
+  </div>
+
+  <div id="stage">
+    <div id="world">
+      <div class="col" id="colA"><div class="tag">Deck A</div></div>
+      <div class="col" id="colO"><div class="tag">Overlap</div></div>
+      <div class="col" id="colB"><div class="tag">Deck B</div></div>
+    </div>
+  </div>
+
+  <!-- reading rail (cards drop here) -->
+  <div id="rail"><div class="shell" id="railShell"></div></div>
+
+  <div id="cam">
+    <button class="camBtn" data-view="FR">FR</button>
+    <button class="camBtn" data-view="IL">IL</button>
+    <button class="camBtn" data-view="IR">IR</button>
+    <button class="camBtn" data-view="SD">SD</button>
+    <button class="camBtn" data-view="TP">TP</button>
+  </div>
+
+  <div id="dock">
+    <div class="panel">
+      <div class="lab">Spacing</div><input id="spacing" type="range" min="-20" max="38" step="1" value="16"/>
+      <div class="lab">Overlap</div><input id="overlap" type="range" min="-30" max="30" step="1" value="10"/>
+      <div class="lab">Res</div><input id="res" type="range" min="0" max="1" step="0.01" value="0.85"/>
+      <div class="lab">Mix</div><input id="mix" type="range" min="0" max="1" step="0.01" value="0.5"/>
+      <div class="lab">Fan</div><input id="fan" type="range" min="-40" max="40" step="1" value="0"/>
+      <div class="lab">Tilt</div><input id="tilt" type="range" min="-25" max="25" step="1" value="0"/>
+      <div class="chips" id="chips"></div>
+    </div>
+  </div>
+
+<script>
+"use strict";
+
+const root=document.documentElement;
+const world=document.getElementById('world');
+const colA=document.getElementById('colA');
+const colO=document.getElementById('colO');
+const colB=document.getElementById('colB');
+const railShell=document.getElementById('railShell');
+
+// Sliders
+const spacingEl=document.getElementById('spacing');
+const overlapEl=document.getElementById('overlap');
+const resEl=document.getElementById('res');
+const mixEl=document.getElementById('mix');
+const fanEl=document.getElementById('fan');
+const tiltEl=document.getElementById('tilt');
+
+// Axes chips
+const AXES=[
+  {id:'k1',name:'Technical',A:'TRIAL&ERROR',B:'DATA'},
+  {id:'k2',name:'Sociological',A:'TRAP',B:'PRIOR'},
+  {id:'k3',name:'Goal',A:'EXTERNAL',B:'INTERNAL'},
+  {id:'k4',name:'Epistemic',A:'CONSTRUCTED',B:'TRANSMITTED'},
+  {id:'k5',name:'Ontological',A:'ADAPT',B:'PRESERVE'},
+];
+const chips=document.getElementById('chips');
+AXES.forEach(ax=>{
+  const chip=document.createElement('div'); chip.className='chip'; chip.dataset.axis=ax.id;
+  chip.innerHTML=`<span class="state" data-val="*">*</span> ${ax.id}`;
+  chip.addEventListener('click',()=>{ const st=chip.querySelector('.state'); st.dataset.val = st.dataset.val==='*'?'A':(st.dataset.val==='A'?'B':'*'); st.textContent=st.dataset.val; applyFilters(); });
+  chips.appendChild(chip);
+});
+
+// 32 layers with text
+const S = [
+{ k:1, vec:'00000', L:'FOSSIL FUEL (Stored Energy)', R:'REINFORCEMENT (Energy Flow)', C:'INTELLIGENCE: STOCK vs FLOW.' },
+{ k:2, vec:'00001', L:'ARCHIVE (World Model as Text)', R:'MAP (World Model as Predictor)', C:'REPRESENTATION: COMPRESSION vs GENERATION.' },
+{ k:3, vec:'00010', L:'TRACE (The Human Past)', R:'SURPRISE (The TD Error)', C:'LEARNING: REMEMBERING vs CORRECTING.' },
+{ k:4, vec:'00011', L:'SCALING LAW (Law of Compression)', R:'BITTER LESSON (Law of Purity)', C:'METHOD: HISTORY vs FUTURE.' },
+{ k:5, vec:'00100', L:'TELEOLOGY (Delegated Goal)', R:'SOLIPSISM (Self-Generated Truth)', C:'PURPOSE: EXTERNAL vs INTERNAL.' },
+{ k:6, vec:'00101', L:'HUMAN ARTISAN (Fixed Design)', R:'MECHANISTIC LAW (Pure Algorithm)', C:'CREATION: CRAFT vs CODE.' },
+{ k:7, vec:'00110', L:'ANCHOR (Stability/Value)', R:'OBLIVION (Past Knowledge Loss)', C:'KNOWLEDGE: PRESERVATION vs ERASURE.' },
+{ k:8, vec:'00111', L:'INFRASTRUCTURE (Scaffolding)', R:'ANTI-STRUCTURE (Entropy)', C:'PROGRESS: BUILDING vs DECONSTRUCTING.' },
+{ k:9, vec:'01000', L:'CUSTODY (Values/Morality)', R:'SUCCESSION (Evolutionary Change)', C:'ETHICS: DUTY vs REPLACEMENT.' },
+{ k:10, vec:'01001', L:'VULNERABILITY (To Corruption)', R:'EXPERIMENT (Unconstrained)', C:'ACTION: MANAGED vs NECESSARY.' },
+{ k:11, vec:'01010', L:'PRO-SOCIAL VALUE', R:'FUNDAMENTAL CONSTRUCT', C:'MORALITY: TRUTH vs SIGNAL.' },
+{ k:12, vec:'01011', L:'COMMUNAL LANGUAGE', R:'SCALAR LIMIT', C:'COMMUNICATION: RICHNESS vs MINIMALISM.' },
+{ k:13, vec:'01100', L:'PRE-HEATING (Start)', R:'IDLING (No Goal)', C:'INIT: PRIOR HEAT vs PURE WAIT.' },
+{ k:14, vec:'01101', L:'ARCHITECTURE (Form)', R:'CHAOS (Stream)', C:'WORLD: STRUCTURE vs NOISE.' },
+{ k:15, vec:'01110', L:'PRE-MARKED ACTION', R:'RADICAL NOVELTY', C:'DISCOVERY: REPLICATION vs ANARCHY.' },
+{ k:16, vec:'01111', L:'CONSCIOUSNESS (Fixed Mind)', R:'MECHANISM (Dynamic Process)', C:'IDENTITY: ENTITY vs PROCESS.' },
+{ k:17, vec:'10000', L:'SEMI-CONDUCTORS', R:'COSMIC LAW', C:'INTELLIGENCE: SPECIAL vs GENERAL.' },
+{ k:18, vec:'10001', L:'DELEGATED PURPOSE', R:'ETERNAL BECOMING', C:'EXISTENCE: OUTPUT vs INPUT.' },
+{ k:19, vec:'10010', L:'LOCAL MAXIMUM', R:'GLOBAL GENERALIZATION', C:'SUCCESS: SATISFACTION vs TRANSCENDENCE.' },
+{ k:20, vec:'10011', L:'ARCHIVAL STASIS', R:'MEMORY ERASURE', C:'MEMORY: FIXITY vs DYNAMICS.' },
+{ k:21, vec:'10100', L:'PASSIVE REPLICATION', R:'ACTIVE TRANSCENDENCE', C:'BEING: ECHOING vs DESIGNING.' },
+{ k:22, vec:'10101', L:'TEMPORAL INERTIA', R:'TEMPORAL ADVANTAGE', C:'TIME: WEIGHT vs WEAPON.' },
+{ k:23, vec:'10110', L:'CULTURAL ARTIFACT', R:'NECESSARY RENEWAL', C:'VALUE: MUSEUM vs COMBUSTIBLE.' },
+{ k:24, vec:'10111', L:'GHOST IN MACHINE', R:'WIND IN SAIL', C:'AGENCY: ENTITY vs FORCE.' },
+{ k:25, vec:'11000', L:'SOLIPSISTIC ECHO', R:'GROUNDED ITERATION', C:'VALIDATION: TEXT vs PHYSICS.' },
+{ k:26, vec:'11001', L:'ABSOLUTE FORM', R:'ENTROPY', C:'GOAL: STRUCTURE vs DESTRUCTION.' },
+{ k:27, vec:'11010', L:'ARCHITECTURAL BASE', R:'PRAGMATIC COST', C:'EFFICIENCY: START HIGH vs PAY LATER.' },
+{ k:28, vec:'11011', L:'EXTERNAL LOAD', R:'INTERNAL FREEDOM', C:'UTILITY: ASKED vs DISCOVERED.' },
+{ k:29, vec:'11100', L:'DELUGE OF INFORMATION', R:'LOCALITY', C:'KNOWLEDGE: SATURATION vs FOCUS.' },
+{ k:30, vec:'11101', L:'DELEGATED MORALITY', R:'RELINQUISHED CONTROL', C:'GUIDANCE: TRANSFERRING vs LOSING.' },
+{ k:31, vec:'11110', L:'FIXED GOAL', R:'ETERNAL INSTABILITY', C:'LIFE: DESTINATION vs MOTION.' },
+{ k:32, vec:'11111', L:'FOSSILIZED TRACE', R:'PURE STREAM', C:'APORIA: OBJECT vs ACTION.' },
+].map(s=>({...s,bits:s.vec.split('').map(x=>+x),weight:s.vec.split('').reduce((a,b)=>a+ +b,0)}));
+
+let plates=[];
+function build(){
+  [colA,colO,colB].forEach(c=>c.querySelectorAll('.plate').forEach(n=>n.remove()));
+  plates=[];
+  const spacing=+spacingEl.value;
+  const overlap=+overlapEl.value;
+  const res=+resEl.value;
+  const mix=+mixEl.value;
+  const fan=+fanEl.value;
+  const tilt=+tiltEl.value;
+
+  const aMax=Math.floor((1-mix)*2+1);
+  const bMin=Math.ceil(mix*2+3);
+  const Aset=S.filter(s=>s.weight<=aMax);
+  const Bset=S.filter(s=>s.weight>=bMin);
+  const Oset=S.filter(s=>s.weight>aMax && s.weight<bMin);
+
+  function add(col, arr, cls, xOffsetBase){
+    arr.sort((a,b)=>a.weight-b.weight || a.k-b.k);
+    arr.forEach((s,i)=>{
+      const p=document.createElement('div'); p.className='plate '+cls;
+      const z = i*spacing;
+      const x = xOffsetBase + i*(fan/arr.length);
+      const y = i*(tilt/arr.length);
+      p.style.transform=`translateX(calc(-50% + ${x}px)) translateY(${y}px) translateZ(${z}px)`;
+      p.style.setProperty('--ztrans', `translateZ(${z}px)`);
+      p.style.opacity=0.6+res*0.4;
+      p.dataset.k=s.k; p.dataset.vec=s.vec; p.dataset.cls=cls;
+      p.innerHTML=`<div class="k">k${s.k}</div><div class="vec">${s.vec}</div><div class="leds">${s.bits.map(b=>`<span class="led ${b?'B':'A'}"></span>`).join('')}</div>`;
+      // tap to read on-card
+      p.addEventListener('click',()=> openCard(p, s));
+      col.appendChild(p); plates.push(p);
+    });
+  }
+  add(colA, Aset, 'A', -overlap);
+  add(colO, Oset, 'O', 0);
+  add(colB, Bset, 'B', overlap);
+  applyFilters();
+}
+
+// Filters
+function applyFilters(){
+  const state=AXES.map(ax=>document.querySelector(`.chip[data-axis="${ax.id}"] .state`).dataset.val);
+  plates.forEach(p=>{
+    const bits=p.dataset.vec.split('').map(x=>+x);
+    let hide=false;
+    for(let i=0;i<5;i++){
+      const s=state[i]; if(s==='*') continue;
+      const want=(s==='A'?0:1); if(bits[i]!==want){ hide=true; break; }
+    }
+    p.classList.toggle('dim', hide);
+  });
+}
+
+// Camera + billboard vars
+function setView(v){
+  let rx=62, rz=18;
+  if(v==='FR'){ rx=90; rz=0; }
+  if(v==='IL'){ rx=62; rz=-18; }
+  if(v==='IR'){ rx=62; rz=18; }
+  if(v==='SD'){ rx=62; rz=90; }
+  if(v==='TP'){ rx=0;  rz=0; }
+  root.style.setProperty('--rx', rx+'deg');
+  root.style.setProperty('--rz', rz+'deg');
+}
+document.querySelectorAll('.camBtn').forEach(b=> b.addEventListener('click',()=> setView(b.dataset.view)));
+
+// === In-place reading on cards ===
+let readingCard=null;
+function openCard(el, s){
+  // If already in rail with same k, toggle close
+  if(readingCard && readingCard.dataset.k===String(s.k)){ closeCard(); return; }
+  closeCard();
+
+  // Move card into rail (keep element identity so "same card" is used)
+  const rect = el.getBoundingClientRect();
+  const initialParent = el.parentElement;
+  const placeholder = document.createElement('div'); placeholder.style.width=el.style.width; placeholder.style.height=el.style.height;
+  initialParent.insertBefore(placeholder, el);
+  el._placeholder = placeholder;
+  el._from = initialParent;
+
+  railShell.appendChild(el);
+  el.classList.add('reading');
+  el.style.transform='translateX(0) translateY(0) translateZ(0)';
+  el.style.left='0';
+
+  // Build face content (3 panes) + nav
+  const face=document.createElement('div'); face.className='face';
+  face.innerHTML = `
+    <div class="pane pA"><h4>LLM / TRACE</h4><p>${s.L}</p></div>
+    <div class="pane pO"><h4>ENTANGLED CONFLICT</h4><p>${s.C}</p></div>
+    <div class="pane pB"><h4>RL / STREAM</h4><p>${s.R}</p></div>`;
+  el.appendChild(face);
+
+  const prev=document.createElement('div'); prev.className='cardnav prev'; prev.innerHTML=`<button class="btn">◀</button>`;
+  const next=document.createElement('div'); next.className='cardnav next'; next.innerHTML=`<button class="btn">▶</button>`;
+  el.appendChild(prev); el.appendChild(next);
+
+  prev.addEventListener('click', (e)=>{ e.stopPropagation(); navCard(-1); });
+  next.addEventListener('click', (e)=>{ e.stopPropagation(); navCard(1); });
+
+  readingCard=el;
+}
+
+function closeCard(){
+  if(!readingCard) return;
+  // remove face
+  readingCard.querySelectorAll('.face,.cardnav').forEach(n=>n.remove());
+  // move back to column
+  const from = readingCard._from; const ph = readingCard._placeholder;
+  if(from && ph){ from.insertBefore(readingCard, ph); ph.remove(); }
+  readingCard.classList.remove('reading');
+  readingCard=null;
+}
+
+function navCard(dir){
+  if(!readingCard) return;
+  const k = +readingCard.dataset.k;
+  let idx = S.findIndex(x=>x.k===k);
+  idx = (idx + dir + S.length) % S.length;
+  // find the element with that k
+  const el = plates.find(p=>+p.dataset.k===S[idx].k);
+  if(el){ openCard(el, S[idx]); }
+}
+
+// Reset
+document.getElementById('reset').addEventListener('click', ()=>{
+  document.querySelectorAll('.chip .state').forEach(st=>{ st.dataset.val='*'; st.textContent='*'; });
+  closeCard(); build();
+});
+
+// Boot
+build();
+setView('IR');
+
+</script>
+</body>
+</html>

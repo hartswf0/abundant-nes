@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Venn Decks — Clear Overlap + Sonification</title>
+  <style>
+    :root{
+      --ink:#e7faff; --ui:#4fc3f7; --ui2:#00ff88; --warn:#ffaa00; --ghost:#9fb6c1;
+      --panel:rgba(0,0,0,.86); --panel-2:rgba(255,255,255,.04); --edge:rgba(79,195,247,.35);
+      --bad:#ff4b72; --good:#21ff86;
+    }
+    *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+    html,body{height:100%}
+    body{ margin:0; background:#000; color:var(--ink); font-family: system-ui,-apple-system,Segoe UI,Roboto,Inter,"Courier New",monospace; overflow:hidden; }
+    canvas{display:block; width:100vw; height:100vh; touch-action:none}
+
+    .badge{position:fixed; left:12px; background:var(--panel); border:1px solid var(--edge); padding:8px 10px; border-radius:10px; font-size:11px; z-index:7; box-shadow:0 6px 24px rgba(0,0,0,.4)}
+    #infoBadge{top:12px}
+    #viewBadge{bottom:12px; color:var(--warn); border-color:rgba(255,170,0,.55)}
+    #blendBadge{bottom:56px; color:var(--ui2); border-color:rgba(0,255,136,.55)}
+    #overBadge{bottom:100px; color:#ffe499; border-color:rgba(255,228,153,.55)}
+    #fallbackBadge{bottom:144px; display:none; border-color:rgba(255,75,114,.55); color:#ffd5de}
+
+    #dock{ position:fixed; right:14px; bottom:18px; width:min(92vw,400px); max-width:440px; background:var(--panel); border:1px solid var(--edge); border-radius:14px; z-index:9; box-shadow:0 10px 40px rgba(0,0,0,.55); backdrop-filter: blur(4px); }
+    .dock-header{ display:flex; align-items:center; gap:10px; padding:10px 12px; border-bottom:1px solid var(--edge); cursor:grab; touch-action:none; user-select:none; }
+    .grip{width:28px; height:6px; border-radius:6px; background:linear-gradient(90deg, var(--edge) 20%, transparent 20% 40%, var(--edge) 40% 60%, transparent 60% 80%, var(--edge) 80%); opacity:.9}
+    .dock-title{font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--ui)}
+    .dock-actions{margin-left:auto; display:flex; gap:8px}
+    .chip{font-size:11px; padding:6px 8px; border-radius:10px; border:1px solid var(--edge); background:var(--panel-2); color:var(--ink); cursor:pointer}
+
+    .dock-body{padding:10px 12px; max-height:min(64vh, 520px); overflow:auto}
+    .section{border:1px solid var(--edge); background:var(--panel-2); border-radius:10px; margin-bottom:10px}
+    .section summary{ list-style:none; display:flex; align-items:center; gap:8px; padding:8px 10px; font-size:12px; color:var(--ui); cursor:pointer; user-select:none }
+    .section summary::-webkit-details-marker{display:none}
+    .section .content{padding:8px 10px; display:grid; gap:10px}
+
+    .row{display:flex; gap:8px; flex-wrap:wrap}
+    button.btn{flex:1; min-width:72px; font-weight:700; font-size:11px; padding:9px 10px; color:var(--ink); background:rgba(79,195,247,.16); border:1px solid var(--edge); border-radius:8px; cursor:pointer}
+    .btn.active{background:rgba(79,195,247,.45); box-shadow:0 0 16px rgba(79,195,247,.55) inset}
+
+    .slider{display:flex; align-items:center; gap:8px}
+    .slider label{font-size:10px; color:var(--ghost); min-width:128px}
+    .slider input[type=range]{flex:1; appearance:none; height:6px; background:rgba(79,195,247,.25); border-radius:10px; outline:none}
+    .slider input[type=range]::-webkit-slider-thumb{appearance:none; width:18px; height:18px; border-radius:50%; background:var(--ui); box-shadow:0 0 10px rgba(79,195,247,.8)}
+    .val{font-size:11px; min-width:38px; text-align:right; color:var(--ui)}
+    .kv{display:flex; align-items:center; gap:8px}
+    .kv input[type=color]{width:28px; height:18px; border:1px solid var(--edge); border-radius:6px; background:none}
+    select{background:rgba(79,195,247,.12); border:1px solid var(--edge); color:var(--ink); padding:6px 8px; border-radius:8px; font-size:11px}
+
+    #xfaderWrap{position:relative; padding:8px 10px; border:1px dashed var(--edge); border-radius:8px; display:grid; gap:8px}
+    #xfader{width:100%}
+    .xf-labels{display:flex; justify-content:space-between; font-size:10px; color:var(--ghost)}
+
+    #mini{ position:fixed; right:14px; bottom:18px; z-index:10; display:none; gap:8px; align-items:center; background:var(--panel); border:1px solid var(--edge); border-radius:999px; padding:8px 10px; font-size:12px; color:var(--ink); box-shadow:0 10px 40px rgba(0,0,0,.55) }
+    #mini .dot{width:10px; height:10px; border-radius:50%; background:var(--ui)}
+
+    #diag{font-size:11px; line-height:1.5}
+    #diag .pass{color:var(--good)}
+    #diag .fail{color:var(--bad)}
+
+    .meter{height:6px; background:rgba(255,255,255,.08); border:1px solid var(--edge); border-radius:6px; overflow:hidden}
+    .meter > div{height:100%}
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+
+  <div id="infoBadge" class="badge">
+    <div style="font-weight:700; color:var(--ui)">Venn Decks</div>
+    <div style="font-size:10px; color:var(--ghost)">Clear overlap + sound</div>
+  </div>
+  <div id="blendBadge" class="badge">🎨 NORMAL</div>
+  <div id="viewBadge" class="badge">📹 FRONT</div>
+  <div id="overBadge" class="badge">Overlap: 50%</div>
+  <div id="fallbackBadge" class="badge">⚠️ 3D unavailable — using 2D fallback</div>
+
+  <div id="dock">
+    <div id="dockHeader" class="dock-header">
+      <div class="grip"></div>
+      <div class="dock-title">DJ Deck Controls</div>
+      <div class="dock-actions">
+        <button id="minBtn" class="chip">Min</button>
+      </div>
+    </div>
+    <div class="dock-body">
+      <details class="section" open>
+        <summary>🎚️ Crossfader • Transport • Audio</summary>
+        <div class="content">
+          <div id="xfaderWrap">
+            <div class="xf-labels"><span>A</span><span>Crossfader</span><span>B</span></div>
+            <input id="xfader" type="range" min="-100" max="100" value="0">
+            <div class="row">
+              <div class="slider"><label>Never Overlap</label><input id="noOverlap" type="checkbox"></div>
+              <div class="slider"><label>Force Overlap %</label><input id="forceOverlap" type="range" min="0" max="100" value="50"><span id="forceOverlapVal" class="val">50</span></div>
+              <div class="slider"><label>Tempo (BPM)</label><input id="bpm" type="range" min="20" max="240" value="100"><span id="bpmVal" class="val">100</span></div>
+            </div>
+            <div class="row">
+              <button class="btn" id="audioToggle">Audio Off</button>
+              <button class="btn" id="syncPulse">Pulse</button>
+              <button class="btn" id="orbit">Orbit</button>
+            </div>
+            <div class="row">
+              <div style="flex:1">
+                <div style="font-size:10px; color:#8fdcb9">A Level</div>
+                <div class="meter"><div id="mA" style="background:#00ff88; width:50%"></div></div>
+              </div>
+              <div style="flex:1">
+                <div style="font-size:10px; color:#f8a3c0">B Level</div>
+                <div class="meter"><div id="mB" style="background:#ff4488; width:50%"></div></div>
+              </div>
+              <div style="flex:1">
+                <div style="font-size:10px; color:#ffe499">Overlap</div>
+                <div class="meter"><div id="mO" style="background:#ffaa00; width:50%"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <details class="section" open>
+        <summary>📹 Views & Blend</summary>
+        <div class="content">
+          <div class="row">
+            <button class="btn" data-view="front">Front</button>
+            <button class="btn" data-view="top">Top</button>
+            <button class="btn" data-view="side">Side</button>
+            <button class="btn" data-view="iso">Iso</button>
+          </div>
+          <div class="row">
+            <button class="btn" data-blend="normal">Normal</button>
+            <button class="btn" data-blend="add">Add</button>
+            <button class="btn" data-blend="multiply">Multiply</button>
+            <button class="btn" data-blend="screen">Screen</button>
+          </div>
+          <div class="row">
+            <div class="slider"><label>Overlap Intensity</label><input id="overlapInt" type="range" min="0" max="100" value="90"><span id="overlapIntVal" class="val">90</span></div>
+          </div>
+        </div>
+      </details>
+
+      <details class="section" open>
+        <summary>📐 Structure</summary>
+        <div class="content">
+          <div class="slider"><label>Layers (4–32)</label><input id="layerRange" type="range" min="4" max="32" value="28"><span id="layerVal" class="val">28</span></div>
+          <div class="slider"><label>Separation (manual)</label><input id="sepRange" type="range" min="0" max="100" value="10"><span id="sepVal" class="val">10</span></div>
+          <div class="slider"><label>Spacing</label><input id="spaceRange" type="range" min="10" max="100" value="60"><span id="spaceVal" class="val">60</span></div>
+        </div>
+      </details>
+
+      <details class="section" open>
+        <summary>🟩 Deck A</summary>
+        <div class="content">
+          <div class="row">
+            <div class="kv"><label>Color</label><input id="colA" type="color" value="#00ff88"></div>
+            <div class="slider"><label>Opacity</label><input id="opA" type="range" min="5" max="100" value="40"><span id="opAVal" class="val">40</span></div>
+            <div class="kv"><label>Material</label><select id="matA"><option>basic</option><option>lambert</option><option selected>standard</option><option>wireframe</option></select></div>
+          </div>
+          <div class="row">
+            <div class="slider"><label>EQ Low</label><input id="eqAL" type="range" min="0" max="100" value="60"><span class="val" id="eqALVal">60</span></div>
+            <div class="slider"><label>EQ Mid</label><input id="eqAM" type="range" min="0" max="100" value="50"><span class="val" id="eqAMVal">50</span></div>
+            <div class="slider"><label>EQ High</label><input id="eqAH" type="range" min="0" max="100" value="40"><span class="val" id="eqAHVal">40</span></div>
+          </div>
+        </div>
+      </details>
+
+      <details class="section" open>
+        <summary>🟥 Deck B</summary>
+        <div class="content">
+          <div class="row">
+            <div class="kv"><label>Color</label><input id="colB" type="color" value="#ff4488"></div>
+            <div class="slider"><label>Opacity</label><input id="opB" type="range" min="5" max="100" value="40"><span id="opBVal" class="val">40</span></div>
+            <div class="kv"><label>Material</label><select id="matB"><option>basic</option><option>lambert</option><option selected>standard</option><option>wireframe</option></select></div>
+          </div>
+          <div class="row">
+            <div class="slider"><label>EQ Low</label><input id="eqBL" type="range" min="0" max="100" value="40"><span class="val" id="eqBLVal">40</span></div>
+            <div class="slider"><label>EQ Mid</label><input id="eqBM" type="range" min="0" max="100" value="50"><span class="val" id="eqBMVal">50</span></div>
+            <div class="slider"><label>EQ High</label><input id="eqBH" type="range" min="0" max="100" value="60"><span class="val" id="eqBHVal">60</span></div>
+          </div>
+        </div>
+      </details>
+
+      <details class="section">
+        <summary>🧪 Diagnostics</summary>
+        <div class="content" id="diag">
+          <div id="envStatus">Env: <em>checking…</em></div>
+          <div id="testResults" style="margin-top:6px"></div>
+          <div class="row"><button class="btn" id="runTestsBtn">Run Tests</button></div>
+        </div>
+      </details>
+    </div>
+  </div>
+
+  <div id="mini"><span class="dot"></span> Controls</div>
+
+  <script>
+  (function(){
+    const DEFAULTS = { colA:'#00ff88', colB:'#ff4488', overlap:'#ffaa00' };
+    const SIZE = 20, MAX_LAYERS = 32;
+
+    const state = {
+      maxLayers:28, spacing:1.1, dist:6, exploded:false, showA:true, showB:true,
+      blend:'normal', overlapIntensity:.9, view:'front', orbit:false, t:0,
+      xf:0, noOverlap:false, forceOverlap:0.5, bpm:100, pulse:false,
+      colA:DEFAULTS.colA, opA:.4, matA:'standard', eqA:{low:.6,mid:.5,high:.4},
+      colB:DEFAULTS.colB, opB:.4, matB:'standard', eqB:{low:.4,mid:.5,high:.6},
+      scene:null, camera:null, renderer:null, a:[], b:[], o:[], using2D:false,
+      // audio
+      ac:null, master:null, deckA:{osc:null, filt:null, gain:null}, deckB:{osc:null, filt:null, gain:null}, overlap:{noise:null, bp:null, gain:null},
+    };
+
+    const canvas = document.getElementById('c');
+    const blendBadge = document.getElementById('blendBadge');
+    const viewBadge = document.getElementById('viewBadge');
+    const fallbackBadge = document.getElementById('fallbackBadge');
+    const overBadge = document.getElementById('overBadge');
+
+    const mA=document.getElementById('mA'), mB=document.getElementById('mB'), mO=document.getElementById('mO');
+
+    // ------- THREE loader (robust) --------
+    async function ensureThree(){ if(window.THREE) return true; const cdns=[
+      'https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js',
+      'https://unpkg.com/three@0.152.2/build/three.min.js',
+      'https://cdnjs.cloudflare.com/ajax/libs/three.js/r152/three.min.js'
+    ]; for(const src of cdns){ try{ await new Promise((res,rej)=>{ const s=document.createElement('script'); s.src=src; s.async=true; s.defer=true; s.onload=()=>res(); s.onerror=rej; document.head.appendChild(s); }); if(window.THREE) return true; }catch(e){} } return false; }
+
+    // ------- math helpers --------
+    function clamp(n,a,b){ return Math.max(a, Math.min(b,n)); }
+    function computeOverlapWidth(dist){ const half=SIZE/2; const left=Math.max(-dist-half, dist-half); const right=Math.min(-dist+half, dist+half); return Math.max(0,right-left); }
+    function distForOverlapPct(p){ const w=clamp(p,0,1)*SIZE; return Math.max(0, (SIZE - w)/2); }
+    function xfGains(xf){ const a=(1-xf)/2, b=(1+xf)/2; return {a,b}; }
+    function bandWeights(t){ const tri=(c,w)=>Math.max(0,1-Math.abs(t-c)/w); return { low:tri(0, .34), mid:tri(.5,.34), high:tri(1,.34) }; }
+
+    // ------- tests --------
+    function runTests(){
+      const cases=[ {dist:0,ex:20},{dist:5,ex:10},{dist:10,ex:0},{dist:6,ex:8} ];
+      const out=[]; for(const k of cases){ const got=Math.round(computeOverlapWidth(k.dist)); out.push(`<div>overlap(dist=${k.dist})=${got} → <b class="${got===k.ex?'pass':'fail'}">${got===k.ex?'PASS':'FAIL expected '+k.ex}</b></div>`);} const d50=distForOverlapPct(.5); out.push(`<div>distForOverlapPct(0.5)=${d50.toFixed(2)} → <b class="${Math.abs(d50-5)<0.01?'pass':'fail'}">${Math.abs(d50-5)<0.01?'PASS':'FAIL'}</b></div>`);
+      document.getElementById('testResults').innerHTML=out.join('');
+    }
+
+    // ------- 2D fallback --------
+    function setup2D(){ state.using2D=true; fallbackBadge.style.display='block'; resize2D(); draw2D(); addEventListener('resize', resize2D); wireUI(); addDockDrag(); }
+    function resize2D(){ const dpr=Math.min(2,devicePixelRatio||1); canvas.width=innerWidth*dpr; canvas.height=innerHeight*dpr; canvas.style.width=innerWidth+'px'; canvas.style.height=innerHeight+'px'; const ctx=canvas.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0); }
+    function blend2d(mode){ switch(mode){ case 'add': return 'lighter'; case 'multiply': return 'multiply'; case 'screen': return 'screen'; default: return 'source-over'; } }
+    function draw2D(){ const ctx=canvas.getContext('2d'); ctx.clearRect(0,0,innerWidth,innerHeight); const w=innerWidth,h=innerHeight, boxW=Math.min(360,w-48); const cubeH=SIZE*state.spacing; const step=cubeH/Math.max(1,state.maxLayers-1); const cx=w/2; const gains=xfGains(state.xf); const dist = state.noOverlap? Math.max(state.dist, SIZE/2+0.1) : (state.forceOverlap>=0? distForOverlapPct(state.forceOverlap) : state.dist); const cxA=cx - dist, cxB=cx + dist; const left=Math.max(cxA-boxW/2, cxB-boxW/2), right=Math.min(cxA+boxW/2, cxB+boxW/2); const ow=Math.max(0,right-left); overBadge.textContent = 'Overlap: '+Math.round((ow/boxW)*100)+'%'; mO.style.width = clamp((ow/boxW)*100,0,100)+'%';
+      for(let i=0;i<state.maxLayers;i++){ const y=h/2 - cubeH/2 + i*step; const t=i/(state.maxLayers-1); const wts=bandWeights(t);
+        if(state.showA){ ctx.globalAlpha = (state.opA)*gains.a*((.5*state.eqA.low*wts.low + .5*state.eqA.mid*wts.mid + .5*state.eqA.high*wts.high) + .5); ctx.globalCompositeOperation='source-over'; ctx.fillStyle=state.colA; ctx.fillRect(cxA - boxW/2, y, boxW, 3); }
+        if(state.showB){ ctx.globalAlpha = (state.opB)*gains.b*((.5*state.eqB.low*wts.low + .5*state.eqB.mid*wts.mid + .5*state.eqB.high*wts.high) + .5); ctx.globalCompositeOperation='source-over'; ctx.fillStyle=state.colB; ctx.fillRect(cxB - boxW/2, y, boxW, 3); }
+        if(!state.exploded && !state.noOverlap && ow>0){ ctx.globalAlpha = Math.max(.25,.45*state.overlapIntensity)*(gains.a+gains.b); ctx.globalCompositeOperation=blend2d(state.blend); const glow=ctx.createLinearGradient(left,y-6,left,y+6); glow.addColorStop(0,'rgba(255,170,0,0)'); glow.addColorStop(.5,'#ffaa00'); glow.addColorStop(1,'rgba(255,170,0,0)'); ctx.fillStyle=glow; ctx.fillRect(left,y-6,ow,12); }
+      }
+      ctx.globalAlpha=1; ctx.globalCompositeOperation='source-over'; ctx.strokeStyle='rgba(79,195,247,.25)'; ctx.strokeRect(cx-boxW/2, h/2-cubeH/2, boxW, cubeH);
+    }
+
+    // ------- 3D engine --------
+    function setView(v){ state.view=v; state.orbit=(v==='orbit'); const V={front:[0,0,80], top:[0,80,0], side:[80,0,0], iso:[60,50,60]}; if(state.camera && V[v]){ state.camera.position.set(...V[v]); state.camera.lookAt(0,0,0); } viewBadge.textContent='📹 '+v.toUpperCase(); }
+    function setBlend3D(mat,T){ switch(state.blend){ case 'add': mat.blending=T.AdditiveBlending; break; case 'multiply': mat.blending=T.MultiplyBlending; break; case 'screen': mat.blending=T.CustomBlending; mat.blendEquation=T.AddEquation; mat.blendSrc=T.OneFactor; mat.blendDst=T.OneMinusSrcColorFactor; break; default: mat.blending=T.NormalBlending; } }
+    function buildMaterials(T, deck){ const type = state[deck==='A'?'matA':'matB']; const wire = type==='wireframe'; const ctor = type==='lambert'? T.MeshLambertMaterial : type==='standard'? T.MeshStandardMaterial : T.MeshBasicMaterial; const color = deck==='A'? state.colA : state.colB; const opacity = (deck==='A'? state.opA : state.opB); const mat = new ctor({ color, transparent:true, opacity, wireframe:wire, side:T.DoubleSide, depthWrite:false }); setBlend3D(mat,T); return mat; }
+    function layerGroup(T,colorHex, base, deck){ const g=new T.Group(); const half=SIZE/2; const color=new T.Color(colorHex); const pts=[new T.Vector3(-half,0,-half),new T.Vector3(half,0,-half),new T.Vector3(half,0,half),new T.Vector3(-half,0,half),new T.Vector3(-half,0,-half)]; const line=new T.Line(new T.BufferGeometry().setFromPoints(pts), new T.LineBasicMaterial({color,transparent:true,opacity:base*.9})); g.add(line); const plane=new T.Mesh(new T.PlaneGeometry(SIZE,SIZE), buildMaterials(T, deck)); plane.rotation.x=-Math.PI/2; g.add(plane); const dotGeo=new T.SphereGeometry(.4,10,10); const dotMat=new T.MeshBasicMaterial({color,transparent:true,opacity:base*1.1}); for(const [x,z] of [[-half,-half],[half,-half],[half,half],[-half,half]]){ const d=new T.Mesh(dotGeo,dotMat); d.position.set(x,0,z); g.add(d); } g.userData={plane, baseOpacity:base, deck}; return g; }
+    function overlapGroup(T){ const g=new T.Group(); const plane=new T.Mesh(new T.PlaneGeometry(1,SIZE), new T.MeshBasicMaterial({color:DEFAULTS.overlap,transparent:true,opacity:0,side:T.DoubleSide,depthWrite:false})); plane.rotation.x=-Math.PI/2; g.add(plane); const rim=new T.Line(new T.BufferGeometry().setFromPoints([new T.Vector3(-.5,0,-SIZE/2),new T.Vector3(.5,0,-SIZE/2),new T.Vector3(.5,0,SIZE/2),new T.Vector3(-.5,0,SIZE/2),new T.Vector3(-.5,0,-SIZE/2)]), new T.LineBasicMaterial({color:DEFAULTS.overlap,transparent:true,opacity:.85})); g.add(rim); g.userData={plane,rim}; return g; }
+    function computeEQGain(deck, t){ const w=bandWeights(t); const eq=deck==='A'?state.eqA:state.eqB; return (0.5*eq.low*w.low + 0.5*eq.mid*w.mid + 0.5*eq.high*w.high) + 0.5; }
+    function updateLayout3D(){ const T=window.THREE; const h=SIZE*state.spacing; const step=h/Math.max(1,state.maxLayers-1); const gains=xfGains(state.xf); const dist = state.noOverlap? Math.max(state.dist, SIZE/2+0.1) : distForOverlapPct(state.forceOverlap); const ow = computeOverlapWidth(dist); const oPct = clamp(ow/SIZE,0,1); overBadge.textContent = 'Overlap: '+Math.round(oPct*100)+'%'; mO.style.width = Math.round(oPct*100)+'%';
+      for(let i=0;i<MAX_LAYERS;i++){ const vis=i<state.maxLayers; const y=-h/2+i*step; const t=i/(state.maxLayers-1); const A=state.a[i], B=state.b[i], O=state.o[i]; if(A){ A.visible=vis && state.showA; if(A.visible){ A.position.set(-dist + (state.exploded? (state.maxLayers/2 - i)*-2 : 0), y, 0); const m=A.userData.plane.material; setBlend3D(m,T); m.opacity = state.opA * gains.a * computeEQGain('A',t); m.color = new T.Color(state.colA); } } if(B){ B.visible=vis && state.showB; if(B.visible){ B.position.set( dist + (state.exploded? (state.maxLayers/2 - i)* 2 : 0), y, 0); const m=B.userData.plane.material; setBlend3D(m,T); m.opacity = state.opB * gains.b * computeEQGain('B',t); m.color = new T.Color(state.colB); } } if(O){ const showO=vis && !state.exploded && ow>0 && state.showA && state.showB; O.visible=showO; if(showO){ const left=Math.max(-dist - SIZE/2, dist - SIZE/2); const right=Math.min(-dist + SIZE/2, dist + SIZE/2); const cx=(left+right)/2; O.position.set(cx,y,0); O.children[0].scale.set(ow,1,1); O.children[1].scale.set(ow,1,1); const mat=O.userData.plane.material; setBlend3D(mat,T); mat.opacity = Math.max(.35,.55*state.overlapIntensity)*(gains.a+gains.b); O.userData.rim.material.opacity = .9; } }
+      }
+      // meters
+      const g = xfGains(state.xf); mA.style.width = Math.round(g.a*100)+'%'; mB.style.width = Math.round(g.b*100)+'%';
+    }
+
+    function animate3D(){ requestAnimationFrame(animate3D); const t=performance.now()/1000; state.t+=.01; if(state.orbit && state.camera){ const r=80; state.camera.position.x=Math.sin(state.t*.3)*r; state.camera.position.z=Math.cos(state.t*.3)*r; state.camera.position.y=50+Math.sin(state.t*.2)*10; state.camera.lookAt(0,0,0); } if(state.renderer && state.scene && state.camera) state.renderer.render(state.scene,state.camera); // audio pulse
+      if(state.ac && state.pulse){ const ph = 0.5+0.5*Math.sin(2*Math.PI*(state.bpm/60)*t); const g=xfGains(state.xf); if(state.deckA.gain) state.deckA.gain.gain.value = g.a * ph; if(state.deckB.gain) state.deckB.gain.gain.value = g.b * ph; if(state.overlap.gain) state.overlap.gain.gain.value = (getOverlapPct()) * ph; }
+    }
+
+    function getOverlapPct(){ const dist = state.noOverlap? Math.max(state.dist, SIZE/2+0.1) : distForOverlapPct(state.forceOverlap); return clamp(computeOverlapWidth(dist)/SIZE,0,1); }
+
+    // ------- Audio (WebAudio) --------
+    function initAudio(){ if(state.ac) return; const AC = window.AudioContext||window.webkitAudioContext; state.ac = new AC(); state.master = state.ac.createGain(); state.master.gain.value = 0.2; state.master.connect(state.ac.destination);
+      // Deck A
+      const oscA = state.ac.createOscillator(); oscA.type='sawtooth'; oscA.frequency.value = 110; const filtA = state.ac.createBiquadFilter(); filtA.type='lowpass'; filtA.frequency.value = 2000; const gA = state.ac.createGain(); gA.gain.value = 0.0; oscA.connect(filtA).connect(gA).connect(state.master); oscA.start(); state.deckA={osc:oscA,filt:filtA,gain:gA};
+      // Deck B
+      const oscB = state.ac.createOscillator(); oscB.type='square'; oscB.frequency.value = 220; const filtB = state.ac.createBiquadFilter(); filtB.type='highpass'; filtB.frequency.value = 800; const gB = state.ac.createGain(); gB.gain.value = 0.0; oscB.connect(filtB).connect(gB).connect(state.master); oscB.start(); state.deckB={osc:oscB,filt:filtB,gain:gB};
+      // Overlap (noise through bandpass)
+      const noiseBuf = state.ac.createBuffer(1, state.ac.sampleRate*2, state.ac.sampleRate); const data=noiseBuf.getChannelData(0); for(let i=0;i<data.length;i++){ data[i]=Math.random()*2-1; }
+      const noiseSrc = state.ac.createBufferSource(); noiseSrc.buffer=noiseBuf; noiseSrc.loop=true; const bp = state.ac.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value = 1200; const gO=state.ac.createGain(); gO.gain.value=0.0; noiseSrc.connect(bp).connect(gO).connect(state.master); noiseSrc.start(); state.overlap={noise:noiseSrc,bp:bp,gain:gO};
+      updateAudioParams();
+    }
+
+    function updateAudioParams(){ if(!state.ac) return; const g=xfGains(state.xf); const oPct=getOverlapPct();
+      // Deck filters from EQ
+      const aCut = 200 + state.eqA.low*400 + state.eqA.mid*1200 + state.eqA.high*4000; state.deckA.filt.frequency.value = aCut; state.deckA.gain.gain.value = g.a * (state.pulse? 0.0:1.0);
+      const bCut = 200 + state.eqB.low*400 + state.eqB.mid*1200 + state.eqB.high*4000; state.deckB.filt.frequency.value = bCut; state.deckB.gain.gain.value = g.b * (state.pulse? 0.0:1.0);
+      // Overlap loudness follows overlap percentage
+      state.overlap.gain.gain.value = oPct * 0.8 * (state.pulse? 0.0:1.0);
+      // meters
+      mA.style.width = Math.round(g.a*100)+'%'; mB.style.width = Math.round(g.b*100)+'%'; mO.style.width = Math.round(oPct*100)+'%';
+    }
+
+    // ------- UI & interactions --------
+    function vibr(ms=12){ if(navigator.vibrate) navigator.vibrate(ms); }
+    function wireUI(){
+      const vBtns=document.querySelectorAll('[data-view]'); vBtns.forEach(b=>b.addEventListener('click',()=>{ vBtns.forEach(x=>x.classList.remove('active')); b.classList.add('active'); setView(b.dataset.view); vibr(12);})); document.querySelector('[data-view="front"]').classList.add('active');
+      const blBtns=document.querySelectorAll('[data-blend]'); blBtns.forEach(b=>b.addEventListener('click',()=>{ blBtns.forEach(x=>x.classList.remove('active')); b.classList.add('active'); state.blend=b.dataset.blend; blendBadge.textContent='🎨 '+state.blend.toUpperCase(); vibr(10); if(!state.using2D) updateLayout3D(); else draw2D(); })); document.querySelector('[data-blend="normal"]').classList.add('active');
+      const bind=(id,fn)=>{ const el=document.getElementById(id); const valEl=document.getElementById(id+'Val'); if(!el) return; const upd=()=>{ const v = (el.type==='checkbox')? el.checked : (el.type==='range'? Number(el.value) : el.value); fn(v); if(valEl) valEl.textContent = (typeof v==='number'? Math.round(v): v); if(!state.using2D) { updateLayout3D(); updateAudioParams(); } else draw2D(); }; el.addEventListener('input', upd); el.addEventListener('change', upd); upd(); };
+
+      // Crossfader / transport / overlap control
+      bind('xfader', v=> state.xf = v/100 );
+      bind('noOverlap', v=> state.noOverlap = !!v );
+      bind('forceOverlap', v=> state.forceOverlap = v/100 );
+      bind('bpm', v=> state.bpm = v );
+
+      document.getElementById('audioToggle').addEventListener('click', async ()=>{ if(!state.ac){ initAudio(); await state.ac.resume(); document.getElementById('audioToggle').textContent='Audio On'; } else { if(state.ac.state==='running'){ await state.ac.suspend(); document.getElementById('audioToggle').textContent='Audio Off'; } else { await state.ac.resume(); document.getElementById('audioToggle').textContent='Audio On'; } } vibr(12); });
+      document.getElementById('syncPulse').addEventListener('click', ()=>{ state.pulse=!state.pulse; document.getElementById('syncPulse').classList.toggle('active'); vibr(15); });
+      document.getElementById('orbit').addEventListener('click', ()=>{ state.orbit=!state.orbit; document.getElementById('orbit').classList.toggle('active'); vibr(15); });
+
+      // Structure
+      bind('overlapInt', v=> state.overlapIntensity=v/100 );
+      bind('layerRange', v=> state.maxLayers=v );
+      bind('sepRange', v=> state.dist = 10 + (v/100)*40 );
+      bind('spaceRange', v=> state.spacing = .5 + (v/100)*1.5 );
+
+      // Deck A
+      bind('opA', v=> state.opA = v/100 );
+      document.getElementById('colA').addEventListener('input', e=>{ state.colA=e.target.value; if(!state.using2D) updateLayout3D(); else draw2D(); });
+      document.getElementById('matA').addEventListener('change', e=>{ state.matA=e.target.value; if(!state.using2D) updateLayout3D(); });
+      ['eqAL','eqAM','eqAH'].forEach((id,i)=> bind(id, v=>{ const key=['low','mid','high'][i]; state.eqA[key]=v/100; }));
+
+      // Deck B
+      bind('opB', v=> state.opB = v/100 );
+      document.getElementById('colB').addEventListener('input', e=>{ state.colB=e.target.value; if(!state.using2D) updateLayout3D(); else draw2D(); });
+      document.getElementById('matB').addEventListener('change', e=>{ state.matB=e.target.value; if(!state.using2D) updateLayout3D(); });
+      ['eqBL','eqBM','eqBH'].forEach((id,i)=> bind(id, v=>{ const key=['low','mid','high'][i]; state.eqB[key]=v/100; }));
+
+      // Minimize dock
+      const dock=document.getElementById('dock'); const mini=document.getElementById('mini');
+      document.getElementById('minBtn').addEventListener('click', ()=>{ dock.style.display='none'; mini.style.display='flex'; vibr(10); });
+      mini.addEventListener('click', ()=>{ dock.style.display='block'; mini.style.display='none'; vibr(10); });
+
+      document.getElementById('runTestsBtn').addEventListener('click', runTests); runTests();
+    }
+
+    // draggable dock
+    function addDockDrag(){ const dock=document.getElementById('dock'); const head=document.getElementById('dockHeader'); let sx=0,sy=0,ox=0,oy=0,drag=false; const start=(x,y)=>{drag=true; sx=x;sy=y; const r=dock.getBoundingClientRect(); ox=r.left; oy=r.top;}; const move=(x,y)=>{ if(!drag)return; const nx=ox+(x-sx), ny=oy+(y-sy); dock.style.left=nx+'px'; dock.style.top=ny+'px'; dock.style.right='unset'; dock.style.bottom='unset'; }; const end=()=>{drag=false;}; head.addEventListener('pointerdown',e=>{ head.setPointerCapture(e.pointerId); start(e.clientX,e.clientY); }); head.addEventListener('pointermove',e=>move(e.clientX,e.clientY)); head.addEventListener('pointerup',end); head.addEventListener('pointercancel',end); }
+
+    // camera drag
+    function addDrag3D(){ canvas.addEventListener('touchstart', (e)=>{ state.drag=true; state.tx=e.touches[0].clientX; state.ty=e.touches[0].clientY; }, {passive:true}); canvas.addEventListener('touchmove', (e)=>{ if(state.orbit) return; const nx=e.touches[0].clientX, ny=e.touches[0].clientY; const dx=nx-(state.tx||nx), dy=ny-(state.ty||ny); const p=state.camera.position; const d=Math.hypot(p.x,p.y,p.z); let th=Math.atan2(p.x,p.z) - dx*0.005; let ph=Math.acos(p.y/d) - dy*0.005; ph=Math.max(0.1, Math.min(Math.PI-0.1, ph)); state.camera.position.x=d*Math.sin(ph)*Math.sin(th); state.camera.position.y=d*Math.cos(ph); state.camera.position.z=d*Math.sin(ph)*Math.cos(th); state.camera.lookAt(0,0,0); state.tx=nx; state.ty=ny; }, {passive:true}); }
+
+    // boot
+    async function boot(){ document.getElementById('envStatus').textContent='Env: loading three.js…'; const ok=await ensureThree(); if(!ok){ document.getElementById('envStatus').innerHTML='Env: <b class="fail">three.js unavailable</b>'; setup2D(); return; }
+      const T=window.THREE; document.getElementById('envStatus').innerHTML='Env: <b class="pass">three.js loaded</b>';
+      state.scene=new T.Scene(); state.scene.background=new T.Color(0x000000); state.scene.fog=new T.FogExp2(0x000000,.003);
+      state.camera=new T.PerspectiveCamera(50, innerWidth/innerHeight, .1, 1000); setView('front');
+      state.renderer=new T.WebGLRenderer({canvas, antialias:true}); state.renderer.setSize(innerWidth,innerHeight); state.renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
+      // lights
+      state.scene.add(new T.AmbientLight(0xffffff,.35)); const top=new T.DirectionalLight(0xffffff,.7); top.position.set(0,80,0); state.scene.add(top);
+      const la=new T.PointLight(0x00ff88, 2, 150); la.position.set(-40,20,30); state.scene.add(la);
+      const lb=new T.PointLight(0xff4488, 2, 150); lb.position.set( 40,20,30); state.scene.add(lb);
+      // layers
+      for(let i=0;i<MAX_LAYERS;i++){ const base=.85-(i/MAX_LAYERS)*.6; const A=layerGroup(T,state.colA,base,'A'); const B=layerGroup(T,state.colB,base,'B'); const O=overlapGroup(T); state.a.push(A); state.b.push(B); state.o.push(O); state.scene.add(A,B,O); }
+      addEventListener('resize', ()=>{ state.camera.aspect=innerWidth/innerHeight; state.camera.updateProjectionMatrix(); state.renderer.setSize(innerWidth,innerHeight); });
+      addDrag3D();
+      wireUI(); addDockDrag();
+      updateLayout3D(); requestAnimationFrame(animate3D);
+    }
+
+    boot();
+  })();
+  </script>
+</body>
+</html>

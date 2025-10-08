@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Volumetric Media Nexus — EZ Instrument</title>
+<style>
+  * {margin:0;padding:0;box-sizing:border-box;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+  body {font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:#000; color:#fff; overflow:hidden;}
+  #canvas {width:100vw;height:100vh;display:block;}
+
+  /* Header */
+  #header {position:fixed;top:0;left:0;width:100%;background:rgba(0,0,0,.85);border-bottom:2px solid rgba(79,195,247,.5);display:flex;align-items:center;justify-content:space-between;padding:8px 10px;z-index:80;backdrop-filter:blur(6px)}
+  #header h1 {font-size:12px;letter-spacing:1px;color:#4fc3f7;margin:0}
+  #trackTabs {display:flex; gap:8px}
+  .tab {border:1px solid rgba(79,195,247,.4); background:rgba(79,195,247,.1); color:#cfefff; border-radius:999px; padding:6px 10px; font-size:10px; cursor:pointer}
+  .tab.active{background:rgba(79,195,247,.3)}
+
+  /* Dock */
+  #dock {position:fixed;top:42px;left:50%;transform:translateX(-50%);display:flex;gap:8px;z-index:75}
+  .dockBtn {width:52px;height:46px;border:2px solid #4fc3f7;border-radius:10px;background:rgba(0,0,0,.9);color:#cfefff;font-size:10px;letter-spacing:.5px;cursor:pointer}
+  .dockBtn.active {background:rgba(79,195,247,.25);box-shadow:0 0 12px rgba(79,195,247,.6)}
+
+  /* Floating panel */
+  #panel {position:fixed;top:96px;left:50%;transform:translateX(-50%);min-width:330px;max-width:94vw;background:rgba(0,0,0,.92);border:2px solid rgba(79,195,247,.5);border-radius:12px;padding:12px 14px;display:none;z-index:70}
+  #panel.open {display:block}
+  .section {margin-bottom:12px}
+  .label {font-size:10px;color:#4fc3f7;margin-bottom:6px;text-transform:uppercase;letter-spacing:1px}
+  .row {display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  input[type=range] {flex:1;height:6px;background:rgba(79,195,247,.3);border-radius:3px;-webkit-appearance:none}
+  input[type=range]::-webkit-slider-thumb {-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:#4fc3f7;box-shadow:0 0 10px rgba(79,195,247,.8)}
+  .val {min-width:38px;text-align:right;font-weight:700;color:#4fc3f7;font-size:11px}
+  button {border:2px solid #4fc3f7;background:rgba(79,195,247,.15);color:#fff;border-radius:8px;padding:6px 10px;font-size:10px;cursor:pointer}
+  button:active,button.active {background:rgba(79,195,247,.3);transform:scale(.98)}
+  select {background:rgba(79,195,247,.1);color:#cfefff;border:1px solid rgba(79,195,247,.4);border-radius:8px;padding:6px 8px;font-size:10px}
+  input[type=color]{width:28px;height:18px;border:1px solid rgba(79,195,247,.35);border-radius:6px;background:none}
+
+  /* Camera Pad */
+  #camPad {position:fixed;right:10px;top:50%;transform:translateY(-50%);display:grid;gap:8px;z-index:65}
+  .camBtn {width:38px;height:38px;border-radius:10px;border:2px solid #4fc3f7;background:rgba(0,0,0,.85);color:#fff;font-size:10px;cursor:pointer}
+
+  /* HUD */
+  #nexusHUD {position:fixed;bottom:14px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.85);border:2px solid #ffaa00;border-radius:10px;padding:8px 14px;display:flex;align-items:center;gap:10px;z-index:60}
+  #nexusHUD span {font-size:11px;color:#ffaa00;letter-spacing:.5px}
+  .meter{width:80px;height:6px;background:rgba(255,255,255,.08);border:1px solid rgba(79,195,247,.35);border-radius:6px;overflow:hidden}
+  .meter>div{height:100%}
+
+  /* EZ BAR */
+  #ezbar{position:fixed;bottom:64px;left:50%;transform:translateX(-50%);display:flex;gap:8px;align-items:center;background:rgba(0,0,0,.8);border:2px solid rgba(79,195,247,.45);border-radius:12px;padding:8px 10px;z-index:68}
+  .ezlabel{font-size:10px;color:#9fd2ff}
+  .ezslider{width:120px;height:6px;background:rgba(79,195,247,.3);border-radius:3px;-webkit-appearance:none}
+  .ezbtn{border:2px solid #4fc3f7;background:rgba(79,195,247,.15);color:#fff;border-radius:8px;padding:6px 10px;font-size:10px}
+
+  /* Onboarding Overlay */
+  #ob{position:fixed;inset:0;background:rgba(0,0,0,.92);display:flex;align-items:center;justify-content:center;z-index:200}
+  #obCard{max-width:560px;width:92vw;border:2px solid #4fc3f7;border-radius:14px;padding:18px;background:rgba(0,0,0,.85);text-align:center}
+  #ob h2{margin-bottom:6px;font-size:16px;color:#4fc3f7}
+  #ob p{margin:8px 0;color:#cfefff;font-size:12px}
+  #ob .row{justify-content:center}
+
+  /* Tests panel text */
+  .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace}
+
+  @media (max-width:480px){ #panel{max-width:96vw} .dockBtn{width:46px;height:42px} #ezbar{bottom:72px;flex-wrap:wrap;justify-content:center} }
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+
+<!-- Onboarding -->
+<div id="ob">
+  <div id="obCard">
+    <h2>Vol‑Media Nexus</h2>
+    <p>Turn it on, pick a vibe, then <b>tap layers</b> in 3D to toggle beats. The interface is the instrument.</p>
+    <div class="row" style="margin-top:10px;gap:8px;justify-content:center">
+      <button id="obAudio" class="ezbtn">Enable Audio</button>
+      <button id="obPlay" class="ezbtn">Play Demo</button>
+      <select id="obPreset">
+        <option value="nebula">Nebula Glide</option>
+        <option value="glass">Glass Wheels</option>
+        <option value="rituals">Rituals</option>
+        <option value="polymesh">PolyMesh</option>
+      </select>
+    </div>
+    <p class="mono" style="opacity:.8;margin-top:10px">Tip: Tap A / Overlap / B at the top to choose which track you program by tapping the layers.</p>
+  </div>
+</div>
+
+<div id="header">
+  <h1>VOL‑MEDIA NEXUS — EZ</h1>
+  <div id="trackTabs">
+    <div class="tab active" data-track="A">Deck A</div>
+    <div class="tab" data-track="O">Overlap</div>
+    <div class="tab" data-track="B">Deck B</div>
+  </div>
+</div>
+
+<div id="dock">
+  <button class="dockBtn" data-panel="ez">EZ</button>
+  <button class="dockBtn" data-panel="shape">SHAPE</button>
+  <button class="dockBtn" data-panel="mix">MIX</button>
+  <button class="dockBtn" data-panel="seq">SEQ</button>
+  <button class="dockBtn" data-panel="presets">PRE</button>
+  <button class="dockBtn" data-panel="tests">TESTS</button>
+  <button class="dockBtn" id="helpBtn">HELP</button>
+</div>
+
+<div id="panel"></div>
+
+<div id="camPad">
+  <button class="camBtn" data-cam="front">FR</button>
+  <button class="camBtn" data-cam="isoL">IL</button>
+  <button class="camBtn" data-cam="isoR">IR</button>
+  <button class="camBtn" data-cam="top">TOP</button>
+</div>
+
+<!-- EZ quick bar -->
+<div id="ezbar">
+  <span class="ezlabel">Preset</span>
+  <select id="ezPreset">
+    <option value="nebula">Nebula</option>
+    <option value="glass">Glass</option>
+    <option value="rituals">Rituals</option>
+    <option value="polymesh">Poly</option>
+  </select>
+  <span class="ezlabel">Overlap</span>
+  <input id="ezOverlap" class="ezslider" type="range" min="0" max="100" value="50"/>
+  <span class="ezlabel">Groove</span>
+  <input id="ezBpm" class="ezslider" type="range" min="60" max="180" value="110"/>
+  <span class="ezlabel">Mix</span>
+  <input id="ezXf" class="ezslider" type="range" min="-100" max="100" value="0"/>
+  <button id="ezPlay" class="ezbtn">Play</button>
+  <button id="ezAudio" class="ezbtn">Audio</button>
+</div>
+
+<div id="nexusHUD">
+  <span id="nexusText">Overlap: 50%</span>
+  <div class="meter"><div id="mA" style="background:#00ff88;width:40%"></div></div>
+  <div class="meter"><div id="mO" style="background:#ffaa00;width:50%"></div></div>
+  <div class="meter"><div id="mB" style="background:#ff4488;width:40%"></div></div>
+</div>
+
+<script>
+(async function(){
+  // Robust THREE loader
+  if(!window.THREE){
+    const srcs=[
+      'https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js',
+      'https://unpkg.com/three@0.152.2/build/three.min.js',
+      'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js'
+    ];
+    for(const s of srcs){ try{ await new Promise((res,rej)=>{const el=document.createElement('script'); el.src=s; el.async=true; el.onload=res; el.onerror=rej; document.head.appendChild(el);}); if(window.THREE) break; }catch(e){} }
+  }
+
+  // ----- Core state -----
+  const SIZE=10; // plane size
+  let scene,camera,renderer; let cubeA=[], cubeB=[], nexus=[]; let layerMeta=[]; // for picking
+  let layers=16, spacing=1.1; let forceOverlap=0.5; let blend='screen';
+  let showA=true, showB=true, showN=true;
+
+  // Music/seq
+  let xf=0; let bpm=110; let AC, master; let playing=false; let stepA=12, stepB=16, stepO=8; let phA=0, phB=0, phO=0; let rootA=110, rootB=220; let scaleA='minorPent', scaleB='majorPent';
+  const seq={ A:new Array(32).fill(0), B:new Array(32).fill(0), O:new Array(32).fill(0) };
+  let activeTrack='A';
+  const COLORS={A:0x00ff88, B:0xff4488, O:0xffaa00};
+  let voices={A:null,B:null,O:null};
+
+  // ----- Scene -----
+  const canvas=document.getElementById('canvas');
+  scene=new THREE.Scene(); scene.background=new THREE.Color(0x000000);
+  camera=new THREE.PerspectiveCamera(50, innerWidth/innerHeight, .1, 1000); camera.position.set(36,36,36); camera.lookAt(0,0,0);
+  renderer=new THREE.WebGLRenderer({canvas, antialias:true}); renderer.setSize(innerWidth,innerHeight); renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
+  addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight);});
+  scene.add(new THREE.AmbientLight(0xffffff,.35)); const keyL=new THREE.PointLight(0x4fc3f7,2,160); keyL.position.set(0,40,40); scene.add(keyL); const rim=new THREE.DirectionalLight(0xffffff,.65); rim.position.set(-40,60,-10); scene.add(rim);
+
+  buildLayers();
+  bindUI();
+  schedule();
+  animate();
+
+  // ----- Geometry -----
+  function makeLayer(col,op){ const g=new THREE.PlaneGeometry(SIZE,SIZE); const m=new THREE.MeshStandardMaterial({color:col,transparent:true,opacity:op,side:THREE.DoubleSide,depthWrite:false,roughness:.6,metalness:.1}); const mesh=new THREE.Mesh(g,m); mesh.rotation.x=-Math.PI/2; return mesh; }
+  function setBlend(mat,isOverlap=false){ switch(blend){ case 'add': mat.blending=THREE.AdditiveBlending; break; case 'multiply': mat.blending=THREE.MultiplyBlending; break; case 'screen': mat.blending=THREE.CustomBlending; mat.blendEquation=THREE.AddEquation; mat.blendSrc=THREE.OneFactor; mat.blendDst=THREE.OneMinusSrcColorFactor; break; default: mat.blending=THREE.NormalBlending; } if(isOverlap){ mat.emissive=new THREE.Color(COLORS.O); mat.emissiveIntensity=.35; } }
+  function buildLayers(){
+    for(const arr of [cubeA,cubeB,nexus]){ for(const o of arr){ scene.remove(o); o.geometry.dispose?.(); o.material.dispose?.(); } arr.length=0; }
+    layerMeta.length=0; const dist=(SIZE - SIZE*forceOverlap)/2;
+    for(let i=0;i<layers;i++){
+      const base=.85-(i/layers)*.55; const y=i*spacing;
+      const a=makeLayer(COLORS.A, Math.max(.18,base*.45)); a.position.set(-dist,y,0); scene.add(a); cubeA.push(a); layerMeta.push({mesh:a, idx:i, deck:'A'});
+      const b=makeLayer(COLORS.B, Math.max(.18,base*.45)); b.position.set( dist,y,0); scene.add(b); cubeB.push(b); layerMeta.push({mesh:b, idx:i, deck:'B'});
+      const n=makeLayer(COLORS.O, Math.max(.20,base*.55)); n.position.set(0,y,0); n.scale.set(SIZE*forceOverlap||0.001,1,1); scene.add(n); nexus.push(n); layerMeta.push({mesh:n, idx:i, deck:'O'});
+      setBlend(a.material); setBlend(b.material); setBlend(n.material,true);
+    }
+    applyVis(); updateHUD();
+  }
+  function applyVis(){ cubeA.forEach(o=>o.visible=showA); cubeB.forEach(o=>o.visible=showB); nexus.forEach(o=>o.visible=showN); }
+  function updateHUD(){ const pct=Math.round(forceOverlap*100); document.getElementById('nexusText').textContent=`Overlap: ${pct}%`; document.getElementById('mO').style.width=`${pct}%`; }
+
+  // ----- Picking (tap to program) -----
+  const ray=new THREE.Raycaster(); const pt=new THREE.Vector2();
+  canvas.addEventListener('pointerdown',e=>{ pt.x=(e.clientX/innerWidth)*2-1; pt.y=-(e.clientY/innerHeight)*2+1; ray.setFromCamera(pt,camera); const hits=ray.intersectObjects(layerMeta.map(x=>x.mesh)); if(hits.length){ const m=hits[0].object; const meta=layerMeta.find(x=>x.mesh===m); if(!meta) return; const stepIdx = meta.idx % getSteps(activeTrack); seq[activeTrack][stepIdx] = seq[activeTrack][stepIdx]?0:1; flash(m); clickTone(); if(navigator.vibrate) navigator.vibrate(10); } });
+  function flash(mesh){ mesh.material.emissive=new THREE.Color(0xffffff); mesh.material.emissiveIntensity=.9; setTimeout(()=>{ mesh.material.emissiveIntensity=.35; }, 90); }
+
+  // ----- Camera -----
+  function setCam(p){ const r=70; if(p==='front'){camera.position.set(0,30,r);} else if(p==='isoL'){camera.position.set(-r*.8,40,r*.6);} else if(p==='isoR'){camera.position.set(r*.8,40,r*.6);} else if(p==='top'){camera.position.set(0,100,0.01);} camera.lookAt(0,0,0); }
+
+  // ----- Audio -----
+  function audioInit(){ if(AC) return; const C=window.AudioContext||window.webkitAudioContext; AC=new C(); master=AC.createGain(); master.gain.value=.18; master.connect(AC.destination); voices.A=mkVoice('sawtooth'); voices.B=mkVoice('square'); voices.O=mkNoise(); }
+  function mkVoice(type){ const osc=AC.createOscillator(); osc.type=type; const filt=AC.createBiquadFilter(); filt.type='lowpass'; filt.frequency.value=1600; const env=AC.createGain(); env.gain.value=0; osc.connect(filt).connect(env).connect(master); osc.start(); return {osc,filt,env}; }
+  function mkNoise(){ const buf=AC.createBuffer(1, AC.sampleRate*2, AC.sampleRate); const d=buf.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1; const src=AC.createBufferSource(); src.buffer=buf; src.loop=true; const bp=AC.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=1200; bp.Q.value=1; const env=AC.createGain(); env.gain.value=0; src.connect(bp).connect(env).connect(master); src.start(); return {src,bp,env}; }
+  function trig(env, level=.6, dur=.22){ const now=AC.currentTime; env.gain.cancelScheduledValues(now); env.gain.setValueAtTime(env.gain.value, now); env.gain.linearRampToValueAtTime(level, now+0.01); env.gain.exponentialRampToValueAtTime(0.0001, now+dur); }
+  function clickTone(){ if(!AC) return; const o=AC.createOscillator(); const g=AC.createGain(); o.type='triangle'; o.frequency.value=660; g.gain.value=.0001; o.connect(g).connect(master); const now=AC.currentTime; g.gain.setValueAtTime(.12, now); g.gain.exponentialRampToValueAtTime(0.0001, now+.09); o.start(); o.stop(now+.12); }
+
+  function scaleFreq(scale, root, degree){ const tables={ minorPent:[0,3,5,7,10], majorPent:[0,2,4,7,9], dorian:[0,2,3,5,7,9,10], whole:[0,2,4,6,8,10] }; const deg=tables[scale]||tables.minorPent; const semis=deg[degree % deg.length]; return root*Math.pow(2, semis/12); }
+  function xfGains(x){ return {a:(1-x)/2, b:(1+x)/2}; }
+  function getSteps(track){ return track==='A'?stepA:(track==='B'?stepB:stepO); }
+
+  // ----- Clock -----
+  function schedule(){ let last=performance.now(); const loop=()=>{ if(playing && AC && AC.state==='running'){ const beat=60000/bpm; const stepDur=beat/4; if(performance.now()-last>=stepDur){ last += stepDur; advance(); } } requestAnimationFrame(loop); }; loop(); }
+  function advance(){ phA=(phA+1)%stepA; phB=(phB+1)%stepB; phO=(phO+1)%stepO; const g=xfGains(xf); const ow=forceOverlap; if(seq.A[phA]){ voices.A.osc.frequency.setTargetAtTime(scaleFreq(scaleA,rootA,phA), AC.currentTime, .02); voices.A.filt.frequency.setTargetAtTime(1200+800*ow, AC.currentTime, .02); trig(voices.A.env, .5*g.a+.05, .18*(1+spacing*.2)); pulse(cubeA); } if(seq.O[phO]){ voices.O.bp.frequency.setTargetAtTime(900+1600*ow, AC.currentTime, .02); voices.O.bp.Q.setTargetAtTime(0.7+6*ow, AC.currentTime, .02); trig(voices.O.env, .6*ow+.05, .22); pulse(nexus,true);} if(seq.B[phB]){ voices.B.osc.frequency.setTargetAtTime(scaleFreq(scaleB,rootB,phB), AC.currentTime, .02); voices.B.filt.frequency.setTargetAtTime(800+1200*ow, AC.currentTime, .02); trig(voices.B.env, .5*g.b+.05, .18*(1+spacing*.2)); pulse(cubeB);} }
+  function pulse(arr,isO=false){ const i=Math.floor(Math.random()*Math.max(1,arr.length-1)); const m=arr[i]; if(!m) return; m.material.emissive=new THREE.Color(isO?COLORS.O:0xffffff); m.material.emissiveIntensity=.9; setTimeout(()=>{ m.material.emissiveIntensity=.35; }, 90); }
+
+  // ----- UI Binds -----
+  function bindUI(){
+    document.querySelectorAll('.camBtn').forEach(b=>b.addEventListener('click',()=>setCam(b.dataset.cam)));
+    document.getElementById('helpBtn').onclick=()=>{ document.getElementById('ob').style.display='flex'; };
+    document.querySelectorAll('.dockBtn').forEach(b=>b.addEventListener('click',()=>{ if(b.id==='helpBtn') return; document.querySelectorAll('.dockBtn').forEach(x=>x.classList.remove('active')); b.classList.add('active'); openPanel(b.dataset.panel);}));
+    document.querySelectorAll('#trackTabs .tab').forEach(t=>t.addEventListener('click',()=>{ document.querySelectorAll('#trackTabs .tab').forEach(x=>x.classList.remove('active')); t.classList.add('active'); activeTrack=t.dataset.track; clickTone(); }));
+
+    // EZ bar
+    document.getElementById('ezPreset').onchange=(e)=>{ applyPreset(e.target.value); };
+    document.getElementById('ezOverlap').oninput=(e)=>{ forceOverlap=parseInt(e.target.value)/100; buildLayers(); };
+    document.getElementById('ezBpm').oninput=(e)=>{ bpm=parseInt(e.target.value); };
+    document.getElementById('ezXf').oninput=(e)=>{ xf=parseInt(e.target.value)/100; const g=xfGains(xf); document.getElementById('mA').style.width=`${Math.round(g.a*100)}%`; document.getElementById('mB').style.width=`${Math.round(g.b*100)}%`; };
+    document.getElementById('ezPlay').onclick=async ()=>{ if(!AC) audioInit(); if(AC.state!=='running') await AC.resume(); playing=!playing; document.getElementById('ezPlay').textContent=playing?'Stop':'Play'; };
+    document.getElementById('ezAudio').onclick=async ()=>{ if(!AC) audioInit(); if(AC.state==='running'){ await AC.suspend(); } else { await AC.resume(); } };
+
+    // Onboarding buttons
+    document.getElementById('obAudio').onclick=async ()=>{ audioInit(); await AC.resume(); if(navigator.vibrate) navigator.vibrate([10,30,10]); };
+    document.getElementById('obPlay').onclick=()=>{ applyPreset(document.getElementById('obPreset').value); seedDemoPattern(); playing=true; document.getElementById('ezPlay').textContent='Stop'; document.getElementById('ob').style.display='none'; };
+  }
+
+  function openPanel(id){ const p=document.getElementById('panel'); let html=''; if(id==='ez'){
+      html = `
+        <div class='section'><div class='label'>Start Here</div>
+          <div class='row'><button id='pAudio'>Audio</button><button id='pPlay'>Play/Stop</button><button id='pDemo'>Autofill Groove</button></div>
+          <div class='row'><span>Preset</span><select id='pPreset'><option value='nebula'>Nebula</option><option value='glass'>Glass</option><option value='rituals'>Rituals</option><option value='polymesh'>Poly</option></select></div>
+          <div class='row'><span>Overlap</span><input id='pOver' type='range' min='0' max='100' value='${Math.round(forceOverlap*100)}'><span class='val'>${Math.round(forceOverlap*100)}</span></div>
+          <div class='row'><span>BPM</span><input id='pBpm' type='range' min='60' max='180' value='${bpm}'><span class='val'>${bpm}</span></div>
+        </div>
+        <div class='section'><div class='label'>How to Play</div>
+          <div class='row' style='line-height:1.4'>1) Pick a preset. 2) Press Play. 3) Tap layers in 3D to toggle beats for the selected track (A / Overlap / B tabs).</div>
+        </div>`;
+    } else if(id==='shape'){
+      html = `
+        <div class='section'><div class='label'>Layers & Spacing</div>
+          <div class='row'><span class='mono'>Layers</span><input id='layerSlider' type='range' min='6' max='32' value='${layers}'><span class='val' id='layerVal'>${layers}</span></div>
+          <div class='row'><span class='mono'>Spacing</span><input id='spcSlider' type='range' min='0.7' max='2.0' step='0.1' value='${spacing}'><span class='val' id='spcVal'>${spacing}</span></div>
+          <div class='row'><span class='mono'>Resonance / Overlap %</span><input id='ovrSlider' type='range' min='0' max='100' value='${Math.round(forceOverlap*100)}'><span class='val' id='ovrVal'>${Math.round(forceOverlap*100)}</span></div>
+        </div>`;
+    } else if(id==='mix'){
+      html = `
+        <div class='section'><div class='label'>Crossfader & Blend</div>
+          <div class='row'><span class='small'>A</span><input id='xf' type='range' min='-100' max='100' value='${Math.round(xf*100)}'><span class='small'>B</span>
+            <button data-blend='normal'>Normal</button><button data-blend='add'>Add</button><button data-blend='multiply'>Multiply</button><button data-blend='screen' class='active'>Screen</button>
+          </div>
+        </div>
+        <div class='section'><div class='label'>Color / Harmony</div>
+          <div class='row'>
+            <span class='small'>A Color</span><input type='color' id='colA' value='#00ff88'>
+            <span class='small'>B Color</span><input type='color' id='colB' value='#ff4488'>
+            <span class='small'>Overlap</span><input type='color' id='colO' value='#ffaa00'>
+          </div>
+          <div class='row'>
+            <span class='small'>Scale A</span><select id='scaleA'><option value='minorPent'>Minor Pent</option><option value='majorPent'>Major Pent</option><option value='dorian'>Dorian</option><option value='whole'>Whole tone</option></select>
+            <span class='small'>Scale B</span><select id='scaleB'><option value='majorPent'>Major Pent</option><option value='minorPent'>Minor Pent</option><option value='dorian'>Dorian</option><option value='whole'>Whole tone</option></select>
+          </div>
+        </div>`;
+    } else if(id==='seq'){
+      html = `
+        <div class='section'><div class='label'>Transport / Polyrhythm</div>
+          <div class='row'><button id='audioBtn'>${AC && AC.state==='running'?'Audio On':'Audio Off'}</button>
+               <button id='playBtn'>${playing?'Stop':'Play'}</button>
+               <span class='small'>BPM</span><input id='bpm' type='range' min='60' max='200' value='${bpm}'><span class='val' id='bpmVal'>${bpm}</span></div>
+          <div class='row'><span class='small'>Steps A</span><input id='stA' type='range' min='4' max='32' value='${stepA}'><span class='val'>${stepA}</span>
+               <span class='small'>Steps O</span><input id='stO' type='range' min='2' max='32' value='${stepO}'><span class='val'>${stepO}</span>
+               <span class='small'>Steps B</span><input id='stB' type='range' min='4' max='32' value='${stepB}'><span class='val'>${stepB}</span></div>
+        </div>
+        <div class='section'><div class='label'>Program by Tapping Layers</div>
+          <div class='row'>Use A / Overlap / B tabs at the top, then tap a layer plane to toggle that step.</div>
+        </div>`;
+    } else if(id==='presets'){
+      html = `
+        <div class='section'><div class='label'>Presets</div>
+          <div class='row'>
+            <button class='preset' data-preset='nebula'>Nebula Glide</button>
+            <button class='preset' data-preset='glass'>Glass Wheels</button>
+            <button class='preset' data-preset='rituals'>Rituals</button>
+            <button class='preset' data-preset='polymesh'>PolyMesh</button>
+          </div>
+        </div>`;
+    } else if(id==='tests'){
+      html = `
+        <div class='section'><div class='label'>Diagnostics / Tests</div>
+          <div id='testsOut' class='row mono' style='font-size:11px; color:#cfefff; line-height:1.6'></div>
+          <div class='row'><button id='runTests'>Run Tests</button></div>
+        </div>`;
+    }
+    p.innerHTML=html; p.classList.add('open'); bindPanel(id);
+  }
+
+  function bindPanel(id){ const p=document.getElementById('panel');
+    if(id==='ez'){
+      p.querySelector('#pAudio').onclick=async ()=>{ if(!AC) audioInit(); if(AC.state!=='running') await AC.resume(); };
+      p.querySelector('#pPlay').onclick=async ()=>{ if(!AC) audioInit(); if(AC.state!=='running') await AC.resume(); playing=!playing; };
+      p.querySelector('#pDemo').onclick=()=>{ seedDemoPattern(); };
+      p.querySelector('#pPreset').onchange=e=>applyPreset(e.target.value);
+      p.querySelector('#pOver').oninput=e=>{ forceOverlap=parseInt(e.target.value)/100; p.querySelector('#pOver').nextElementSibling.textContent=e.target.value; buildLayers(); };
+      p.querySelector('#pBpm').oninput=e=>{ bpm=parseInt(e.target.value); p.querySelector('#pBpm').nextElementSibling.textContent=bpm; };
+    }
+    if(id==='shape'){
+      p.querySelector('#layerSlider').oninput=e=>{ layers=parseInt(e.target.value); p.querySelector('#layerVal').textContent=layers; buildLayers(); };
+      p.querySelector('#spcSlider').oninput=e=>{ spacing=parseFloat(e.target.value); document.getElementById('spcVal').textContent=spacing; buildLayers(); };
+      p.querySelector('#ovrSlider').oninput=e=>{ forceOverlap=parseInt(e.target.value)/100; document.getElementById('ovrVal').textContent=Math.round(forceOverlap*100); buildLayers(); };
+    }
+    if(id==='mix'){
+      p.querySelectorAll('[data-blend]').forEach(b=> b.onclick=()=>{ document.querySelectorAll('[data-blend]').forEach(x=>x.classList.remove('active')); b.classList.add('active'); blend=b.getAttribute('data-blend'); [...cubeA,...cubeB].forEach(m=>setBlend(m.material)); nexus.forEach(m=>setBlend(m.material,true)); });
+      const xfEl=p.querySelector('#xf'); if(xfEl){ xfEl.oninput=e=>{ xf=parseInt(e.target.value)/100; const g=xfGains(xf); document.getElementById('mA').style.width=`${Math.round(g.a*100)}%`; document.getElementById('mB').style.width=`${Math.round(g.b*100)}%`; }; }
+      p.querySelector('#colA')?.addEventListener('input',e=>{ COLORS.A=parseInt(e.target.value.slice(1),16); cubeA.forEach(m=>m.material.color=new THREE.Color(COLORS.A)); });
+      p.querySelector('#colB')?.addEventListener('input',e=>{ COLORS.B=parseInt(e.target.value.slice(1),16); cubeB.forEach(m=>m.material.color=new THREE.Color(COLORS.B)); });
+      p.querySelector('#colO')?.addEventListener('input',e=>{ COLORS.O=parseInt(e.target.value.slice(1),16); nexus.forEach(m=>m.material.color=new THREE.Color(COLORS.O)); });
+      p.querySelector('#scaleA')?.addEventListener('change',e=>{ scaleA=e.target.value; });
+      p.querySelector('#scaleB')?.addEventListener('change',e=>{ scaleB=e.target.value; });
+    }
+    if(id==='seq'){
+      p.querySelector('#audioBtn').onclick=async ()=>{ audioInit(); if(AC.state==='running'){ await AC.suspend(); p.querySelector('#audioBtn').textContent='Audio Off'; } else { await AC.resume(); p.querySelector('#audioBtn').textContent='Audio On'; } };
+      p.querySelector('#playBtn').onclick=async ()=>{ if(!AC) audioInit(); if(AC.state!=='running') await AC.resume(); playing=!playing; p.querySelector('#playBtn').textContent=playing?'Stop':'Play'; };
+      p.querySelector('#bpm').oninput=e=>{ bpm=parseInt(e.target.value); p.querySelector('#bpmVal').textContent=bpm; };
+      p.querySelector('#stA').oninput=e=>{ stepA=parseInt(e.target.value); p.querySelector('#stA').nextElementSibling.textContent=stepA; };
+      p.querySelector('#stO').oninput=e=>{ stepO=parseInt(e.target.value); p.querySelector('#stO').nextElementSibling.textContent=stepO; };
+      p.querySelector('#stB').oninput=e=>{ stepB=parseInt(e.target.value); p.querySelector('#stB').nextElementSibling.textContent=stepB; };
+    }
+    if(id==='presets'){
+      p.querySelectorAll('.preset').forEach(btn=> btn.onclick=()=>{ applyPreset(btn.dataset.preset); });
+    }
+    if(id==='tests'){
+      const out=p.querySelector('#testsOut'); const run=()=>{ const logs=[]; let ok=true; logs.push((typeof voices==='object')? 'T1 voices object exists ✓' : (ok=false,'T1 voices object missing ✗')); audioInit(); logs.push((voices.A&&voices.B&&voices.O)? 'T2 voices initialized ✓' : (ok=false,'T2 voices not initialized ✗')); const ow=SIZE*forceOverlap; const dist=(SIZE-ow)/2; const consistent = Math.abs(ow + 2*dist - SIZE) < 1e-6; logs.push(consistent? 'T3 overlap mapping consistent ✓' : 'T3 overlap mapping inconsistent ✗'); out.innerHTML = logs.map(l=>`<div>${l}</div>`).join(''); console.log('[Tests]', ...logs); };
+      p.querySelector('#runTests').onclick=run; run();
+    }
+  }
+
+  // ----- Presets & demo -----
+  function applyPreset(name){
+    const presets={
+      nebula:{ bpm:96, overlap:.7, steps:[12,8,16], colors:['#23ffa0','#ff77aa','#ffd166'], scales:['dorian','minorPent'], blend:'screen' },
+      glass:{ bpm:128, overlap:.45, steps:[16,12,16], colors:['#86f3ff','#f2a2ff','#ffe7a1'], scales:['whole','majorPent'], blend:'add' },
+      rituals:{ bpm:84, overlap:.85, steps:[10,5,15], colors:['#00ff88','#ff4488','#ffaa00'], scales:['minorPent','dorian'], blend:'multiply' },
+      polymesh:{ bpm:140, overlap:.3, steps:[13,8,21], colors:['#69ffcd','#ffa3b5','#ffd166'], scales:['dorian','majorPent'], blend:'screen' }
+    };
+    const p=presets[name]; if(!p) return; bpm=p.bpm; stepA=p.steps[0]; stepO=p.steps[1]; stepB=p.steps[2]; forceOverlap=p.overlap; buildLayers();
+    const [ca,cb,co]=p.colors; COLORS.A=parseInt(ca.slice(1),16); COLORS.B=parseInt(cb.slice(1),16); COLORS.O=parseInt(co.slice(1),16); cubeA.forEach(m=>m.material.color=new THREE.Color(COLORS.A)); cubeB.forEach(m=>m.material.color=new THREE.Color(COLORS.B)); nexus.forEach(m=>m.material.color=new THREE.Color(COLORS.O));
+    scaleA=p.scales[0]; scaleB=p.scales[1]; blend=p.blend; [...cubeA,...cubeB].forEach(m=>setBlend(m.material)); nexus.forEach(m=>setBlend(m.material,true));
+    // reflect in EZ bar controls
+    document.getElementById('ezBpm').value=bpm; document.getElementById('ezOverlap').value=Math.round(forceOverlap*100);
+  }
+  function seedDemoPattern(){ seq.A.fill(0); seq.B.fill(0); seq.O.fill(0); for(let i=0;i<stepA;i+=3) seq.A[i]=1; for(let i=0;i<stepB;i+=4) seq.B[i]=1; for(let i=1;i<stepO;i+=2) seq.O[i]=1; if(navigator.vibrate) navigator.vibrate([10,30,10]); }
+
+  // ----- Onboarding defaults -----
+  applyPreset('nebula');
+
+  // ----- Animate -----
+  function animate(){ requestAnimationFrame(animate); renderer.render(scene,camera); }
+})();
+</script>
+</body>
+</html>

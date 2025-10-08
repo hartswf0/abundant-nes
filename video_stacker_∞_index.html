@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>VIDEO_STACKER_∞ — stack the TVs</title>
+  <meta name="description" content="Mobile-first Three.js + cannon-es stacking game. Each TV plays a different video. Bad placement → collapse → debris." />
+  
+  <!-- Import Map to resolve bare specifiers used by three.js addons -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <style>
+    :root{
+      --bg:#0a0b0f;--ink:#e9f0ff;--muted:#a8b5c7;--accent:#51e0c1;--warn:#ff5a5f;--ok:#65f28a;--glass:#86d1ff;
+      --panel:#121521;--panel-hi:#1b2030;--line:rgba(255,255,255,.1);
+      --btn:#1d2333;--btn-hi:#262e43;--btn-txt:#e8f4ff;
+      --led:#10ffc8;--led-dim:#063c2f;
+      --safe: env(safe-area-inset);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%;background:radial-gradient(120% 140% at 50% 0%, #121521 0%, #0a0b0f 50%, #07080c 100%);color:var(--ink);margin:0;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,Ubuntu,"Helvetica Neue",Arial,sans-serif}
+    #app{position:fixed;inset:0}
+    canvas{display:block;touch-action:none}
+
+    /* Topbar */
+    .topbar{position:fixed;left:0;right:0;top:0;padding:calc(env(safe-area-inset-top) + 2px) 10px 8px 10px;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(to bottom, rgba(5,6,9,.75), rgba(5,6,9,0));backdrop-filter:blur(8px);z-index:10}
+    .view-sel{display:flex;gap:8px}
+    .chip{padding:6px 10px;border-radius:12px;border:1px solid var(--line);background:var(--panel-hi);font-size:12px}
+    .kv.pill{display:inline-flex;align-items:center;gap:8px;padding:8px 10px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+    .tag{font-size:11px;color:var(--muted);letter-spacing:.3px}
+
+    /* Edge rails (Shorts‑style) */
+    .rail{position:fixed;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:10px;z-index:9}
+    .rail.right{right:8px;padding-right:calc(env(safe-area-inset-right));}
+    .rail.left{left:8px;padding-left:calc(env(safe-area-inset-left));}
+    .fab, .btn{appearance:none;border:1px solid var(--line);background:var(--btn);color:var(--btn-txt);border-radius:14px;padding:10px 12px;display:flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;box-shadow:0 8px 24px rgba(0,0,0,.35)}
+    .fab.primary{background:linear-gradient(180deg,#13261c,#0f1b15);border-color:#1b3c2d;color:#b7ffcf}
+    .btn.warn{background:linear-gradient(180deg,#2b1516,#1c1214);border-color:#3d2226;color:#ffc7c9}
+
+    /* Floating preview & stats */
+    .float{position:fixed;display:flex;gap:8px;z-index:9}
+    .float.tr{top:56px;right:8px;align-items:center}
+    .float.tl{top:56px;left:8px;align-items:center}
+    .stats{display:flex;gap:8px}
+    .pill{display:inline-flex;align-items:center;gap:8px;padding:8px 10px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+    .score{font-variant-numeric:tabular-nums}
+    .meter{width:120px;height:10px;background:var(--panel);border-radius:999px;position:relative;overflow:hidden;border:1px solid var(--line)}
+    .meter>i{position:absolute;inset:0;width:40%;background:linear-gradient(90deg, #1fe4b9, #4f8cff);transform-origin:left center;}
+
+    .preview{display:flex;align-items:center;gap:10px;padding:8px;border-radius:12px;background:var(--panel);border:1px solid var(--line);min-height:56px}
+    .preview canvas,.preview video{width:80px;height:45px;border-radius:8px;background:#000;border:1px solid #0004;object-fit:cover}
+
+    /* Hide old bottom HUD (kept for compatibility) */
+    .hud{display:none}
+
+    /* Overlay */
+    .overlay{position:fixed;inset:0;display:none;place-items:center;background:radial-gradient(80% 60% at 50% 30%, rgba(0,0,0,.6), rgba(0,0,0,.9));}
+    .card{width:min(560px,92vw);background:linear-gradient(180deg,#0f1420,#0b0f18);border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:0 10px 40px rgba(0,0,0,.45)}
+    .card h1{margin:0 0 8px 0;font-size:22px}
+    .card p{margin:6px 0;color:var(--muted)}
+
+    /* Test toast */
+    .toast{position:fixed;top:10px;left:10px;background:#0b0f18;border:1px solid var(--line);color:var(--ink);padding:8px 10px;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.35);font-size:12px;display:none;max-width:80vw;z-index:10}
+    .toast b{color:#9ff2c6}
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+
+  <!-- Top bar stays lean -->
+  <div class="topbar">
+    <div class="kv pill"><span>VIDEO_STACKER_∞</span><span class="tag">v1.0</span></div>
+    <div class="view-sel">
+      <button class="chip" data-view="front">Front</button>
+      <button class="chip" data-view="isoL">Iso L</button>
+      <button class="chip" data-view="isoR">Iso R</button>
+      <button class="chip" data-view="low">Low</button>
+      <button class="chip" data-view="top">Top</button>
+    </div>
+  </div>
+
+  <!-- Floating stats (top-left) -->
+  <div class="float tl">
+    <div class="stats">
+      <div class="pill kv"><b>Score</b><span id="score" class="score">0000</span></div>
+      <div class="pill kv"><b>Best</b><span id="best" class="score">0000</span></div>
+      <div class="pill kv"><b>Height</b><span id="height" class="score">0.00m</span></div>
+      <div class="pill kv"><b>Stability</b>
+        <div class="meter" title="Stack stability">
+          <i id="stabbar" style="transform:scaleX(1)"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Floating next preview (top-right) -->
+  <div class="float tr">
+    <div class="preview" id="nextPreview">
+      <div class="tag">Next</div>
+      <div class="meta">
+        <div class="tag">queued channel</div>
+        <div class="tag">mutates only when hidden</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Shorts‑style right rail: primary gameplay -->
+  <div class="rail right">
+    <button id="dropBtn" class="fab primary" title="DROP">DROP</button>
+    <button id="nL" class="btn" title="NUDGE left">◀</button>
+    <button id="nR" class="btn" title="NUDGE right">▶</button>
+    <button id="cull" class="btn warn" title="CULL">CULL</button>
+  </div>
+
+  <!-- Shorts‑style left rail: utility -->
+  <div class="rail left">
+    <button id="view" class="btn" title="Cycle view">⟲ VIEW</button>
+    <button id="mute" class="btn" title="Mute">MUTE</button>
+    <button id="replay" class="btn" title="Instant replay">REPLAY</button>
+  </div>
+
+  <!-- Kept (hidden) for compatibility with earlier code selections -->
+  <div class="hud" id="hud"></div>
+
+  <div class="overlay" id="over">
+    <div class="card">
+      <h1>Collapse — debris everywhere</h1>
+      <p id="final"></p>
+      <div class="row" style="margin-top:10px">
+        <button id="again" class="fab primary" style="width:100%">Play again</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+<script type="module">
+// ===== Imports (ESM using import map) =====
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import * as CANNON from 'https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js';
+
+// ===== Config (from POML spec) =====
+const CFG = {
+  TV:{w:0.6,d:0.45,h:0.4}, gapY:0.05, K:6, LIMIT:0.22, a:0.7,
+  gravity:-9.82, dprMax:1.5, shards:64, TTL:3,
+  fall:0.8, spawnY:6, spawnYrand:6,
+};
+
+// FEED: same-origin MP4s recommended; falls back to shader noise if load fails
+const FEED = [
+  '/videos/a.mp4','/videos/b.mp4','/videos/c.mp4'
+];
+
+// ===== State =====
+let scene, camera, renderer, controls;
+let world;
+let tvs = []; // {group, body, video, texture, material}
+let dropping = null; // current falling TV
+let score = 0, streak = 0, best = parseInt(localStorage.getItem('VS_BEST')||'0');
+let muted = true;
+let idleTimer = null;
+let camMode = 'front';
+let nextIndex = 0;
+let collapsed = false;
+
+// ===== Main loop timing (pre‑init to avoid TDZ) =====
+let last = performance.now();
+let step = (dt)=> world.step(1/120, dt, 5);
+
+// ===== DOM refs =====
+const $ = s=>document.querySelector(s);
+const scoreEl = $('#score');
+const bestEl = $('#best'); bestEl.textContent = pad(best);
+const heightEl = $('#height');
+const stabbar = $('#stabbar');
+const over = $('#over');
+const final = $('#final');
+const toast = $('#toast');
+
+// ===== Utils =====
+function pad(n, w=4){return String(n).padStart(w,'0')}
+const clamp=(x,a=0,b=1)=>Math.min(b,Math.max(a,x));
+function rand(a,b){return a+Math.random()*(b-a)}
+function makeMatFlat(color){return new THREE.MeshStandardMaterial({color,roughness:.95,metalness:.05})}
+function showToast(html){ toast.innerHTML=html; toast.style.display='block'; setTimeout(()=>toast.style.display='none', 3500); }
+
+// ===== Renderer / Scene =====
+initThree();
+initWorld();
+makeRoom();
+updateCam('front', true);
+makeLights();
+
+// HUD events (IDs unchanged)
+$('#dropBtn').onclick = dropTV;
+$('#nL').onclick = ()=> nudge(-1);
+$('#nR').onclick = ()=> nudge(+1);
+$('#cull').onclick = cull;
+$('#view').onclick = cycleView;
+$('#mute').onclick = toggleMute;
+$('#replay').onclick = resetGame;
+$('#again').onclick = resetGame;
+for(const b of document.querySelectorAll('[data-view]')) b.onclick = e=>updateCam(e.target.dataset.view);
+
+setupNextPreview();
+resetIdle();
+loop();
+
+// Auto-tests if ?test=1
+const params = new URLSearchParams(location.search);
+if(params.get('test')==='1') runSelfTests();
+
+// ===== Functions =====
+function initThree(){
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color('#0b0e14');
+  camera = new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 0.1, 200);
+  renderer = new THREE.WebGLRenderer({antialias:true,alpha:false,powerPreference:'high-performance'});
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.setPixelRatio(Math.min(devicePixelRatio||1, CFG.dprMax));
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  $('#app').appendChild(renderer.domElement);
+  controls = new OrbitControls(camera, renderer.domElement); controls.enabled=false;
+  addEventListener('resize', debounce(()=>{
+    camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+  }, 150));
+}
+
+function initWorld(){
+  world = new CANNON.World({gravity: new CANNON.Vec3(0, CFG.gravity, 0)});
+  world.broadphase = new CANNON.SAPBroadphase(world);
+  world.allowSleep = true;
+  // Floor
+  const groundShape = new CANNON.Plane();
+  const groundBody = new CANNON.Body({mass:0, shape:groundShape, material:new CANNON.Material('floor')});
+  groundBody.quaternion.setFromEuler(-Math.PI/2,0,0);
+  world.addBody(groundBody);
+
+  const matTV = new CANNON.Material('tv');
+  const ctv = new CANNON.ContactMaterial(matTV, groundBody.material, {friction:0.6, restitution:0.05});
+  world.addContactMaterial(ctv);
+
+  // Visual floor
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(20, 20), new THREE.MeshStandardMaterial({color:'#0e1220', roughness:1, metalness:0}));
+  floor.rotation.x = -Math.PI/2; floor.receiveShadow = true; scene.add(floor);
+
+  // Low walls to catch debris
+  const rim = new THREE.Mesh(new THREE.BoxGeometry(20,0.3,20), makeMatFlat('#0d1322'));
+  rim.position.y = -0.15; rim.receiveShadow = true; scene.add(rim);
+}
+
+function makeRoom(){
+  // faint fog / backdrop pillars for scale
+  scene.fog = new THREE.Fog('#0b0e14', 15, 80);
+  const geo = new THREE.CylinderGeometry(0.06,0.06,8,12);
+  for(let i=0;i<8;i++){
+    const m = makeMatFlat('#1a2438');
+    const p = new THREE.Mesh(geo, m); p.position.set(Math.cos(i)*3.2,4,Math.sin(i)*3.2); p.castShadow=true; p.receiveShadow=true; scene.add(p);
+  }
+}
+
+function makeLights(){
+  const amb = new THREE.AmbientLight('#445', 0.6); scene.add(amb);
+  const dir = new THREE.DirectionalLight('#9fb8ff', 0.9); dir.position.set(5,8,6); dir.castShadow = true; dir.shadow.mapSize.set(1024,1024); dir.shadow.camera.top=8; dir.shadow.camera.bottom=-4; dir.shadow.camera.left=-6; dir.shadow.camera.right=6; scene.add(dir);
+  const fill = new THREE.PointLight('#46e2c2', 0.4, 10); fill.position.set(-2,2,3); scene.add(fill);
+  const rim = new THREE.PointLight('#ff7a1a', 0.4, 12); rim.position.set(3,3,-2); scene.add(rim);
+}
+
+function updateCam(mode, instant=false){
+  camMode = mode;
+  let p, t = new THREE.Vector3(0,1.4,0);
+  const y = Math.max(getTopY()+1.2, 2.5);
+  if(mode==='front') p = new THREE.Vector3(0, y, 6);
+  else if(mode==='isoL') p = new THREE.Vector3(-4.5, y+0.5, 5.5);
+  else if(mode==='isoR') p = new THREE.Vector3(4.5, y+0.5, 5.5);
+  else if(mode==='low') p = new THREE.Vector3(0, 1.5, 8);
+  else if(mode==='top') p = new THREE.Vector3(0, y+6, 0.01);
+  if(instant){ camera.position.copy(p); camera.lookAt(t); return; }
+  tweenVec3(camera.position, p, 320);
+  setTimeout(()=>camera.lookAt(t), 320);
+}
+
+function cycleView(){
+  const order=['front','isoL','isoR','low','top'];
+  const i=(order.indexOf(camMode)+1)%order.length; updateCam(order[i]);
+}
+
+function setupNextPreview(){
+  const box = document.getElementById('nextPreview');
+  box.innerHTML = '';
+  const vid = document.createElement('video');
+  vid.muted = true; vid.loop = true; vid.playsInline = true; vid.autoplay = true; vid.src = FEED[nextIndex%FEED.length]||'';
+  const meta = document.createElement('div'); meta.className='meta'; meta.innerHTML = `<div class="tag">${(vid.src||'noise').split('/').pop()}</div><div class="tag">queued channel</div>`;
+  box.appendChild(vid); box.appendChild(meta);
+  vid.play().catch(()=>{ // fallback: canvas noise
+    box.removeChild(vid);
+    const c = document.createElement('canvas'); c.width=160; c.height=90; box.prepend(c);
+    const ctx=c.getContext('2d');
+    (function anim(){
+      const img = ctx.createImageData(c.width,c.height);
+      for(let i=0;i<img.data.length;i+=4){
+        const n = (Math.random()*255)|0; img.data[i]=img.data[i+1]=img.data[i+2]=n; img.data[i+3]=255;
+      }
+      ctx.putImageData(img,0,0); if(!collapsed) requestAnimationFrame(anim);
+    })();
+  });
+}
+
+// === TV Factory ===
+async function makeTV(videoURL){
+  const g = new THREE.Group();
+
+  // shell
+  const shell = new THREE.Mesh(new THREE.BoxGeometry(CFG.TV.w, CFG.TV.h, CFG.TV.d), makeMatFlat('#1e2638'));
+  shell.castShadow = true; shell.receiveShadow = true; g.add(shell);
+
+  // LED strip
+  const led = new THREE.Mesh(new THREE.PlaneGeometry(CFG.TV.w*0.7, 0.02), new THREE.MeshBasicMaterial({color:'#10ffc8'}));
+  led.position.set(0, -CFG.TV.h*0.5+0.03, CFG.TV.d*0.5+0.001); g.add(led);
+
+  // screen frame
+  const frame = new THREE.Mesh(new THREE.BoxGeometry(CFG.TV.w*0.9, CFG.TV.h*0.7, 0.02), makeMatFlat('#0b0f18'));
+  frame.position.z = CFG.TV.d*0.5 + 0.011; frame.castShadow=true; g.add(frame);
+
+  // video plane (slightly recessed to avoid z-fight)
+  const planeGeo = new THREE.PlaneGeometry(CFG.TV.w*0.88, (CFG.TV.w*0.88)*9/16);
+
+  // glass shader material (scanlines + slight chroma)
+  const glassMat = new THREE.ShaderMaterial({
+    transparent:true,
+    uniforms:{ uTime:{value:0}, uTint:{value:new THREE.Color('#86d1ff')}, uAlpha:{value:0.18} },
+    vertexShader:`varying vec2 vUv; void main(){ vUv=uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0);} `,
+    fragmentShader:`
+      varying vec2 vUv; uniform float uTime; uniform vec3 uTint; uniform float uAlpha;
+      void main(){
+        float scan = 0.1*sin(vUv.y*800.0 + uTime*8.0);
+        float vign = smoothstep(0.0,0.9,length(vUv-0.5));
+        vec3 col = mix(vec3(0.0), uTint, 0.2+0.2*scan);
+        float a = uAlpha * (1.0 - 0.6*vign);
+        gl_FragColor = vec4(col, a);
+      }`
+  });
+
+  // try video (await the async factory)
+  const {mesh:screen, video, texture, material} = await makeVideoScreen(planeGeo, videoURL, glassMat);
+  screen.position.z = CFG.TV.d*0.5 + 0.012; g.add(screen);
+
+  return {group:g, video, texture, material};
+}
+
+function makeVideoScreen(geo, url, glassMat){
+  const video = document.createElement('video');
+  video.crossOrigin = 'anonymous';
+  video.playsInline = true; video.muted = true; video.loop = true; video.autoplay = true; if(url) video.src = url;
+  let texture, vidMat;
+  const obj = new THREE.Group();
+  const scr = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({color:'#000'}));
+  obj.add(scr);
+  const glass = new THREE.Mesh(geo, glassMat); glass.renderOrder=2; obj.add(glass);
+
+  const onFail = ()=>{
+    // noise shader fallback
+    const mat = new THREE.ShaderMaterial({
+      uniforms:{ uTime:{value:0} },
+      vertexShader:`varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);} `,
+      fragmentShader:`varying vec2 vUv; uniform float uTime; float n(vec2 p){return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453);} void main(){ float g = n(vUv*vec2(1024.0,576.0)+uTime); gl_FragColor=vec4(vec3(g),1.0);} `
+    });
+    const plane = new THREE.Mesh(geo, mat); plane.renderOrder=1; obj.add(plane);
+    return {mesh:obj, video:null, texture:null, material:mat};
+  };
+
+  const tryPlay = async()=>{
+    try{ await video.play(); }catch(e){}
+    if(!video.currentTime && !video.readyState){ return onFail(); }
+    texture = new THREE.VideoTexture(video); texture.colorSpace = THREE.SRGBColorSpace; texture.minFilter = THREE.LinearFilter; texture.magFilter=THREE.LinearFilter; texture.generateMipmaps=false;
+    vidMat = new THREE.MeshBasicMaterial({map:texture});
+    const plane = new THREE.Mesh(geo, vidMat); plane.renderOrder=1; obj.add(plane);
+    return {mesh:obj, video, texture, material:vidMat};
+  };
+
+  // attempt immediately; if blocked, fall back
+  return tryPlay();
+}
+
+async function dropTV(){
+  if(collapsed || dropping) return; resetIdle();
+  // Build TV visual
+  const src = FEED[nextIndex%FEED.length];
+  nextIndex++;
+  setupNextPreview(); // Eno seam: mutate when queued (hidden)
+  const tv = await makeTV(src);
+  if(!tv || !tv.group) return;
+
+  const y = CFG.spawnY + rand(0, CFG.spawnYrand) + getTopY();
+  tv.group.position.set(rand(-0.4,0.4), y, rand(-0.15,0.15));
+  scene.add(tv.group);
+
+  // Physics body
+  const shape = new CANNON.Box(new CANNON.Vec3(CFG.TV.w/2, CFG.TV.h/2, CFG.TV.d/2));
+  const body = new CANNON.Body({mass:3, material:new CANNON.Material('tv')});
+  body.addShape(shape);
+  body.position.set(tv.group.position.x, tv.group.position.y, tv.group.position.z);
+  body.angularDamping = 0.45; body.linearDamping = 0.05; body.sleepSpeedLimit = 0.15; body.sleepTimeLimit=0.8;
+  world.addBody(body);
+
+  tv.body = body; tv.group.userData.body = body;
+  tvs.push(tv); dropping = tv;
+}
+
+function nudge(dir){
+  if(!dropping || collapsed) return; resetIdle();
+  const imp = new CANNON.Vec3(0.25*dir, 0, 0);
+  dropping.body.applyImpulse(imp, dropping.body.position);
+}
+
+function cull(){
+  if(collapsed || !tvs.length) return; resetIdle();
+  // Remove bottom-most visible TV (mutate rule allows channel changes when hidden/culled)
+  const tv = tvs.shift();
+  if(tv.body){ world.removeBody(tv.body); }
+  if(tv.group){ scene.remove(tv.group); disposeTV(tv); }
+  streak = 0; updateScore(+0, true);
+}
+
+function disposeTV(tv){
+  if(tv.texture){ tv.texture.dispose(); }
+  if(tv.material && tv.material.map) tv.material.map.dispose();
+}
+
+function getTopY(){
+  let max = 0; for(const tv of tvs){ max = Math.max(max, tv.group.position.y + CFG.TV.h/2); } return max;
+}
+
+function updateHUD(){
+  // height
+  const h = getTopY(); heightEl.textContent = h.toFixed(2)+'m';
+  // stability
+  const s = stability(); stabbar.style.transform = `scaleX(${clamp(s,0,1)})`;
+}
+
+function stability(){
+  // Approximate: COM of last K bodies projected to ground vs bounding footprint rectangle
+  const K = CFG.K; const items = tvs.slice(-K);
+  if(items.length<2) return 1;
+  let sum = new CANNON.Vec3(0,0,0); let minx=1e9,maxx=-1e9,minz=1e9,maxz=-1e9;
+  for(const tv of items){
+    const p = tv.body.position; sum.vadd(p, sum); minx=Math.min(minx, p.x-CFG.TV.w/2); maxx=Math.max(maxx, p.x+CFG.TV.w/2); minz=Math.min(minz, p.z-CFG.TV.d/2); maxz=Math.max(maxz, p.z+CFG.TV.d/2);
+  }
+  const com = sum.scale(1/items.length);
+  const cx = (minx+maxx)/2, cz=(minz+maxz)/2;
+  const dx = Math.abs(com.x-cx)/( (maxx-minx)/2 + 1e-3 );
+  const dz = Math.abs(com.z-cz)/( (maxz-minz)/2 + 1e-3 );
+  const overhang = Math.max(dx,dz) - 1.0; // >0 means beyond footprint
+  const metric = 1 - ( (Math.max(dx,dz)) * CFG.LIMIT + CFG.a*Math.max(0,overhang) );
+  return metric;
+}
+
+function onSettle(tv){
+  // scoring
+  const clean = Math.abs(tv.body.velocity.x)<0.05 && Math.abs(tv.body.velocity.z)<0.05 && Math.abs(tv.body.angularVelocity.y)<0.05;
+  const gain = 10 + Math.round(tv.group.position.y*2) + (clean?5:0);
+  streak = clean? (streak+1) : 0;
+  updateScore(gain);
+}
+
+function updateScore(delta=0, noStreak=false){
+  score += delta; if(noStreak) streak=0; scoreEl.textContent = pad(score);
+  if(score>best){ best=score; localStorage.setItem('VS_BEST', String(best)); bestEl.textContent = pad(best); }
+}
+
+function collapse(){
+  if(collapsed) return; collapsed = true;
+  // slow-mo
+  const origStep = step;
+  step = (dt)=>origStep(dt*0.3);
+
+  // burst impulse on top cluster
+  const items = tvs.slice(-CFG.K);
+  for(const tv of items){ tv.body.applyImpulse(new CANNON.Vec3(rand(-1,1), rand(1,2), rand(-1,1)), tv.body.position); }
+
+  spawnDebris();
+  setTimeout(()=>{
+    over.style.display='grid'; final.textContent = `Final score ${score} • Height ${(getTopY()).toFixed(2)}m • Streak ${streak}`;
+  }, 650);
+}
+
+function spawnDebris(){
+  for(let i=0;i<CFG.shards;i++){
+    const s = rand(0.02,0.06);
+    const m = new THREE.Mesh(new THREE.BoxGeometry(s,s,s), makeMatFlat('#2a3550'));
+    m.position.set(rand(-0.5,0.5), getTopY()+rand(0.0,1.5), rand(-0.3,0.3)); m.castShadow=true; scene.add(m);
+    const b = new CANNON.Body({mass:0.02}); b.addShape(new CANNON.Box(new CANNON.Vec3(s/2,s/2,s/2))); b.position.copy(m.position); world.addBody(b);
+    b.applyImpulse(new CANNON.Vec3(rand(-0.6,0.6), rand(0.6,1.2), rand(-0.6,0.6)), b.position);
+    m.userData.body = b;
+    setTimeout(()=>{ scene.remove(m); world.removeBody(b); }, CFG.TTL*1000);
+  }
+}
+
+function toggleMute(){
+  muted = !muted; for(const tv of tvs){ if(tv.video) tv.video.muted = muted; } $('#mute').textContent = muted? 'MUTE' : 'UNMUTE';
+}
+
+function resetGame(){
+  // clear physics & scene
+  over.style.display='none'; collapsed=false; step=(dt)=>world.step(1/120, dt, 5);
+  for(const tv of tvs){ if(tv.video){ try{tv.video.pause();}catch{} } if(tv.body) world.removeBody(tv.body); if(tv.group) scene.remove(tv.group); disposeTV(tv); }
+  tvs.length=0; dropping=null; score=0; streak=0; scoreEl.textContent=pad(0); heightEl.textContent='0.00m';
+}
+
+// ===== Idle → Hiss Mode =====
+function resetIdle(){ clearTimeout(idleTimer); idleTimer=setTimeout(()=>{ hissMode(true); }, 15000); }
+let hiss = null;
+function hissMode(on){
+  if(on){ if(hiss) return; hiss = makeHissTV(); scene.add(hiss.group); showToast('<b>Hiss mode</b> — idle noise'); } else { if(!hiss) return; scene.remove(hiss.group); hiss=null; }
+}
+function makeHissTV(){
+  const tv = {group:new THREE.Group()};
+  const shell = new THREE.Mesh(new THREE.BoxGeometry(CFG.TV.w, CFG.TV.h, CFG.TV.d), makeMatFlat('#1e2638')); tv.group.add(shell);
+  const geo = new THREE.PlaneGeometry(CFG.TV.w*0.88, (CFG.TV.w*0.88)*9/16);
+  const mat = new THREE.ShaderMaterial({
+    uniforms:{ uTime:{value:0} },
+    vertexShader:`varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);} `,
+    fragmentShader:`varying vec2 vUv; uniform float uTime; float n(vec2 p){return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453);} void main(){ float g = n(vUv*vec2(1024.0,576.0)+uTime*3.0); gl_FragColor=vec4(vec3(g),1.0);} `
+  });
+  const screen = new THREE.Mesh(geo, mat); screen.position.z = CFG.TV.d*0.5+0.012; tv.group.add(screen);
+  tv.group.position.set(0, 0.25, 1.2);
+  return tv;
+}
+
+// ===== Main loop =====
+function loop(now=performance.now()){
+  requestAnimationFrame(loop);
+  const dt = Math.min((now-last)/1000, 0.033); last = now;
+  step(dt);
+
+  // sync meshes ↔ bodies
+  for(const tv of tvs){ if(tv.body){ tv.group.position.copy(tv.body.position); tv.group.quaternion.copy(tv.body.quaternion); }}
+
+  // detect settle of dropping TV
+  if(dropping && dropping.body.sleepState === CANNON.Body.SLEEPING){ onSettle(dropping); dropping = null; }
+
+  // update glass shaders & fallback shaders
+  scene.traverse(obj=>{
+    if(obj.material && obj.material.uniforms && obj.material.uniforms.uTime){ obj.material.uniforms.uTime.value = now*0.001; }
+  });
+
+  // camera follow top
+  if(!controls.enabled && (camMode==='front'||camMode==='isoL'||camMode==='isoR'||camMode==='low')){
+    const targetY = Math.max(getTopY()+1.2, 2.5);
+    const p = camera.position; if(camMode==='front'){ p.y += (targetY - p.y)*0.04; }
+    else if(camMode==='isoL' || camMode==='isoR'){ p.y += (targetY - p.y)*0.04; }
+  }
+
+  updateHUD();
+  
+  // collapse check
+  if(!collapsed){ const s = stability(); if(s<0) collapse(); }
+
+  renderer.render(scene, camera);
+}
+
+// ===== Helpers =====
+function tweenVec3(from, to, ms){
+  const a = {x:from.x,y:from.y,z:from.z};
+  const b = {x:to.x,y:to.y,z:to.z};
+  const t0 = performance.now();
+  (function anim(){
+    const t = (performance.now()-t0)/ms; const k = t>=1?1:t; const e = 1- Math.pow(1-k, 3);
+    camera.position.set(a.x + (b.x-a.x)*e, a.y + (b.y-a.y)*e, a.z + (b.z-a.z)*e);
+    if(k<1) requestAnimationFrame(anim);
+  })();
+}
+function debounce(fn, ms){ let to; return (...args)=>{ clearTimeout(to); to=setTimeout(()=>fn.apply(null,args), ms); } }
+
+// ===== Mobile gestures (quick taps) =====
+let touchX=null; addEventListener('touchstart', e=>{ touchX=e.touches[0].clientX; }, {passive:true});
+addEventListener('touchend', e=>{ if(touchX==null) return; const dx=(e.changedTouches[0].clientX - touchX); if(Math.abs(dx)>40){ nudge(Math.sign(dx)); } else { dropTV(); } touchX=null; }, {passive:true});
+
+// ===== Self-test harness (run with ?test=1) =====
+function delay(ms){return new Promise(r=>setTimeout(r,ms));}
+async function runSelfTests(){
+  const results = [];
+  const ok = (name, cond)=>results.push({name, pass:!!cond});
+  try{
+    ok('Three loaded', !!THREE && typeof THREE.Scene==='function');
+    ok('OrbitControls available', !!OrbitControls);
+    ok('Cannon-es loaded', !!CANNON && typeof CANNON.World==='function');
+    ok('last initialized before loop', typeof last==='number' && isFinite(last));
+    ok('step function defined', typeof step==='function');
+    // world step sanity
+    const before = performance.now(); world.step(1/120, 1/60, 3); ok('World step executes', performance.now()>=before);
+    const baseCount = tvs.length; await dropTV(); await delay(1200); ok('Drop spawns a TV', tvs.length>baseCount);
+    ok('Stability numeric', Number.isFinite(stability()));
+  }catch(e){ results.push({name:'Harness error', pass:false, err:e}); }
+  const passed = results.filter(r=>r.pass).length;
+  console.table(results);
+  showToast(`Self‑tests: <b>${passed}/${results.length}</b> passed`);
+}
+
+</script>
+</body>
+</html>

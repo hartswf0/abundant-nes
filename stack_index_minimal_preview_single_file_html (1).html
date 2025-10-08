@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>VOL‑MEDIA DECKS v6 — Stacks of Stacks (2‑Row Hub, AV‑Linked)</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;touch-action:none}
+  html,body{height:100%}
+  body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:#000;color:#fff;overflow:hidden}
+  #canvas{width:100vw;height:100vh;display:block}
+  #toast{position:fixed;bottom:10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.85);border:1px solid rgba(255,255,255,.2);padding:6px 10px;border-radius:10px;font-size:12px;color:#fff;z-index:6;display:none}
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+<div id="toast"></div>
+<script>
+(async function(){
+  // ---- Load THREE safely if absent
+  if(!window.THREE){
+    const CDNs=['https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js','https://unpkg.com/three@0.152.2/build/three.min.js','https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js'];
+    for(const src of CDNs){ try{ await new Promise((res,rej)=>{const s=document.createElement('script'); s.src=src; s.onload=res; s.onerror=rej; document.head.appendChild(s)}); if(window.THREE) break; }catch(e){} }
+  }
+
+  // ===== Scene =====
+  const canvas=document.getElementById('canvas');
+  const scene=new THREE.Scene(); scene.background=new THREE.Color(0x000000);
+  const camera=new THREE.PerspectiveCamera(54, innerWidth/innerHeight, .1, 3000); camera.position.set(80,56,96); camera.lookAt(0,12,0);
+  const renderer=new THREE.WebGLRenderer({canvas,antialias:true}); renderer.setSize(innerWidth,innerHeight); renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
+  addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight)});
+
+  // Lighting
+  scene.add(new THREE.AmbientLight(0xffffff,.22));
+  const key=new THREE.PointLight(0x66ddff,1.6,520); key.position.set(0,70,120); scene.add(key);
+  const warm=new THREE.PointLight(0xffaa66,1.1,460); warm.position.set(90,52,-60); scene.add(warm);
+  const rim=new THREE.DirectionalLight(0xffffff,.55); rim.position.set(-80,110,-40); scene.add(rim);
+
+  // ===== Utility / UI bits =====
+  function mkSprite(text){ const cvs=document.createElement('canvas'); const s=256; cvs.width=cvs.height=s; const ctx=cvs.getContext('2d'); ctx.clearRect(0,0,s,s); ctx.fillStyle='rgba(0,0,0,0)'; ctx.fillRect(0,0,s,s); ctx.fillStyle='white'; ctx.font='bold 48px Inter, system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.shadowColor='rgba(0,0,0,0.6)'; ctx.shadowBlur=12; ctx.fillText(text,s/2,s/2); const tex=new THREE.CanvasTexture(cvs); const mat=new THREE.SpriteMaterial({map:tex,transparent:true,depthWrite:false}); const spr=new THREE.Sprite(mat); spr.scale.set(8,8,1); return spr; }
+  function updateSpriteText(sprite,txt){ const t = sprite.material.map.image; const ctx=t.getContext('2d'); const s=t.width; ctx.clearRect(0,0,s,s); ctx.fillStyle='rgba(0,0,0,0)'; ctx.fillRect(0,0,s,s); ctx.fillStyle='#ffffff'; ctx.font='bold 48px Inter, system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.shadowColor='rgba(0,0,0,0.7)'; ctx.shadowBlur=14; ctx.fillText(txt,s/2,s/2); sprite.material.map.needsUpdate=true; }
+  const viewLabel=mkSprite('FRONT'); viewLabel.position.set(0, 48, 0); scene.add(viewLabel);
+  function showViewLabel(txt){ updateSpriteText(viewLabel, txt); }
+
+  // ===== Camera Presets =====
+  const VIEWS=[
+    {name:'FRONT',pos:[0,34,110]},
+    {name:'ISO L',pos:[-85,42,70]},
+    {name:'ISO R',pos:[85,42,70]},
+    {name:'SIDE',pos:[0,36,-110]},
+    {name:'TOP',pos:[0,130,0.01]}
+  ];
+  let viewIdx=1, orbit=false, orbitSpeed=18, tOrbit=0, dist=120; // camera globals
+  function applyView(){ const v=VIEWS[viewIdx%VIEWS.length]; camera.position.set(...v.pos); camera.lookAt(0,12,0); showViewLabel(v.name); }
+
+  // ===== State =====
+  const CRATES=[
+    {id:'70s', name:'1970s', col:0xffa44d, voice:'tape'},
+    {id:'80s', name:'1980s', col:0x59e0ff, voice:'fm'},
+    {id:'90s', name:'1990s', col:0x7da1ff, voice:'breaks'},
+    {id:'00s', name:'2000s', col:0xffffff, voice:'supersaw'},
+    {id:'10s', name:'2010s', col:0x00d4aa, voice:'trap'},
+    {id:'20s', name:'2020s', col:0xc47dff, voice:'neural'}
+  ];
+
+  const decks={
+    A:{color:0x00ff88, crate:CRATES[1], steps:16, root:110, scale:'minorPent', spacing:1.12, layers:16, size:1.0, seq:Array(32).fill(0), tune:Array(32).fill(0), phase:0, group:null, plates:[], subs:{}},
+    B:{color:0xff4488, crate:CRATES[3], steps:16, root:220, scale:'majorPent', spacing:1.12, layers:16, size:1.0, seq:Array(32).fill(0), tune:Array(32).fill(0), phase:0, group:null, plates:[], subs:{}}
+  };
+
+  // Global engine vars
+  let bpm=112, energy=.45, resonance=.5, playing=false, xf=0; // xf -1..+1 (A..B)
+  let AC, master, convolver, wet, dry, voices={A:null,B:null}; let voicesReady=false;
+
+  const MAX_PLATES=28, SIZE=12;
+
+  // ===== Base builders =====
+  function mkPlate(color,op){ const g=new THREE.PlaneGeometry(SIZE,SIZE); const m=new THREE.MeshStandardMaterial({color,transparent:true,opacity:op,side:THREE.DoubleSide,depthWrite:false,roughness:.55,metalness:.08}); const mesh=new THREE.Mesh(g,m); mesh.rotation.x=-Math.PI/2; m.emissive=new THREE.Color(color); m.emissiveIntensity=.22; return mesh; }
+
+  // ===== Primary Decks =====
+  let sepBase=30, sepMin=8, sepX=sepBase, couple=0.0; // couple 0..1 controls attractive overlap when crossfader near center
+  function updateCoupledSeparation(){ const t=Math.abs(xf); const blend = couple*(1 - t); sepX = lerp(sepBase, sepMin, blend); applySeparation(); updateAudioLinks(); }
+
+  function buildDeck(which, x){ const d=decks[which]; if(d.group){ scene.remove(d.group); d.plates.forEach(p=>{p.geometry.dispose?.(); p.material.dispose?.();}); d.plates.length=0; }
+    const g=new THREE.Group(); g.position.set(x,0,0);
+    for(let i=0;i<MAX_PLATES;i++){ const base=.9-(i/MAX_PLATES)*.55; const p=mkPlate(d.color,Math.max(.22,base*.5)); p.position.y=i*d.spacing; g.add(p); d.plates.push(p); }
+    const tag=mkSprite(which); tag.position.set(0,2,0); g.add(tag); d.subs.tag=tag;
+    scene.add(g); d.group=g; refreshDeckVisual(which,true);
+  }
+  buildDeck('A',-sepX); buildDeck('B',sepX);
+
+  function refreshDeckVisual(which){ const d=decks[which]; const activeColor=new THREE.Color(d.color).lerp(new THREE.Color(0xffffff), 0.3*resonance);
+    const baseScale=d.size*(1+0.06*energy); const EI=0.18+0.6*energy; const OP=0.3+0.6*energy; d.plates.forEach((p,i)=>{
+      const vis=i<d.layers; p.visible=vis; if(!vis) return; p.position.y=i*d.spacing; p.scale.set(baseScale,1,baseScale);
+      p.material.color.copy(activeColor); p.material.emissive.copy(new THREE.Color(d.color));
+      p.material.emissiveIntensity = EI*(0.95 - (i/Math.max(1,d.layers))*0.5);
+      p.material.opacity = OP*(0.95 - (i/Math.max(1,d.layers))*0.4);
+    });
+  }
+  function applySeparation(){ decks.A.group.position.x=-sepX; decks.B.group.position.x=sepX; hub.group.position.x=0; overlap.group.position.x=0; }
+  function applyAll(){ refreshDeckVisual('A'); refreshDeckVisual('B'); refreshOverlapVisual(); refreshHub(); applySeparation(); updateAudioLinks(); }
+
+  // ===== Overlap musical stack =====
+  const overlap={color:0xffaa00, steps:16, spacing:1.12, layers:12, seq:Array(32).fill(0), tune:Array(32).fill(0), phase:0, group:null, plates:[]};
+  (function buildOverlap(){ const g=new THREE.Group(); g.position.set(0,0,0); overlap.group=g; for(let i=0;i<MAX_PLATES;i++){ const p=mkPlate(overlap.color, .16); p.position.y=i*overlap.spacing; g.add(p); overlap.plates.push(p);} scene.add(g); refreshOverlapVisual(); })();
+  function refreshOverlapVisual(){ const EI=.12+.5*energy; const OP=.18+.5*energy; for(let i=0;i<overlap.plates.length;i++){ const p=overlap.plates[i]; const vis=i<overlap.layers; p.visible=vis; if(!vis) continue; p.position.y=i*overlap.spacing; p.material.emissiveIntensity = EI*(0.95 - (i/Math.max(1,overlap.layers))*0.5); p.material.opacity = OP*(0.95 - (i/Math.max(1,overlap.layers))*0.4); } }
+
+  // ===== HUB — two rows at bottom (max 5 per row) =====
+  const hub={group:new THREE.Group(), shown:true, stacks:[], layout:{cols:5, rowGap:1.6, colGap:12, yBottom:-6}}; scene.add(hub.group);
+  function buildHub(){
+    const defs=[
+      {name:'BPM', color:0x59e0ff, getter:()=>bpm, setter:v=>{ bpm=clamp(Math.round(v),60,180); }, min:60, max:180},
+      {name:'ENERGY', color:0x00ff88, getter:()=>energy*100, setter:v=>{ energy=clamp(v/100,0,1) }, min:0, max:100},
+      {name:'RES', color:0xffa44d, getter:()=>resonance*100, setter:v=>{ resonance=clamp(v/100,0,1) }, min:0, max:100},
+      {name:'MIX', color:0xff4488, getter:()=>((xf+1)/2)*100, setter:v=>{ setXF((clamp(v,0,100)/100)*2-1) }, min:0, max:100},
+      {name:'SIZE', color:0xffffff, getter:()=>Math.round(decks.A.size*100), setter:v=>{ const s=clamp(v,70,160)/100; decks.A.size=decks.B.size=s; }, min:70, max:160},
+      {name:'SEP', color:0x7da1ff, getter:()=>sepBase, setter:v=>{ sepBase=clamp(v,8,120); updateCoupledSeparation(); }, min:8, max:120},
+      {name:'LAYERS', color:0xc47dff, getter:()=>Math.round((decks.A.layers+decks.B.layers)/2), setter:v=>{ const L=clamp(Math.round(v),6,MAX_PLATES); decks.A.layers=L; decks.B.layers=L; }, min:6, max:MAX_PLATES},
+      {name:'COUPLE', color:0x00d4aa, getter:()=>Math.round(couple*100), setter:v=>{ couple=clamp(v,0,100)/100; updateCoupledSeparation(); }, min:0, max:100},
+      {name:'VIEW', color:0x9ad7ff, getter:()=>viewIdx*20, setter:v=>{ viewIdx=Math.round(clamp(v/20,0,VIEWS.length-1)); applyView(); }, min:0, max:(VIEWS.length-1)*20},
+      {name:'ORBIT', color:0xff88cc, getter:()=>orbit?orbitSpeed:0, setter:v=>{ orbit = v>1; orbitSpeed = clamp(v,0,40); }, min:0, max:40}
+    ];
+    const N=defs.length; const cols=Math.min(hub.layout.cols,N); const rows=Math.ceil(N/cols); const offsetX=(i)=>{ const c=i%cols; return (c-(cols-1)/2)*hub.layout.colGap };
+    const offsetY=(i)=>{ const r=Math.floor(i/cols); return hub.layout.yBottom + r*hub.layout.rowGap };
+    defs.forEach((d,i)=>{ const g=new THREE.Group(); g.position.set(offsetX(i), offsetY(i), 0); const plates=[]; const P=16; for(let j=0;j<P;j++){ const p=mkPlate(d.color, 0.22); p.position.y=j*1.15; g.add(p); plates.push(p); } const tag=mkSprite(d.name); tag.position.set(0, P*1.15+2, 0); g.add(tag); hub.group.add(g); hub.stacks.push({def:d, group:g, plates, tag}); });
+  }
+  buildHub();
+  function refreshHub(){ hub.stacks.forEach(S=>{ const v=clamp((S.def.getter()-S.def.min)/(S.def.max-S.def.min),0,1); const nOn=Math.round(v*S.plates.length); S.plates.forEach((p,idx)=>{ p.visible=true; const on=idx<nOn; p.material.opacity = on? 0.72 : 0.12; p.material.emissiveIntensity = on? 0.9 : 0.15; p.scale.set(1+(on?0.08:0),1,1+(on?0.08:0)); }); }); }
+
+  // ===== Gestures =====
+  const ray=new THREE.Raycaster(); const v2=new THREE.Vector2();
+  function pickAt(clientX,clientY,objects){ v2.x=(clientX/innerWidth)*2-1; v2.y=-(clientY/innerHeight)*2+1; ray.setFromCamera(v2,camera); return ray.intersectObjects(objects); }
+
+  // Deck gestures
+  let dragging=false, activeDeck=null, mode=null, start={x:0,y:0}, hold=false, tuneIdx=null;
+  canvas.addEventListener('pointerdown',ev=>{
+    const hits=pickAt(ev.clientX,ev.clientY,[...decks.A.plates,...decks.B.plates]);
+    if(!hits.length){ return; }
+    const mesh=hits[0].object; const which = decks.A.plates.includes(mesh)?'A':'B'; activeDeck=which; dragging=true; start.x=ev.clientX; start.y=ev.clientY; hold=true; tuneIdx=(which==='A'?decks.A.plates.indexOf(mesh):decks.B.plates.indexOf(mesh));
+    setTimeout(()=>{ if(hold){ mode='tune'; showTuner(which,tuneIdx,0); if(navigator.vibrate) navigator.vibrate(7); } },280);
+  });
+  canvas.addEventListener('pointermove',ev=>{
+    if(!dragging||!activeDeck) return; const dx=ev.clientX-start.x; const dy=ev.clientY-start.y; const d=decks[activeDeck];
+    if(mode==='tune'){
+      const st=clamp(Math.round(-dy/12),-12,12); setTune(activeDeck,tuneIdx,st); showTuner(activeDeck,tuneIdx,st); previewTone(activeDeck,tuneIdx,st);
+    } else {
+      hold=false;
+      if(Math.abs(dy)>Math.abs(dx)){
+        d.spacing = clamp(d.spacing + (-dy)*0.002, 0.6, 2.0); start.y=ev.clientY; refreshDeckVisual(activeDeck); updateAudioLinks();
+      } else {
+        setXF(xf + dx*0.004); start.x=ev.clientX; updateAudioLinks();
+      }
+    }
+  });
+  addEventListener('pointerup',ev=>{
+    if(dragging&&activeDeck){ if(mode==='tune'){ hideTuner(); } else { const d=decks[activeDeck]; const step=tuneIdx % d.steps; d.seq[step]=d.seq[step]?0:1; pulsePlate((activeDeck==='A'?decks.A.plates:decks.B.plates)[tuneIdx]); click(); } }
+    dragging=false; activeDeck=null; hold=false; mode=null; tuneIdx=null;
+  });
+
+  // Two-finger gestures: per-deck density/size, across-decks separation
+  let two=null; addEventListener('touchstart',e=>{ if(e.touches.length===2){ const a=pickStack(e.touches[0]); const b=pickStack(e.touches[1]); if(a && b && a.which===b.which){ two={type:'layers', which:a.which, d:dist2(e.touches), baseLayers:decks[a.which].layers, baseSize:decks[a.which].size}; } else if(a && b){ two={type:'sep', base:sepBase, x:(e.touches[0].clientX+e.touches[1].clientX)/2}; } else { two=null; } } });
+  addEventListener('touchmove',e=>{ if(!two||e.touches.length!==2) return; if(two.type==='layers'){ const k=dist2(e.touches)/two.d; const w=two.which; decks[w].layers = clamp(Math.round(two.baseLayers*k),6,MAX_PLATES); decks[w].size = clamp(two.baseSize*k,0.7,1.6); refreshDeckVisual(w); updateAudioLinks(); } else if(two.type==='sep'){ const nx=(e.touches[0].clientX+e.touches[1].clientX)/2; const dx=(nx-two.x); sepBase=clamp(two.base+dx*0.25, 8, 120); updateCoupledSeparation(); } });
+  addEventListener('touchend',()=>two=null);
+  function pickStack(t){ const hits=pickAt(t.clientX,t.clientY,[...decks.A.plates,...decks.B.plates]); if(!hits.length) return null; const mesh=hits[0].object; return { which: decks.A.plates.includes(mesh)?'A':'B' } }
+  function dist2(t){ const dx=t[0].clientX-t[1].clientX; const dy=t[0].clientY-t[1].clientY; return Math.hypot(dx,dy); }
+
+  // Overlap program: tap center plates
+  canvas.addEventListener('pointerdown',ev=>{ const hits=pickAt(ev.clientX,ev.clientY, overlap.plates); if(hits.length){ const idx=overlap.plates.indexOf(hits[0].object); const step=idx % overlap.steps; overlap.seq[step]=overlap.seq[step]?0:1; pulsePlate(overlap.plates[idx]); click(); } }, {capture:true});
+
+  // ===== Micro feedback =====
+  function pulsePlate(p){ p.material.emissiveIntensity=.98; p.scale.set(1.2,1,1.2); setTimeout(()=>{ p.scale.set(1,1,1); p.material.emissiveIntensity=.22+0.6*energy; },110) }
+
+  // In‑stack tuner overlay (sprite)
+  const tunerSprite = mkSprite(''); tunerSprite.position.set(0,20,0); tunerSprite.visible=false; scene.add(tunerSprite);
+  function showTuner(which,idx,st){ tunerSprite.visible=true; const g=decks[which].group; tunerSprite.position.set(g.position.x, decks[which].plates[idx].position.y+6, g.position.z); updateSpriteText(tunerSprite, `${st>0?'+':''}${st} st`); }
+  function hideTuner(){ tunerSprite.visible=false }
+
+  // ===== Audio Engine =====
+  function makeIR(sec=1.6, decay=3){ const rate = AC.sampleRate, len = rate*sec; const ir = AC.createBuffer(2, len, rate); for(let ch=0; ch<2; ch++){ const d = ir.getChannelData(ch); for(let i=0;i<len;i++){ d[i] = (Math.random()*2-1) * Math.pow(1 - i/len, decay); } } return ir; }
+  function audioInit(){ if(AC) return; const C=window.AudioContext||window.webkitAudioContext; AC=new C(); master=AC.createGain(); master.gain.value=.22; master.connect(AC.destination);
+    convolver=AC.createConvolver(); convolver.buffer=makeIR(); wet=AC.createGain(); dry=AC.createGain(); wet.gain.value=.25; dry.gain.value=.75; const bus=AC.createGain(); bus.gain.value=1; bus.connect(dry).connect(master); wet.connect(convolver).connect(master);
+    voices.A=buildVoice(decks.A.crate.voice); voices.B=buildVoice(decks.B.crate.voice); voicesReady=true; updateAudioLinks(); toast('Audio ready. Stacks are live.'); }
+  function buildVoice(kind){ const out=AC.createGain(); out.gain.value=1; const env=AC.createGain(); env.gain.value=0; const filt=AC.createBiquadFilter(); filt.type='lowpass'; filt.frequency.value=1400; filt.Q.value=.7; const pan=AC.createStereoPanner(); pan.pan.value=0; const detLFO=AC.createOscillator(); const detAmt=AC.createGain(); detAmt.gain.value=0; detLFO.type='sine'; detLFO.frequency.value=.25; detLFO.start(); detLFO.connect(detAmt);
+    function osc(type,det=0){ const o=AC.createOscillator(); o.type=type; o.detune.value=det; o.start(); detAmt.connect(o.detune); o.connect(filt); return o; }
+    let parts={env,filt,out,pan,detAmt}; filt.connect(env).connect(out); out.connect(dry); out.connect(wet); out.connect(pan).connect(master);
+    if(kind==='tape'){ osc('sawtooth',-4); osc('triangle',+4);} else if(kind==='fm'){ osc('square',0); osc('square',+7);} else if(kind==='breaks'){ osc('sawtooth',0);} else if(kind==='supersaw'){ osc('sawtooth',-9); osc('sawtooth',+9);} else if(kind==='trap'){ osc('sine',0);} else { osc('triangle',0); osc('sine',+3);} return parts; }
+  function trigger(env,level=.6,dur=.22){ const t=AC.currentTime; env.gain.cancelScheduledValues(t); env.gain.setValueAtTime(env.gain.value,t); env.gain.linearRampToValueAtTime(level,t+0.01); env.gain.exponentialRampToValueAtTime(0.0001,t+dur); }
+  function setFilter(parts,cut,q){ parts.filt.frequency.setTargetAtTime(cut,AC.currentTime,.02); parts.filt.Q.setTargetAtTime(q,AC.currentTime,.02); }
+  function setFreq(parts,f){ /* hooked via detune LFO; base is filter resonance */ }
+  function click(){ if(!AC) return; const o=AC.createOscillator(); const g=AC.createGain(); o.type='triangle'; o.frequency.value=700; o.connect(g).connect(master); const t=AC.currentTime; g.gain.setValueAtTime(.12,t); g.gain.exponentialRampToValueAtTime(0.0001,t+.1); o.start(); o.stop(t+.12) }
+  function previewTone(which,idx,st){ if(!AC||!voicesReady) return; const d=decks[which]; const f=scaleFreq(d.scale,d.root, idx % d.steps); const tuned=f*Math.pow(2,st/12); const v=(which==='A')?voices.A:voices.B; v.filt.frequency.setTargetAtTime(400+tuned,AC.currentTime,.02); trigger(v.env,.12,.12); }
+  function scaleFreq(scale,root,degree){ const tbl={minorPent:[0,3,5,7,10],majorPent:[0,2,4,7,9],dorian:[0,2,3,5,7,9,10],phrygian:[0,1,5,7,8]}; const arr=tbl[scale]||tbl.minorPent; const semi=arr[degree%arr.length]; return root*Math.pow(2,semi/12) }
+  function xfG(x){ return {a:(1-x)/2,b:(1+x)/2} }
+  function lerp(a,b,t){ return a*(1-t)+b*t }
+
+  // Map controls tighter to sonics + visuals
+  function updateAudioLinks(){ if(!AC||!voicesReady) return; const g=xfG(xf);
+    // Energy → master loudness & plate emissive gain
+    master.gain.setTargetAtTime(0.15 + 0.4*energy, AC.currentTime, .05);
+    // Resonance → filter Q
+    [voices.A, voices.B].forEach(v=> setFilter(v, 600 + 2600*energy, 0.8 + resonance*8));
+    // Crossfader + separation → panning & wetness
+    voices.A.pan.pan.setTargetAtTime(-Math.min(1, sepBase/120)*(1-g.a), AC.currentTime, .02);
+    voices.B.pan.pan.setTargetAtTime(+Math.min(1, sepBase/120)*(1-g.b), AC.currentTime, .02);
+    wet.gain.setTargetAtTime(0.15 + 0.5*(decks.A.layers+decks.B.layers)/(2*MAX_PLATES), AC.currentTime, .08);
+    dry.gain.setTargetAtTime(1 - wet.gain.value, AC.currentTime, .1);
+    // Size → detune jitter amount
+    const detAmt = (decks.A.size+decks.B.size)/2; [voices.A,voices.B].forEach(v=> v.detAmt.gain.setTargetAtTime(3 + detAmt*6 + couple*10, AC.currentTime, .1));
+  }
+
+  // ===== Sequencer =====
+  function startClock(){ let last=performance.now(); function loop(){ if(playing && AC && AC.state==='running'){ const beat=60000/bpm; const stepDur=beat/4; const now=performance.now(); if(now-last>=stepDur){ last+=stepDur; tick(); } } requestAnimationFrame(loop) } loop(); }
+  function deckLevel(which){ const base= (which==='A'? (1-(xf+1)/2) : ((xf+1)/2)); const sz=(which==='A'?decks.A.size:decks.B.size); return base*sz; }
+  function tick(){ ['A','B'].forEach(which=>{ const d=decks[which]; d.phase=(d.phase+1)%d.steps; const idx=d.phase; if(d.seq[idx]){ const f=scaleFreq(d.scale,d.root,idx); const tuned=f*Math.pow(2,(d.tune[idx]||0)/12); if(AC&&voicesReady){ const v=(which==='A')?voices.A:voices.B; const weight=deckLevel(which); v.filt.frequency.setTargetAtTime(400+tuned*(0.5+energy),AC.currentTime,.02); setFilter(v, 800+2800*energy, .9+6*resonance); trigger(v.env, .22 + .6*weight, .16 + .12*resonance); }
+        const plate=d.plates[idx % Math.max(1,d.layers)]; if(plate){ plate.scale.set(decks[which].size*1.18,1,decks[which].size*1.18); setTimeout(()=>{ plate.scale.set(decks[which].size,1,decks[which].size); }, 100); }
+    } });
+    const sepGain = 1 - Math.min(1, (sepX-sepMin)/(sepBase-sepMin+0.0001)); if(AC&&voicesReady){ const bothHit = (decks.A.seq[decks.A.phase] && decks.B.seq[decks.B.phase]); if(bothHit || overlap.seq[overlap.phase]){ trigger(voices.A.env, .12*sepGain, .35 + .3*resonance); } }
+    overlap.phase=(overlap.phase+1)%overlap.steps;
+  }
+
+  // ===== Helpers =====
+  function setXF(x){ xf=clamp(x,-1,1); const g=xfG(xf); decks.A.layers = clamp(Math.round(10+g.a*18),6,MAX_PLATES); decks.B.layers = clamp(Math.round(10+g.b*18),6,MAX_PLATES); refreshDeckVisual('A'); refreshDeckVisual('B'); updateCoupledSeparation(); if(navigator.vibrate) navigator.vibrate(3); }
+  function setTune(which,idx,st){ decks[which].tune[idx%32]=st }
+  function clamp(x,a,b){ return Math.max(a,Math.min(b,x)); }
+  const toastEl=document.getElementById('toast'); function toast(m){ toastEl.textContent=m; toastEl.style.display='block'; clearTimeout(toast._id); toast._id=setTimeout(()=>toastEl.style.display='none',1100) }
+
+  // ===== Camera (orbit) =====
+  function updateCam(){ if(orbit){ tOrbit+=0.0015*orbitSpeed*(60/bpm); const R=dist; camera.position.x=Math.sin(tOrbit)*R; camera.position.z=Math.cos(tOrbit)*R; camera.position.y=56; camera.lookAt(0,12,0); } }
+
+  // ===== First interaction → enable audio & start =====
+  let primed=false; canvas.addEventListener('pointerdown', async ()=>{ if(!primed){ audioInit(); if(AC.state!=='running') await AC.resume(); playing=true; primed=true; refreshHub(); toast('Playing — two-row hub at bottom is live.'); } });
+
+  // ===== Render =====
+  function animate(){ requestAnimationFrame(animate); updateCam(); renderer.render(scene,camera) }
+
+  // ===== Build and refresh =====
+  applySeparation(); refreshHub(); applyView();
+
+  startClock(); animate();
+})();
+</script>
+</body>
+</html>

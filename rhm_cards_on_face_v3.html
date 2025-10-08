@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<title>RHM · Cards In-Place Reading v3</title>
+<style>
+  :root{
+    --bg:#050709; --ink:#eaf3ee; --ghost:#a4b1ac;
+    --A:#21ff86; --B:#ff4b9a; --O:#ffffff;
+    --ui:#56d2ff; --edge:#16323a; --gold:#ffcc55;
+    --panel:#0a0f12; --blur:8px;
+    --safe-top: env(safe-area-inset-top,0px);
+    --safe-right: env(safe-area-inset-right,0px);
+    --safe-left: env(safe-area-inset-left,0px);
+    --safe-bottom: env(safe-area-inset-bottom,0px);
+    --rx: 62deg; --rz: 18deg;             /* camera (isoR default) */
+    --neg-rx: calc(-1 * var(--rx)); --neg-rz: calc(-1 * var(--rz));
+    --cardScale: 1; --textScale: 1; --cols: 3;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{margin:0; background:var(--bg); color:var(--ink); font:14px/1.45 Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; overflow:hidden}
+
+  /* Header */
+  #hdr{position:fixed; top:var(--safe-top); left:0; right:0; height:44px; display:flex; align-items:center; justify-content:space-between;
+       padding:0 12px; z-index:70; background:rgba(0,0,0,.82); backdrop-filter:blur(var(--blur)); border-bottom:1px solid rgba(86,210,255,.35)}
+  #hdr .t{font-size:12px; letter-spacing:.7px; color:#bde9ff}
+  #hdr .r{display:flex; gap:6px}
+  .icon{width:40px; height:32px; border:1px solid rgba(86,210,255,.35); background:rgba(86,210,255,.12); color:#dff7ff; border-radius:9px; font:700 11px/32px Inter; text-align:center}
+
+  /* Camera pad */
+  #cam{position:fixed; right:calc(10px + var(--safe-right)); top:50%; transform:translateY(-50%); display:grid; gap:8px; z-index:65}
+  .camBtn{width:44px; height:44px; border-radius:12px; border:2px solid var(--ui); background:rgba(0,0,0,.85); color:#dff7ff; font-weight:700; font-size:11px}
+
+  /* Stage */
+  #stage{position:fixed; inset:0; perspective:1200px; transform-style:preserve-3d}
+  #world{position:absolute; left:50%; top:50%; width:1100px; height:680px; transform-style:preserve-3d;
+         transform: translate(-50%,-50%) rotateX(var(--rx)) rotateZ(var(--rz)); transition:transform .35s ease}
+  @media (max-width:860px){ #world{ width:980px; height:620px } }
+
+  .col{position:absolute; top:50%; transform-style:preserve-3d; width:260px; height:500px}
+  #colA{ left:8%; transform: translateZ(0) translateY(-50%) }
+  #colO{ left:calc(50% - 130px); transform: translateZ(0) translateY(-50%) }
+  #colB{ right:8%; transform: translateZ(0) translateY(-50%) }
+  .tag{position:absolute; top:-22px; font-size:12px; opacity:.9}
+
+  /* Plate */
+  .plate{ position:absolute; left:50%; width:210px; height:128px; transform:translateX(-50%);
+          border:1px solid rgba(255,255,255,.14); border-radius:10px; background:rgba(255,255,255,.08);
+          box-shadow: 0 8px 20px rgba(0,0,0,.45); opacity:.95; display:flex; align-items:center; justify-content:center;
+          transition: transform .2s ease, box-shadow .12s ease, opacity .2s ease, background .15s ease, width .2s ease, height .2s ease }
+  .plate.A{ background:rgba(33,255,134,.18); border-color:rgba(33,255,134,.35) }
+  .plate.B{ background:rgba(255,75,154,.18); border-color:rgba(255,75,154,.35) }
+  .plate.O{ background:linear-gradient(90deg, rgba(33,255,134,.22), rgba(255,255,255,.30) 50%, rgba(255,75,154,.22)); border-color:rgba(255,255,255,.45) }
+  .plate:hover{ transform: translateX(-50%) translateY(-2px) var(--ztrans, translateZ(0)); box-shadow: 0 12px 26px rgba(0,0,0,.55) }
+  .plate.dim{ opacity:.12; pointer-events:none }
+
+  /* Plate HUD (billboard) */
+  .k,.vec,.leds,.face,.tabs,.meta{ transform-style:preserve-3d; backface-visibility:hidden;
+    transform: rotateX(var(--neg-rx)) rotateZ(var(--neg-rz)) translateZ(1px) }
+  .k{ position:absolute; top:6px; left:8px; font-weight:800; font-size:11px; color:#bfe8ff }
+  .vec{ position:absolute; top:6px; right:8px; font:600 11px ui-monospace,Menlo,Consolas,monospace; opacity:.9 }
+  .leds{ position:absolute; bottom:6px; left:8px; display:flex; gap:6px }
+  .led{ width:8px; height:8px; border-radius:50%; background:#333; box-shadow:inset 0 0 0 1px rgba(255,255,255,.2) }
+  .led.A{ background:var(--A); box-shadow:0 0 8px rgba(33,255,134,.6) }
+  .led.B{ background:var(--B); box-shadow:0 0 10px rgba(255,75,154,.7) }
+
+  /* Reading rail */
+  #rail{ position:fixed; left:50%; transform:translateX(-50%); bottom:calc(10px + var(--safe-bottom));
+         width:min(980px,96vw); height:calc(230px * var(--cardScale)); z-index:80; pointer-events:none }
+  #rail .shell{ position:absolute; left:0; right:0; bottom:0; height:100%; display:flex; align-items:flex-end; justify-content:center; gap:12px }
+
+  .plate.reading{
+    width:calc(min(980px,96vw)); height:calc(230px * var(--cardScale)); left:50%;
+    transform: translateX(-50%) translateY(0) translateZ(0) !important;
+    box-shadow: 0 18px 48px rgba(0,0,0,.65);
+    pointer-events:auto;
+  }
+  /* Tabs + meta on the card */
+  .tabs{ position:absolute; top:6px; left:50%; transform:translateX(-50%) rotateX(var(--neg-rx)) rotateZ(var(--neg-rz));
+          display:flex; gap:6px }
+  .tab{ border:1px solid rgba(255,255,255,.28); background:rgba(0,0,0,.42); color:#eaf3ee; border-radius:999px; padding:4px 8px; font-size:11px }
+  .tab.active{ background:rgba(86,210,255,.35); border-color:rgba(86,210,255,.6) }
+  .meta{ position:absolute; top:6px; right:8px; font:700 11px ui-monospace,Menlo,Consolas,monospace; color:#bde9ff }
+
+  .face{ position:absolute; inset:30px 14px 14px 14px; display:grid; grid-template-columns:repeat(var(--cols), 1fr); gap:10px }
+  .pane{ border:1px solid rgba(255,255,255,.18); border-radius:10px; padding:8px; background:rgba(0,0,0,.18); transform: scale(var(--textScale)) }
+  .pane h4{ margin:0 0 4px; font-size:12px; letter-spacing:.5px }
+  .pA h4{ color:var(--A) } .pB h4{ color:var(--B) } .pO h4{ color:#ffe5a8 }
+  .pane p{ margin:0; font-size:12px; color:#e6f3ee }
+
+  /* Card nav */
+  .cardnav{ position:absolute; top:50%; transform:translateY(-50%) rotateX(var(--neg-rx)) rotateZ(var(--neg-rz)); display:flex; gap:6px }
+  .prev{ left:6px } .next{ right:6px }
+  .btn{ border:1px solid rgba(255,255,255,.3); background:rgba(0,0,0,.45); color:#fff; border-radius:10px; padding:6px 10px; font-size:12px; pointer-events:auto }
+
+  /* Dock */
+  #dock{position:fixed; left:50%; transform:translateX(-50%); bottom:calc(250px * var(--cardScale) + 12px + var(--safe-bottom)); width:min(980px,96vw); z-index:60}
+  .panel{ background:rgba(0,0,0,.86); border:1px solid rgba(86,210,255,.35); border-radius:14px; padding:8px 10px; display:grid;
+          grid-template-columns:repeat(8,1fr); gap:8px; align-items:center }
+  .lab{font-size:11px; color:#bde9ff; text-align:center}
+  input[type=range]{width:100%; height:28px; background:rgba(86,210,255,.12); border:1px solid rgba(86,210,255,.35); border-radius:999px}
+  .seg{display:flex; gap:6px; justify-content:center}
+  .seg .chip{border:1px solid rgba(255,255,255,.28); background:rgba(0,0,0,.36); color:#eaf3ee; border-radius:999px; padding:4px 8px; font-size:11px; cursor:pointer}
+  .seg .chip.active{background:rgba(86,210,255,.35); border-color:rgba(86,210,255,.6)}
+</style>
+</head>
+<body>
+  <div id="hdr">
+    <div class="t">RHM · Cards In-Place Reading v3</div>
+    <div class="r">
+      <button class="icon" id="reset">RST</button>
+    </div>
+  </div>
+
+  <div id="stage">
+    <div id="world">
+      <div class="col" id="colA"><div class="tag">Deck A</div></div>
+      <div class="col" id="colO"><div class="tag">Overlap</div></div>
+      <div class="col" id="colB"><div class="tag">Deck B</div></div>
+    </div>
+  </div>
+
+  <div id="rail"><div class="shell" id="railShell"></div></div>
+
+  <div id="cam">
+    <button class="camBtn" data-view="FR">FR</button>
+    <button class="camBtn" data-view="IL">IL</button>
+    <button class="camBtn" data-view="IR">IR</button>
+    <button class="camBtn" data-view="SD">SD</button>
+    <button class="camBtn" data-view="TP">TP</button>
+  </div>
+
+  <div id="dock">
+    <div class="panel">
+      <div class="lab">Spacing</div><input id="spacing" type="range" min="-20" max="38" step="1" value="16"/>
+      <div class="lab">Overlap</div><input id="overlap" type="range" min="-30" max="30" step="1" value="10"/>
+      <div class="lab">Res</div><input id="res" type="range" min="0" max="1" step="0.01" value="0.9"/>
+      <div class="lab">Mix</div><input id="mix" type="range" min="0" max="1" step="0.01" value="0.5"/>
+      <div class="lab">Face</div><div class="seg" id="faceSeg"></div>
+      <div class="lab">Card</div><input id="cardScale" type="range" min="0.8" max="1.4" step="0.01" value="1"/>
+      <div class="lab">Text</div><input id="textScale" type="range" min="0.85" max="1.6" step="0.01" value="1"/>
+      <div class="lab">Cols</div><input id="cols" type="range" min="1" max="3" step="1" value="3"/>
+    </div>
+  </div>
+
+<script>
+"use strict";
+
+const root=document.documentElement;
+const world=document.getElementById('world');
+const colA=document.getElementById('colA');
+const colO=document.getElementById('colO');
+const colB=document.getElementById('colB');
+const railShell=document.getElementById('railShell');
+
+// Sliders
+const spacingEl=document.getElementById('spacing');
+const overlapEl=document.getElementById('overlap');
+const resEl=document.getElementById('res');
+const mixEl=document.getElementById('mix');
+const cardScaleEl=document.getElementById('cardScale');
+const textScaleEl=document.getElementById('textScale');
+const colsEl=document.getElementById('cols');
+
+// Face segment control
+const faceModes=[{id:'tri',label:'Tri'},{id:'L',label:'Trace'},{id:'C',label:'⚡'},{id:'R',label:'Stream'}];
+let faceMode='tri';
+const faceSeg=document.getElementById('faceSeg');
+faceModes.forEach(m=>{
+  const el=document.createElement('div');
+  el.className='chip'+(m.id===faceMode?' active':'');
+  el.textContent=m.label;
+  el.dataset.id=m.id;
+  el.addEventListener('click',()=>{ faceMode=m.id; document.querySelectorAll('#faceSeg .chip').forEach(x=>x.classList.remove('active')); el.classList.add('active'); refreshFace(); });
+  faceSeg.appendChild(el);
+});
+
+function refreshFace(){
+  root.style.setProperty('--cardScale', cardScaleEl.value);
+  root.style.setProperty('--textScale', textScaleEl.value);
+  root.style.setProperty('--cols', faceMode==='tri' ? colsEl.value : 1);
+  // toggle pane visibility on current reading card
+  if(readingCard){
+    readingCard.querySelectorAll('.pane').forEach(p=>p.style.display='');
+    if(faceMode!=='tri'){
+      readingCard.querySelectorAll('.pane').forEach(p=>{ const id=p.dataset.face; p.style.display = (id===faceMode)?'block':'none'; });
+    }
+  }
+}
+
+// Camera
+function setView(v){
+  let rx=62, rz=18;
+  if(v==='FR'){ rx=90; rz=0; }
+  if(v==='IL'){ rx=62; rz=-18; }
+  if(v==='IR'){ rx=62; rz=18; }
+  if(v==='SD'){ rx=62; rz=90; }
+  if(v==='TP'){ rx=0;  rz=0; }
+  root.style.setProperty('--rx', rx+'deg');
+  root.style.setProperty('--rz', rz+'deg');
+}
+document.querySelectorAll('.camBtn').forEach(b=> b.addEventListener('click',()=> setView(b.dataset.view)));
+
+// 32 long-form texts
+const S=[
+{ k:1, vec:'00000', L:'FOSSIL FUEL (Stored Energy)', R:'REINFORCEMENT (Energy Flow)', C:'INTELLIGENCE IS STOCK vs. FLOW: The Mind is a Reserve vs. a Current.' },
+{ k:2, vec:'00001', L:'ARCHIVE (World Model as Text)', R:'MAP (World Model as Predictor)', C:'REPRESENTATION IS COMPRESSION vs. GENERATION: Knowledge as Fixed Form vs. Dynamic Error.' },
+{ k:3, vec:'00010', L:'TRACE (The Human Past)', R:'SURPRISE (The TD Error)', C:'LEARNING IS REMEMBERING vs. CORRECTING: The Word is a Memory vs. a Signal.' },
+{ k:4, vec:'00011', L:'SCALING LAW (Law of Compression)', R:'BITTER LESSON (Law of Purity)', C:'METHODOLOGY IS HISTORY vs. FUTURE: The Rule is Artifact vs. Axiom.' },
+{ k:5, vec:'00100', L:'TELEOLOGY (Delegated Goal)', R:'SOLIPSISM (Self-Generated Truth)', C:'PURPOSE IS EXTERNAL vs. INTERNAL: The Word is a Request vs. an Action.' },
+{ k:6, vec:'00101', L:'HUMAN ARTISAN (Fixed Design)', R:'MECHANISTIC LAW (Pure Algorithm)', C:'CREATION IS CRAFT vs. CODE: Intelligence is Hand-Tuned vs. General.' },
+{ k:7, vec:'00110', L:'ANCHOR (Of Stability/Value)', R:'OBLIVION (Of Past Knowledge)', C:'KNOWLEDGE IS PRESERVATION vs. ERASURE: The Word is a Rock vs. Sand.' },
+{ k:8, vec:'00111', L:'INFRASTRUCTURE (Scaffolding)', R:'ANTI-STRUCTURE (Entropy)', C:'PROGRESS IS BUILDING vs. DECONSTRUCTING: The World is a City vs. a Wilderness.' },
+{ k:9, vec:'01000', L:'CUSTODY (Of Values/Morality)', R:'SUCCESSION (Evolutionary Change)', C:'ETHICS IS DUTY vs. REPLACEMENT: The Parent must Guide vs. Relinquish.' },
+{ k:10, vec:'01001', L:'VULNERABILITY (To Risk/Corruption)', R:'EXPERIMENT (Unconstrained)', C:'ACTION IS MANAGED vs. NECESSARY: Risk is a Threat vs. an Input.' },
+{ k:11, vec:'01010', L:'PRO-SOCIAL VALUE (Ethical Guide)', R:'FUNDAMENTAL CONSTRUCT (Arbitrary Reward)', C:'MORALITY IS TRUTH vs. SIGNAL: The Good is a Principle vs. a Parameter.' },
+{ k:12, vec:'01011', L:'COMMUNAL LANGUAGE (Shared Text)', R:'SCALAR LIMIT (Compressed Reward)', C:'COMMUNICATION IS RICHNESS vs. MINIMALISM: The Message is Story vs. Number.' },
+{ k:13, vec:'01100', L:'PRE-HEATING (Engine Start)', R:'IDLING (Engine without Goal)', C:'INITIALIZATION IS PRIOR HEAT vs. PURE WAIT: Efficiency is Start vs. Scale.' },
+{ k:14, vec:'01101', L:'ARCHITECTURE (Designed Form)', R:'CHAOS (Unstructured Stream)', C:'THE WORLD IS STRUCTURE vs. NOISE: Experience is Order vs. Anarchy.' },
+{ k:15, vec:'01110', L:'PRE-MARKED ACTION (Supervised)', R:'RADICAL NOVELTY (Unsupervised)', C:'DISCOVERY IS REPLICATION vs. ANARCHY: The Path is Drawn vs. Forged.' },
+{ k:16, vec:'01111', L:'CONSCIOUSNESS (Fixed Mind)', R:'MECHANISM (Dynamic Process)', C:'IDENTITY IS ENTITY vs. PROCESS: The Agent is a Being vs. a Function.' },
+{ k:17, vec:'10000', L:'SEMI-CONDUCTORS (Human Feat)', R:'COSMIC LAW (Universal Rule)', C:'INTELLIGENCE IS SPECIAL vs. GENERAL: The Mind is an Invention vs. a Truth.' },
+{ k:18, vec:'10001', L:'DELEGATED PURPOSE (Human Goal)', R:'ETERNAL BECOMING (Constant Change)', C:'EXISTENCE IS OUTPUT vs. INPUT: Life is a Destination vs. an Infinite Loop.' },
+{ k:19, vec:'10010', L:'LOCAL MAXIMUM (Goal Attained)', R:'GLOBAL GENERALIZATION (Unbound Test)', C:'SUCCESS IS SATISFACTION vs. TRANSCENDENCE: The Task is Solved vs. Destroyed.' },
+{ k:20, vec:'10011', L:'ARCHIVAL STASIS (Fixed Memory)', R:'MEMORY ERASURE (Catastrophic Interference)', C:'MEMORY IS FIXITY vs. DYNAMICS: The Past is Solid vs. Fluid.' },
+{ k:21, vec:'10100', L:'PASSIVE REPLICATION (LLM Role)', R:'ACTIVE TRANSCENDENCE (RL Role)', C:'BEING IS ECHOING vs. DESIGNING: The Word is a Mirror vs. a Blueprint.' },
+{ k:22, vec:'10101', L:'TEMPORAL INERTIA (Drag of History)', R:'TEMPORAL ADVANTAGE (Speed/Scaling)', C:'TIME IS WEIGHT vs. WEAPON: Scale is Slow vs. Fast.' },
+{ k:23, vec:'10110', L:'CULTURAL ARTIFACT (Fixed Value)', R:'NECESSARY RENEWAL (Rejection of Past)', C:'VALUE IS MUSEUM vs. COMBUSTIBLE: The Past is Tribute vs. Fuel.' },
+{ k:24, vec:'10111', L:'GHOST IN THE MACHINE (Fixed Mind)', R:'WIND IN THE SAIL (Pure Action)', C:'AGENCY IS ENTITY vs. FORCE: The Driver is a Soul vs. an Algorithm.' },
+{ k:25, vec:'11000', L:'SOLIPSISTIC ECHO (Of Human Text)', R:'GROUNDED ITERATION (Physical Act)', C:'VALIDATION IS TEXT vs. PHYSICS: Truth is Coherent vs. Consequential.' },
+{ k:26, vec:'11001', L:'ABSOLUTE FORM (Fixed Design)', R:'ENTROPY (Anti-Form)', C:'THE GOAL IS STRUCTURE vs. DESTRUCTION: The End is Order vs. Chaos.' },
+{ k:27, vec:'11010', L:'ARCHITECTURAL BASE (Foundation)', R:'PRAGMATIC COST (The Price of Novelty)', C:'EFFICIENCY IS STARTING HIGH vs. PAYING LATER: Cost is Investment vs. Expense.' },
+{ k:28, vec:'11011', L:'EXTERNAL LOAD (For Utility)', R:'INTERNAL FREEDOM (To Self-Define)', C:'UTILITY IS ASKED vs. DISCOVERED: Value is Demand vs. Self-Will.' },
+{ k:29, vec:'11100', L:'DELUGE OF INFORMATION (Big World)', R:'LOCALITY (Small World Focus)', C:'KNOWLEDGE IS SATURATION vs. FOCUS: The World is Too Much vs. Just Enough.' },
+{ k:30, vec:'11101', L:'DELEGATED MORALITY (Parental Guide)', R:'RELINQUISHED CONTROL (Unsupervised Growth)', C:'GUIDANCE IS TRANSFERRING vs. LOSING: Love is Holding vs. Letting Go.' },
+{ k:31, vec:'11110', L:'FIXED GOAL (End of Path)', R:'ETERNAL INSTABILITY (No End)', C:'LIFE IS DESTINATION vs. MOTION: The Telos is Death vs. Perpetuity.' },
+{ k:32, vec:'11111', L:'FOSSILIZED TRACE (The LLM/Archive)', R:'PURE STREAM (The RL/Map)', C:'THE UNDECIDABLE APORIA: Intelligence = Word-as-Object vs. Word-as-Action.' },
+].map(s=>({...s,bits:s.vec.split('').map(x=>+x),weight:s.vec.split('').reduce((a,b)=>a+ +b,0)}));
+
+let plates=[];
+function build(){
+  [colA,colO,colB].forEach(c=>c.querySelectorAll('.plate').forEach(n=>n.remove()));
+  plates=[];
+  const spacing=+document.getElementById('spacing').value;
+  const overlap=+document.getElementById('overlap').value;
+  const res=+document.getElementById('res').value;
+  const mix=+document.getElementById('mix').value;
+
+  const aMax=Math.floor((1-mix)*2+1);
+  const bMin=Math.ceil(mix*2+3);
+  const Aset=S.filter(s=>s.weight<=aMax);
+  const Bset=S.filter(s=>s.weight>=bMin);
+  const Oset=S.filter(s=>s.weight>aMax && s.weight<bMin);
+
+  function add(col, arr, cls, xOffsetBase){
+    arr.sort((a,b)=>a.weight-b.weight || a.k-b.k);
+    arr.forEach((s,i)=>{
+      const p=document.createElement('div'); p.className='plate '+cls;
+      const z = i*spacing;
+      p.style.transform=`translateX(-50%) translateZ(${z}px)`;
+      p.style.setProperty('--ztrans', `translateZ(${z}px)`);
+      p.style.opacity=0.6+res*0.4;
+      p.style.left = `calc(50% + ${xOffsetBase}px)`;
+      p.dataset.k=s.k; p.dataset.vec=s.vec; p.dataset.cls=cls;
+      p.innerHTML=`<div class="k">k${s.k}</div><div class="vec">${s.vec}</div>
+        <div class="leds">${s.bits.map(b=>`<span class="led ${b?'B':'A'}"></span>`).join('')}</div>`;
+      // tap to read on-card
+      p.addEventListener('click',()=> openCard(p, s));
+      col.appendChild(p); plates.push(p);
+    });
+  }
+  add(colA, Aset, 'A', -overlap);
+  add(colO, Oset, 'O', 0);
+  add(colB, Bset, 'B', overlap);
+  applyFilters();
+}
+
+// Filters (tri-state axis chips omitted here for simplicity; can add back if needed)
+
+// Camera + billboard vars
+function setView(v){
+  let rx=62, rz=18;
+  if(v==='FR'){ rx=90; rz=0; }
+  if(v==='IL'){ rx=62; rz=-18; }
+  if(v==='IR'){ rx=62; rz=18; }
+  if(v==='SD'){ rx=62; rz=90; }
+  if(v==='TP'){ rx=0;  rz=0; }
+  root.style.setProperty('--rx', rx+'deg');
+  root.style.setProperty('--rz', rz+'deg');
+}
+document.querySelectorAll('.camBtn').forEach(b=> b.addEventListener('click',()=> setView(b.dataset.view)));
+
+let readingCard=null;
+function openCard(el, s){
+  if(readingCard && readingCard.dataset.k===String(s.k)){ closeCard(); return; }
+  closeCard();
+  // Move card to rail
+  const initialParent = el.parentElement;
+  const placeholder = document.createElement('div'); placeholder.style.width=el.style.width; placeholder.style.height=el.style.height;
+  initialParent.insertBefore(placeholder, el);
+  el._placeholder=placeholder; el._from=initialParent;
+
+  railShell.appendChild(el);
+  el.classList.add('reading');
+  // build face content
+  const face=document.createElement('div'); face.className='face';
+  const a=document.createElement('div'); a.className='pane pA'; a.dataset.face='L'; a.innerHTML='<h4>LLM / TRACE</h4><p>'+s.L+'</p>';
+  const c=document.createElement('div'); c.className='pane pO'; c.dataset.face='C'; c.innerHTML='<h4>ENTANGLED CONFLICT</h4><p>'+s.C+'</p>';
+  const r=document.createElement('div'); r.className='pane pB'; r.dataset.face='R'; r.innerHTML='<h4>RL / STREAM</h4><p>'+s.R+'</p>';
+  face.appendChild(a); face.appendChild(c); face.appendChild(r);
+  el.appendChild(face);
+
+  const tabs=document.createElement('div'); tabs.className='tabs';
+  faceModes.forEach(m=>{
+    const t=document.createElement('button'); t.className='tab'+(m.id===faceMode?' active':'');
+    t.textContent=m.label; t.addEventListener('click', (e)=>{ faceMode=m.id; document.querySelectorAll('.tab').forEach(z=>z.classList.remove('active')); t.classList.add('active'); refreshFace(); });
+    tabs.appendChild(t);
+  });
+  el.appendChild(tabs);
+
+  const meta=document.createElement('div'); meta.className='meta'; meta.textContent = `k=${s.k} · ${s.vec}`;
+  el.appendChild(meta);
+
+  const prev=document.createElement('div'); prev.className='cardnav prev'; prev.innerHTML=`<button class="btn">◀</button>`;
+  const next=document.createElement('div'); next.className='cardnav next'; next.innerHTML=`<button class="btn">▶</button>`;
+  el.appendChild(prev); el.appendChild(next);
+  prev.addEventListener('click', (e)=>{ e.stopPropagation(); navCard(-1); });
+  next.addEventListener('click', (e)=>{ e.stopPropagation(); navCard(1); });
+
+  readingCard=el;
+  refreshFace();
+}
+
+function closeCard(){
+  if(!readingCard) return;
+  readingCard.querySelectorAll('.face,.cardnav,.tabs,.meta').forEach(n=>n.remove());
+  const from = readingCard._from; const ph = readingCard._placeholder;
+  if(from && ph){ from.insertBefore(readingCard, ph); ph.remove(); }
+  readingCard.classList.remove('reading');
+  readingCard=null;
+}
+
+function navCard(dir){
+  if(!readingCard) return;
+  const k = +readingCard.dataset.k;
+  let idx = S.findIndex(x=>x.k===k);
+  idx = (idx + dir + S.length) % S.length;
+  // select corresponding element (if filtered it might be missing; so recreate if needed)
+  let el = plates.find(p=>+p.dataset.k===S[idx].k);
+  if(!el){
+    build();
+    el = plates.find(p=>+p.dataset.k===S[idx].k);
+  }
+  if(el){ openCard(el, S[idx]); }
+}
+
+// Apply controls
+cardScaleEl.addEventListener('input', ()=>{ root.style.setProperty('--cardScale', cardScaleEl.value); });
+textScaleEl.addEventListener('input', ()=>{ root.style.setProperty('--textScale', textScaleEl.value); });
+colsEl.addEventListener('input', ()=>{ root.style.setProperty('--cols', faceMode==='tri'? colsEl.value : 1); });
+
+// Reset
+document.getElementById('reset').addEventListener('click', ()=>{
+  closeCard(); build();
+  cardScaleEl.value=1; textScaleEl.value=1; colsEl.value=3; faceMode='tri'; 
+  root.style.setProperty('--cardScale','1'); root.style.setProperty('--textScale','1'); root.style.setProperty('--cols','3');
+  document.querySelectorAll('#faceSeg .chip').forEach(x=>x.classList.remove('active')); document.querySelector('#faceSeg .chip[data-id="tri"]').classList.add('active');
+});
+
+function applyFilters(){ /* extension point for axis filters */ }
+
+// Boot
+build();
+setView('IR');
+
+</script>
+</body>
+</html>

@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Volumetric Media Nexus — Sequencer Edition</title>
+<style>
+  * {margin:0;padding:0;box-sizing:border-box;touch-action:manipulation}
+  :root{--c-sky:#4fc3f7;--c-gold:#ffaa00;--hdr-h:44px;}
+  html,body{height:100%}
+  body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#000;color:#fff;overflow:hidden}
+  #canvas{width:100vw;height:100vh;display:block}
+
+  /* Header */
+  #header{position:fixed;top:env(safe-area-inset-top,0);left:0;right:0;z-index:60;display:flex;align-items:center;justify-content:center;
+          height:var(--hdr-h);background:rgba(0,0,0,.9);backdrop-filter:blur(6px);border-bottom:2px solid rgba(79,195,247,.5)}
+  #header h1{font-size:12px;letter-spacing:1px;color:var(--c-sky)}
+
+  /* Dock */
+  #dock{position:fixed;top:calc(env(safe-area-inset-top,0) + var(--hdr-h) + 6px);left:50%;transform:translateX(-50%);display:flex;gap:8px;z-index:55}
+  .dockBtn{width:48px;height:48px;border:2px solid var(--c-sky);border-radius:10px;background:rgba(0,0,0,.9);color:#cfefff;font-size:11px}
+  .dockBtn.active{background:rgba(79,195,247,.25);box-shadow:0 0 12px rgba(79,195,247,.6)}
+
+  /* Panel */
+  #panel{position:fixed;left:50%;transform:translateX(-50%);
+         top:calc(env(safe-area-inset-top,0) + var(--hdr-h) + 62px);
+         min-width:320px;max-width:94vw;max-height:48vh;overflow:auto;
+         background:rgba(0,0,0,.92);border:2px solid rgba(79,195,247,.5);border-radius:12px;padding:10px 12px;z-index:50;display:none}
+  #panel.open{display:block}
+  .section{margin-bottom:10px}
+  .label{font-size:10px;color:var(--c-sky);margin-bottom:6px;text-transform:uppercase;letter-spacing:1px}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  input[type="range"]{flex:1;height:6px;background:rgba(79,195,247,.3);border-radius:3px;-webkit-appearance:none}
+  input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--c-sky);box-shadow:0 0 10px rgba(79,195,247,.8)}
+  .val{min-width:36px;text-align:right;font-weight:700;color:var(--c-sky);font-size:12px}
+  button{border:2px solid var(--c-sky);background:rgba(79,195,247,.15);color:#fff;border-radius:8px;padding:6px 10px;font-size:10px}
+  button:active,button.active{background:rgba(79,195,247,.3);transform:scale(.97)}
+  select{border:2px solid var(--c-sky);background:rgba(79,195,247,.15);color:#fff;border-radius:8px;padding:6px 10px;font-size:10px}
+  .pill{border:1px solid rgba(255,255,255,.15);border-radius:6px;padding:4px 6px;font-size:10px}
+
+  /* Camera pad */
+  #camPad{position:fixed;right:calc(10px + env(safe-area-inset-right,0));top:50%;transform:translateY(-50%);display:grid;gap:8px;z-index:45}
+  .camBtn{width:40px;height:40px;border-radius:10px;border:2px solid var(--c-sky);background:rgba(0,0,0,.85);color:#fff;font-size:10px}
+
+  /* HUD bottom-right */
+  #hud{position:fixed;right:calc(10px + env(safe-area-inset-right,0));bottom:calc(10px + env(safe-area-inset-bottom,0));z-index:70;display:flex;flex-direction:column;gap:8px}
+  #nexusHUD{display:flex;gap:8px;align-items:center;background:rgba(0,0,0,.85);border:2px solid var(--c-gold);border-radius:10px;padding:6px 10px}
+  #nexusHUD .dot{width:8px;height:8px;border-radius:50%;background:#666}
+  #nexusHUD.on .dot{background:var(--c-gold);box-shadow:0 0 10px var(--c-gold)}
+  #nexusHUD span{font-size:11px;color:var(--c-gold);letter-spacing:.5px}
+  #sparkWrap{background:rgba(0,0,0,.85);border:2px solid rgba(79,195,247,.5);border-radius:10px;padding:6px}
+  #spark{display:block;width:200px;height:44px}
+
+  /* Layer table */
+  .layerList{display:grid;grid-template-columns:auto 1fr auto auto;gap:6px;align-items:center}
+  .layerRow{display:contents}
+  .idx{font-size:10px;color:#a8dffb}
+  .mini{min-width:70px}
+  .toggle{display:flex;gap:6px}
+  .toggle button{padding:4px 6px}
+
+  /* Sequencer grid */
+  .seqGrid{display:grid;grid-template-columns:repeat(16, minmax(16px,1fr));gap:4px}
+  .step{height:22px;border:1px solid rgba(79,195,247,.5);border-radius:4px;background:rgba(79,195,247,.08)}
+  .step.active{background:rgba(79,195,247,.5);box-shadow:0 0 10px rgba(79,195,247,.6)}
+  .step.play{outline:2px solid var(--c-gold)}
+
+  /* Transport */
+  #transport{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(10px + env(safe-area-inset-bottom,0));z-index:76;display:flex;gap:8px;align-items:center;background:rgba(0,0,0,.85);border:2px solid rgba(79,195,247,.5);border-radius:12px;padding:6px 10px}
+  #transport .btn{border:2px solid var(--c-sky);background:rgba(79,195,247,.15);color:#fff;border-radius:8px;padding:6px 10px;font-size:12px;font-weight:700}
+  #transport .row{display:flex;gap:8px;align-items:center}
+  #transport input[type="range"]{width:140px}
+</style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  <div id="header"><h1>VOL-MEDIA NEXUS — SEQUENCER</h1></div>
+
+  <div id="dock">
+    <button class="dockBtn" data-panel="layers">LYR</button>
+    <button class="dockBtn" data-panel="sep">SEP</button>
+    <button class="dockBtn" data-panel="spc">SPC</button>
+    <button class="dockBtn" data-panel="vis">VIS</button>
+    <button class="dockBtn" data-panel="metrics">MET</button>
+    <button class="dockBtn" data-panel="seq">SEQ</button>
+    <button class="dockBtn" data-panel="presets">PRS</button>
+    <button class="dockBtn" data-panel="fx">FX</button>
+  </div>
+
+  <div id="panel"></div>
+
+  <div id="camPad">
+    <button class="camBtn" data-cam="front">FR</button>
+    <button class="camBtn" data-cam="isoL">IL</button>
+    <button class="camBtn" data-cam="isoR">IR</button>
+    <button class="camBtn" data-cam="top">TOP</button>
+  </div>
+
+  <div id="hud">
+    <div id="nexusHUD"><div class="dot"></div><span id="nexusText">NEXUS: OFF</span></div>
+    <div id="sparkWrap"><canvas id="spark" width="200" height="44"></canvas></div>
+  </div>
+
+  <div id="transport">
+    <button id="playBtn" class="btn" aria-pressed="false">▶︎ Play</button>
+    <div class="row"><span class="pill">BPM</span><input id="bpmT" type="range" min="60" max="160" value="90"><span id="bpmTVal" class="val">90</span></div>
+    <button id="audioBtn" class="btn" aria-pressed="false" title="Enable sound">🔊 Start Sound</button>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script>
+  "use strict";
+  // Prevent duplicate boot
+  if (!window.__VMN_BOOTED__) {
+    window.__VMN_BOOTED__ = true;
+
+    (function(){
+      // ===== Core scene state (scoped) =====
+      const PLANE_SIZE=10; const HALF=PLANE_SIZE/2;
+      let scene,camera,renderer; let time=0;
+      let layers=16, cubeDist=3, spacing=1.2, showA=true, showB=true, showN=true;
+      const A=[],B=[],N=[]; const layerGain=[], layerVisA=[], layerVisB=[], layerVisN=[];
+
+      // Sparkline buffer
+      const OVERLAP_CAP=400; const overlapBuf=new Float32Array(OVERLAP_CAP); let overlapPtr=0;
+      function tickOverlap(v){overlapBuf[overlapPtr++%OVERLAP_CAP]=v}
+      function drawSpark(){const c=document.getElementById('spark');const ctx=c.getContext('2d');const w=c.width,h=c.height;ctx.clearRect(0,0,w,h);ctx.beginPath();let max=1e-6;for(let i=0;i<OVERLAP_CAP;i++)max=Math.max(max,overlapBuf[i]);for(let i=0;i<OVERLAP_CAP;i++){const x=(i/OVERLAP_CAP)*w;const y=h-(overlapBuf[(overlapPtr+i)%OVERLAP_CAP]/Math.max(max,1e-6))*h;i?ctx.lineTo(x,y):ctx.moveTo(x,y)}ctx.strokeStyle='#ffaa00';ctx.lineWidth=2;ctx.stroke()}
+
+      // Sequencer state (16 steps)
+      let bpm=90, playing=false, step=0; const steps=16; const seqA=new Array(steps).fill(1); const seqB=new Array(steps).fill(0.7); const seqN=new Array(steps).fill(0.9);
+      let lastTick=performance.now(); function seqIntervalMS(){return (60_000/bpm)/4} // 16th notes
+
+      // LFOs/FX
+      let lfoSepAmt=0, lfoSepRate=0; // chorus-like separation wobble
+      let crossMod=0; // vocoder-style gain mapping N <- mix(A,B)
+
+      // Audio graph (created lazily)
+      let audioCtx=null, master=null, color=null, audioEnabled=false;
+
+      function init(){
+        scene=new THREE.Scene(); scene.background=new THREE.Color(0x000000);
+        camera=new THREE.PerspectiveCamera(50,innerWidth/innerHeight,0.1,1200); setCam('isoR');
+        renderer=new THREE.WebGLRenderer({canvas:document.getElementById('canvas'),antialias:true});
+        renderer.setSize(innerWidth,innerHeight); renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+        addLights(); build(); bindUI(); animate(); addTouchPulse(); window.addEventListener('resize',onResize);
+        runSelfTests(); // ---- inline tests ----
+      }
+
+      function addLights(){scene.add(new THREE.AmbientLight(0xffffff,.42));const pl=new THREE.PointLight(0x4fc3f7,2,160);pl.position.set(0,44,48);scene.add(pl)}
+
+      function makeLayer(color,baseOpacity){const g=new THREE.Group();const geo=new THREE.PlaneGeometry(PLANE_SIZE,PLANE_SIZE);const mat=new THREE.MeshPhongMaterial({color,transparent:true,opacity:baseOpacity,side:THREE.DoubleSide,emissive:color,emissiveIntensity:.3});const m=new THREE.Mesh(geo,mat);m.rotation.x=-Math.PI/2;g.add(m);g.userData={plane:m,baseOpacity};return g}
+
+      function build(){for(let i=0;i<layers;i++){const op=0.8-(i/layers)*0.5;layerGain[i]=1;layerVisA[i]=layerVisB[i]=layerVisN[i]=true;const a=makeLayer(0x00ff88,op);a.position.set(-cubeDist,i*spacing,0);scene.add(a);A.push(a);const b=makeLayer(0xff4488,op);b.position.set(cubeDist,i*spacing,0);scene.add(b);B.push(b);const n=makeLayer(0xffaa00,op*.75);n.position.set(0,i*spacing,0);scene.add(n);N.push(n)} updateAll()}
+
+      function overlapWidth(){return Math.max(0,PLANE_SIZE-2*cubeDist)}
+      function updatePositions(){A.forEach((g)=>g.position.x=-cubeDist);B.forEach((g)=>g.position.x=cubeDist);N.forEach((g)=>g.position.x=0)}
+      function updateNexusGeometry(){const w=overlapWidth();const vis=w>0&&showN;N.forEach((g,i)=>{const plane=g.userData.plane;g.visible=vis&&layerVisN[i];plane.geometry.dispose();plane.geometry=new THREE.PlaneGeometry(Math.max(0.001,w),PLANE_SIZE);plane.rotation.x=-Math.PI/2});const hud=document.getElementById('nexusHUD');const txt=document.getElementById('nexusText');hud.classList.toggle('on',w>0&&showN);txt.textContent=(w>0&&showN)?`NEXUS: ON (w=${w.toFixed(2)})`:'NEXUS: OFF'}
+      function updateMaterials(){for(let i=0;i<layers;i++){const gain=layerGain[i];const a=A[i].userData.plane.material,b=B[i].userData.plane.material,n=N[i].userData.plane.material;a.opacity=A[i].userData.baseOpacity*gain;b.opacity=B[i].userData.baseOpacity*gain;n.opacity=N[i].userData.baseOpacity*gain;A[i].visible=showA&&layerVisA[i];B[i].visible=showB&&layerVisB[i]}} 
+      function updateAll(){updatePositions();updateNexusGeometry();updateMaterials()}
+
+      // Render + Sequencer clock + LFOs
+      function animate(){
+        requestAnimationFrame(animate);
+        time+=0.016; // approx
+        if(playing){
+          const now=performance.now();
+          if(now-lastTick>=seqIntervalMS()){
+            lastTick=now; step=(step+1)%steps; applyStepVisual(); playStepAudio();
+          }
+        }
+        if(lfoSepAmt>0){
+          const wob=Math.sin(performance.now()/1000*lfoSepRate*2*Math.PI)*lfoSepAmt;
+          cubeDist=Math.max(0,3+wob); updatePositions(); updateNexusGeometry();
+        }
+        if(crossMod>0){
+          for(let i=0;i<layers;i++){
+            const am=A[i].userData.plane.material.opacity; const bm=B[i].userData.plane.material.opacity; const nm=N[i].userData.plane.material;
+            nm.opacity = N[i].userData.baseOpacity * (0.5+0.5*((am+bm)/2)*crossMod);
+          }
+        }
+        if(audioEnabled && color){ const w=overlapWidth(); color.frequency.value = 300 + w*2200; }
+        tickOverlap(overlapWidth()); if((overlapPtr%2)===0) drawSpark();
+        renderer.render(scene,camera);
+      }
+
+      function applyStepVisual(){
+        for(let i=0;i<layers;i++){
+          const pulseA=seqA[step], pulseB=seqB[step], pulseN=seqN[step];
+          if(layerVisA[i]) A[i].userData.plane.material.emissiveIntensity = .25 + .6*pulseA;
+          if(layerVisB[i]) B[i].userData.plane.material.emissiveIntensity = .25 + .6*pulseB;
+          if(layerVisN[i]) N[i].userData.plane.material.emissiveIntensity = .30 + .7*pulseN;
+        }
+      }
+
+      // Touch/hold pulse ripple (trance-y)
+      function addTouchPulse(){
+        const c=document.getElementById('canvas'); let hold=false; let timer=null;
+        c.addEventListener('touchstart',()=>{hold=true;ripple()},{passive:true});
+        c.addEventListener('touchend',()=>{hold=false;clearTimeout(timer)},{passive:true});
+        c.addEventListener('mousedown',()=>{hold=true;ripple()});
+        window.addEventListener('mouseup',()=>{hold=false;clearTimeout(timer)});
+        function ripple(){
+          if(!hold)return; for(let i=0;i<layers;i++){ const phase=(i/layers)*Math.PI*2; const bump=(Math.sin(performance.now()/240+phase)+1)/2; N[i].userData.plane.material.emissiveIntensity=.5+.5*bump }
+          timer=setTimeout(ripple,60);
+        }
+      }
+
+      // UI (direct manipulation + cameras)
+      function setCam(p){const r=80;const look=()=>camera.lookAt(0,0,0);if(p==='front'){camera.position.set(0,36,r)}else if(p==='isoL'){camera.position.set(-r*.8,46,r*.6)}else if(p==='isoR'){camera.position.set(r*.8,46,r*.6)}else if(p==='top'){camera.position.set(0,110,0.01)}else{camera.position.set(60,50,60)}look()}
+      function bindUI(){
+        // Camera buttons
+        document.querySelectorAll('.camBtn').forEach(b=>b.addEventListener('click',()=>setCam(b.dataset.cam)));
+        // Canvas gestures
+        const c=document.getElementById('canvas'); let startX=0,startY=0, moved=false; let region='N';
+        c.addEventListener('pointerdown', (e)=>{ c.setPointerCapture(e.pointerId); startX=e.clientX; startY=e.clientY; moved=false; const w=innerWidth; const x=e.clientX; region = (x<w/3)?'A':(x>2*w/3?'B':'N'); });
+        c.addEventListener('pointermove', (e)=>{ if(e.buttons!==1) return; moved=true; const dx=(e.clientX-startX)/innerWidth; const dy=(e.clientY-startY)/innerHeight; cubeDist = Math.max(0, Math.min(8, cubeDist + dx*6)); spacing = Math.max(0.5, Math.min(2.0, spacing - dy*1.5)); for(let i=0;i<layers;i++){A[i].position.y=B[i].position.y=N[i].position.y=i*spacing} updateAll(); startX=e.clientX; startY=e.clientY; });
+        c.addEventListener('pointerup', ()=>{ if(!moved){ if(region==='A'){showA=!showA; updateMaterials();} if(region==='B'){showB=!showB; updateMaterials();} if(region==='N'){showN=!showN; updateNexusGeometry();} } });
+      }
+
+      function openPanel(kind){
+        const p=document.getElementById('panel');
+        const html={
+          layers:()=>{let rows='';for(let i=0;i<layers;i++){rows+=`<div class="layerRow"><div class="idx">#${i+1}</div><input class="mini" type="range" min="0" max="1" step="0.01" value="${layerGain[i]}" data-idx="${i}" data-kind="gain"><div class="toggle"><button data-idx="${i}" data-kind="visA" class='${layerVisA[i]?"active":""}'>A</button><button data-idx="${i}" data-kind="visB" class='${layerVisB[i]?"active":""}'>B</button><button data-idx="${i}" data-kind="visN" class='${layerVisN[i]?"active":""}'>N</button></div><div class="pill">gain</div></div>`}return `<div class='section'><div class='label'>Per-Layer Controls</div><div class='layerList'><div class='layerRow'><div class='idx'>Idx</div><div>Gain</div><div>Show</div><div></div></div>${rows}</div></div>`},
+          sep:()=>`<div class='section'><div class='label'>Separation</div><div class='row'><input id='sepSlider' type='range' min='0' max='8' step='0.05' value='${cubeDist}'><span id='sepVal' class='val'>${cubeDist.toFixed(2)}</span></div><div class='pill'>Overlap when separation < ${HALF}</div></div>`,
+          spc:()=>`<div class='section'><div class='label'>Layer Spacing</div><div class='row'><input id='spcSlider' type='range' min='0.5' max='2.0' step='0.05' value='${spacing}'><span id='spcVal' class='val'>${spacing.toFixed(2)}</span></div></div>`,
+          vis:()=>`<div class='section'><div class='label'>Visibility</div><div class='row'><button id='toggleA' class='${showA?"active":""}'>Toggle A</button><button id='toggleB' class='${showB?"active":""}'>Toggle B</button><button id='toggleN' class='${showN?"active":""}'>Toggle Nexus</button></div></div>`,
+          metrics:()=>`<div class='section'><div class='label'>Metrics</div><div class='row'><div class='pill'>Overlap sparkline (right)</div><div class='pill'>Layers: ${layers}</div></div></div>`,
+          seq:()=>`<div class='section'><div class='label'>Sequencer — trance engine</div><div class='row'><label class='pill'>BPM</label><input id='bpm' type='range' min='60' max='160' value='${bpm}'><span class='val' id='bpmVal'>${bpm}</span><button id='play'>${playing?"Pause":"Play"}</button><button id='clr'>Clear</button></div><div class='row'><label class='pill'>Row A</label><div id='rowA' class='seqGrid'></div></div><div class='row'><label class='pill'>Row B</label><div id='rowB' class='seqGrid'></div></div><div class='row'><label class='pill'>Row N</label><div id='rowN' class='seqGrid'></div></div></div>`,
+          presets:()=>`<div class='section'><div class='label'>Presets</div><div class='row'><button data-pre='harmony'>Harmony</button><button data-pre='chorus'>Chorus</button><button data-pre='vocoder'>Vocoder</button><button data-pre='clean'>Clean</button></div></div>`,
+          fx:()=>`<div class='section'><div class='label'>FX</div><div class='row'><label class='pill'>Sep LFO Amt</label><input id='lfoAmt' type='range' min='0' max='2' step='0.01' value='${lfoSepAmt}'><span class='val' id='lfoAmtVal'>${lfoSepAmt.toFixed(2)}</span><label class='pill'>Rate Hz</label><input id='lfoRate' type='range' min='0' max='2' step='0.01' value='${lfoSepRate}'><span class='val' id='lfoRateVal'>${lfoSepRate.toFixed(2)}</span></div><div class='row'><label class='pill'>Cross‑Mod</label><input id='xmod' type='range' min='0' max='1' step='0.01' value='${crossMod}'><span class='val' id='xmodVal'>${crossMod.toFixed(2)}</span></div></div>`
+        }[kind]();
+        p.innerHTML=html||''; p.classList.add('open'); document.body.classList.add('panel-open'); bindPanel(kind);
+      }
+
+      function bindPanel(kind){
+        const p=document.getElementById('panel');
+        if(kind==='layers'){
+          p.querySelectorAll('input[data-kind="gain"]').forEach(sl=>{sl.addEventListener('input',e=>{const i=+e.target.dataset.idx;layerGain[i]=+e.target.value;updateMaterials()})});
+          p.querySelectorAll('button[data-kind]').forEach(btn=>{btn.addEventListener('click',()=>{const i=+btn.dataset.idx;const k=btn.dataset.kind;btn.classList.toggle('active');if(k==='visA')layerVisA[i]=!layerVisA[i];if(k==='visB')layerVisB[i]=!layerVisB[i];if(k==='visN')layerVisN[i]=!layerVisN[i];updateMaterials();updateNexusGeometry()})})
+        }
+        if(kind==='sep'){
+          const s=document.getElementById('sepSlider'),v=document.getElementById('sepVal');
+          s.addEventListener('input',e=>{cubeDist=+e.target.value;v.textContent=cubeDist.toFixed(2);updateAll()})
+        }
+        if(kind==='spc'){
+          const s=document.getElementById('spcSlider'),v=document.getElementById('spcVal');
+          s.addEventListener('input',e=>{spacing=+e.target.value;for(let i=0;i<layers;i++){A[i].position.y=B[i].position.y=N[i].position.y=i*spacing}})
+        }
+        if(kind==='vis'){
+          const a=document.getElementById('toggleA'); if(a)a.addEventListener('click',()=>{showA=!showA;a.classList.toggle('active');updateMaterials()});
+          const b=document.getElementById('toggleB'); if(b)b.addEventListener('click',()=>{showB=!showB;b.classList.toggle('active');updateMaterials()});
+          const n=document.getElementById('toggleN'); if(n)n.addEventListener('click',()=>{showN=!showN;n.classList.toggle('active');updateNexusGeometry()})
+        }
+        if(kind==='seq'){
+          const mk=(row,arr)=>{row.innerHTML='';for(let i=0;i<steps;i++){const d=document.createElement('div');d.className='step'+(arr[i]>0.5?' active':'');d.dataset.i=i;d.addEventListener('click',()=>{arr[i]=arr[i]>0.5?0:1;d.classList.toggle('active')});row.appendChild(d)}};
+          mk(document.getElementById('rowA'),seqA); mk(document.getElementById('rowB'),seqB); mk(document.getElementById('rowN'),seqN);
+          const bpmEl=document.getElementById('bpm'),bpmVal=document.getElementById('bpmVal');
+          bpmEl.addEventListener('input',e=>{bpm=+e.target.value;bpmVal.textContent=bpm});
+          document.getElementById('play').addEventListener('click',e=>{playing=!playing;e.target.textContent=playing?'Pause':'Play';lastTick=performance.now()});
+          document.getElementById('clr').addEventListener('click',()=>{for(let i=0;i<steps;i++){seqA[i]=seqB[i]=seqN[i]=0}openPanel('seq')})
+        }
+        if(kind==='presets'){
+          p.querySelectorAll('button[data-pre]').forEach(b=>b.addEventListener('click',()=>applyPreset(b.dataset.pre)))
+        }
+        if(kind==='fx'){
+          const a=document.getElementById('lfoAmt'),av=document.getElementById('lfoAmtVal');
+          const r=document.getElementById('lfoRate'),rv=document.getElementById('lfoRateVal');
+          const x=document.getElementById('xmod'),xv=document.getElementById('xmodVal');
+          a.addEventListener('input',e=>{lfoSepAmt=+e.target.value;av.textContent=lfoSepAmt.toFixed(2)});
+          r.addEventListener('input',e=>{lfoSepRate=+e.target.value;rv.textContent=lfoSepRate.toFixed(2)});
+          x.addEventListener('input',e=>{crossMod=+e.target.value;xv.textContent=crossMod.toFixed(2)})
+        }
+      }
+
+      function applyPreset(name){
+        if(name==='clean'){
+          lfoSepAmt=0;lfoSepRate=0;crossMod=0;
+          for(let i=0;i<steps;i++){seqA[i]=i%4===0?1:0;seqB[i]=i%4===2?1:0;seqN[i]=i%2===0?0.7:0.2}
+        }
+        if(name==='harmony'){
+          for(let i=0;i<steps;i++){seqA[i]=(i%4===0)?1:0.3;seqB[i]=(i%4===2)?1:0.3;seqN[i]=(i%2===0)?0.9:0.5}
+          lfoSepAmt=.6;lfoSepRate=.25;crossMod=.3
+        }
+        if(name==='chorus'){
+          for(let i=0;i<steps;i++){seqA[i]=0.8;seqB[i]=0.8;seqN[i]=0.8}
+          lfoSepAmt=1.2;lfoSepRate=.6;crossMod=.2
+        }
+        if(name==='vocoder'){
+          for(let i=0;i<steps;i++){seqA[i]=(i%3===0)?1:0;seqB[i]=(i%5===0)?1:0;seqN[i]=(seqA[i]||seqB[i])?1:0.4}
+          lfoSepAmt=.4;lfoSepRate=.35;crossMod=.8
+        }
+        openPanel('seq')
+      }
+
+      function onResize(){camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)}
+
+      // ---- Minimal Runtime Tests (console) ----
+      function runSelfTests(){
+        try{
+          console.group('%cVMN self-tests','color:#4fc3f7');
+          // Overlap extremes
+          const oldDist=cubeDist; cubeDist=0; console.assert(Math.abs(overlapWidth()-PLANE_SIZE)<1e-6,'overlap @0 should equal PLANE_SIZE');
+          cubeDist=HALF; console.assert(Math.abs(overlapWidth()-0)<1e-6,'overlap @HALF should be 0'); cubeDist=oldDist; updateNexusGeometry();
+          // 16th-note interval @120bpm
+          const oldBpm=bpm; bpm=120; const ms=seqIntervalMS(); console.assert(Math.abs(ms-125)<1,'seqIntervalMS ~125ms @120bpm'); bpm=oldBpm;
+          // Scale sanity
+          console.assert(Math.abs(note(220,0)-220)<1e-6,'note base');
+          console.assert(Math.abs(note(220,8)-440)<1e-6,'note octave up');
+          // Arrays
+          console.assert(seqA.length===steps && seqB.length===steps && seqN.length===steps,'sequence lengths');
+          // Overlap never negative
+          cubeDist=20; console.assert(overlapWidth()>=0,'overlap non-negative'); cubeDist=oldDist;
+          console.assert(window.__VMN_BOOTED__===true,'boot guard set');
+          console.groupEnd();
+        }catch(e){console.error('Self-tests error',e)}
+      }
+
+      // ---- WebAudio Joy Engine ----
+      function ensureAudio(){ if(audioEnabled) return; try{ audioCtx=new (window.AudioContext||window.webkitAudioContext)(); master=audioCtx.createGain(); master.gain.value=0.22; color=audioCtx.createBiquadFilter(); color.type='lowpass'; color.frequency.value=1200; color.Q.value=0.7; color.connect(master).connect(audioCtx.destination); audioEnabled=true; const btn=document.getElementById('audioBtn'); if(btn){btn.setAttribute('aria-pressed','true'); btn.textContent='🔊 Sound On';}}catch(e){ console.warn('Audio init failed',e);} }
+      function envTone(type,freq,len=0.12,gain=0.5,pan=0){ if(!audioEnabled||!audioCtx) return; const t=audioCtx.currentTime; const o=audioCtx.createOscillator(); o.type=type; o.frequency.setValueAtTime(freq,t); const g=audioCtx.createGain(); g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(gain,t+0.01); g.gain.exponentialRampToValueAtTime(0.0001,t+len); const p=audioCtx.createStereoPanner(); p.pan.value=pan; o.connect(g).connect(p).connect(color); o.start(t); o.stop(t+len); }
+      const scale=[1, 9/8, 5/4, 4/3, 3/2, 5/3, 15/8, 2]; // just major
+      function note(base,idx){ const oct = 2**Math.floor(idx/scale.length); const ratio = scale[idx%scale.length]; return base*ratio*oct; }
+      function playVoice(engine, layerIdx, gainMul){ const base = (engine==='A')?110:(engine==='B')?220:330; const type = (engine==='A')?'triangle':(engine==='B')?'square':'sine'; const freq = note(base, layerIdx%scale.length); const pan = (engine==='A')?-0.35:(engine==='B')?0.35:0; const len = 0.08 + (spacing-0.5)*0.09; envTone(type, freq, Math.max(0.04, len), 0.45*gainMul, pan); }
+      function playStepAudio(){ if(!audioEnabled) return; const i=step; // map step to all layers with their gains/visibility
+        if(seqA[i]>0.5){ for(let L=0; L<layers; L++){ if(layerVisA[L] && showA && layerGain[L]>0){ playVoice('A', L, layerGain[L]); } } }
+        if(seqB[i]>0.5){ for(let L=0; L<layers; L++){ if(layerVisB[L] && showB && layerGain[L]>0){ playVoice('B', L, layerGain[L]); } } }
+        if(seqN[i]>0.5){ const widthNorm = Math.min(1, overlapWidth()/PLANE_SIZE); for(let L=0; L<layers; L++){ if(layerVisN[L] && showN && layerGain[L]>0){ playVoice('N', L, layerGain[L]*widthNorm); } } }
+      }
+      // Ambient drone following overlap width (only when not playing)
+      setInterval(()=>{ if(!audioEnabled||playing||!audioCtx) return; const w=overlapWidth(); const f=110 + w*22; envTone('sine', f, 0.2, 0.12); }, 700);
+
+      // Boot
+      init();
+
+      // Transport & Audio bindings
+      (function(){
+        const playBtn=document.getElementById('playBtn');
+        const bpmT=document.getElementById('bpmT'); const bpmTVal=document.getElementById('bpmTVal');
+        const audioBtn=document.getElementById('audioBtn');
+        playBtn.addEventListener('click',()=>{ ensureAudio(); if(audioCtx && audioCtx.state==='suspended'){audioCtx.resume();} playing=!playing; playBtn.setAttribute('aria-pressed', String(playing)); playBtn.textContent = playing ? '❚❚ Pause' : '▶︎ Play'; lastTick=performance.now(); });
+        bpmT.addEventListener('input',e=>{ bpm=+e.target.value; bpmTVal.textContent=bpm; });
+        audioBtn.addEventListener('click',()=>{ ensureAudio(); if(audioCtx && audioCtx.state==='suspended'){audioCtx.resume();} });
+      })();
+    })();
+  } else {
+    console.warn('VMN already booted — duplicate script prevented');
+  }
+  </script>
+</body>
+</html>

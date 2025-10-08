@@ -1,0 +1,386 @@
+[
+  {
+    "k": 1,
+    "vec": "00000",
+    "title": "Foundational Bitter Lesson",
+    "bits": [
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "k": 2,
+    "vec": "00001",
+    "title": "RL → Preservation",
+    "bits": [
+      0,
+      0,
+      0,
+      0,
+      1
+    ]
+  },
+  {
+    "k": 3,
+    "vec": "00010",
+    "title": "RL Internalism",
+    "bits": [
+      0,
+      0,
+      0,
+      1,
+      0
+    ]
+  },
+  {
+    "k": 4,
+    "vec": "00011",
+    "title": "RL Construct→Preserve",
+    "bits": [
+      0,
+      0,
+      0,
+      1,
+      1
+    ]
+  },
+  {
+    "k": 5,
+    "vec": "00100",
+    "title": "Externalized Trap",
+    "bits": [
+      0,
+      0,
+      1,
+      0,
+      0
+    ]
+  },
+  {
+    "k": 6,
+    "vec": "00101",
+    "title": "Trap vs Preservation",
+    "bits": [
+      0,
+      0,
+      1,
+      0,
+      1
+    ]
+  },
+  {
+    "k": 7,
+    "vec": "00110",
+    "title": "Trap: Internal Construct",
+    "bits": [
+      0,
+      0,
+      1,
+      1,
+      0
+    ]
+  },
+  {
+    "k": 8,
+    "vec": "00111",
+    "title": "Trap: Solo Preservation",
+    "bits": [
+      0,
+      0,
+      1,
+      1,
+      1
+    ]
+  },
+  {
+    "k": 9,
+    "vec": "01000",
+    "title": "Prior dismissed → Adapt",
+    "bits": [
+      0,
+      1,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "k": 10,
+    "vec": "01001",
+    "title": "Prior Trap vs Preserve",
+    "bits": [
+      0,
+      1,
+      0,
+      0,
+      1
+    ]
+  },
+  {
+    "k": 11,
+    "vec": "01010",
+    "title": "External Construct vs Prior",
+    "bits": [
+      0,
+      1,
+      0,
+      1,
+      0
+    ]
+  },
+  {
+    "k": 12,
+    "vec": "01011",
+    "title": "Epistemic Trap",
+    "bits": [
+      0,
+      1,
+      0,
+      1,
+      1
+    ]
+  },
+  {
+    "k": 13,
+    "vec": "01100",
+    "title": "Prior + Internal Construct",
+    "bits": [
+      0,
+      1,
+      1,
+      0,
+      0
+    ]
+  },
+  {
+    "k": 14,
+    "vec": "01101",
+    "title": "Prior + Internal Preserve",
+    "bits": [
+      0,
+      1,
+      1,
+      0,
+      1
+    ]
+  },
+  {
+    "k": 15,
+    "vec": "01110",
+    "title": "Transmission → Consistency",
+    "bits": [
+      0,
+      1,
+      1,
+      1,
+      0
+    ]
+  },
+  {
+    "k": 16,
+    "vec": "01111",
+    "title": "Prior → Preservation",
+    "bits": [
+      0,
+      1,
+      1,
+      1,
+      1
+    ]
+  },
+  {
+    "k": 17,
+    "vec": "10000",
+    "title": "Data→External Construct",
+    "bits": [
+      1,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "k": 18,
+    "vec": "10001",
+    "title": "Data→External Preserve",
+    "bits": [
+      1,
+      0,
+      0,
+      0,
+      1
+    ]
+  },
+  {
+    "k": 19,
+    "vec": "10010",
+    "title": "Data→Internal Construct",
+    "bits": [
+      1,
+      0,
+      0,
+      1,
+      0
+    ]
+  },
+  {
+    "k": 20,
+    "vec": "10011",
+    "title": "Data→Internal Preserve",
+    "bits": [
+      1,
+      0,
+      0,
+      1,
+      1
+    ]
+  },
+  {
+    "k": 21,
+    "vec": "10100",
+    "title": "Data Trap→Adapt",
+    "bits": [
+      1,
+      0,
+      1,
+      0,
+      0
+    ]
+  },
+  {
+    "k": 22,
+    "vec": "10101",
+    "title": "Data Trap→Preserve",
+    "bits": [
+      1,
+      0,
+      1,
+      0,
+      1
+    ]
+  },
+  {
+    "k": 23,
+    "vec": "10110",
+    "title": "Data Trap→Construct",
+    "bits": [
+      1,
+      0,
+      1,
+      1,
+      0
+    ]
+  },
+  {
+    "k": 24,
+    "vec": "10111",
+    "title": "Data Trap→Corpus",
+    "bits": [
+      1,
+      0,
+      1,
+      1,
+      1
+    ]
+  },
+  {
+    "k": 25,
+    "vec": "11000",
+    "title": "Prior→External Construct",
+    "bits": [
+      1,
+      1,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "k": 26,
+    "vec": "11001",
+    "title": "Prior→External Preserve",
+    "bits": [
+      1,
+      1,
+      0,
+      0,
+      1
+    ]
+  },
+  {
+    "k": 27,
+    "vec": "11010",
+    "title": "Prior→Internal Construct",
+    "bits": [
+      1,
+      1,
+      0,
+      1,
+      0
+    ]
+  },
+  {
+    "k": 28,
+    "vec": "11011",
+    "title": "Prior→Internal Preserve",
+    "bits": [
+      1,
+      1,
+      0,
+      1,
+      1
+    ]
+  },
+  {
+    "k": 29,
+    "vec": "11100",
+    "title": "Cultural Imperative",
+    "bits": [
+      1,
+      1,
+      1,
+      0,
+      0
+    ]
+  },
+  {
+    "k": 30,
+    "vec": "11101",
+    "title": "Preservation Imperative",
+    "bits": [
+      1,
+      1,
+      1,
+      0,
+      1
+    ]
+  },
+  {
+    "k": 31,
+    "vec": "11110",
+    "title": "Transmitted Paradigm",
+    "bits": [
+      1,
+      1,
+      1,
+      1,
+      0
+    ]
+  },
+  {
+    "k": 32,
+    "vec": "11111",
+    "title": "Ultimate Cultural Axiom",
+    "bits": [
+      1,
+      1,
+      1,
+      1,
+      1
+    ]
+  }
+]

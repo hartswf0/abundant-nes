@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>VOL‑MEDIA CRATES — Chronophonic DJ (Adaptive)</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:#000;color:#fff;overflow:hidden}
+  #stage{position:fixed;inset:0}
+  #canvas{width:100%;height:100%;display:block}
+
+  /* Top decade bar */
+  #decades{position:fixed;top:8px;left:50%;transform:translateX(-50%);display:flex;gap:8px;z-index:50}
+  .dtab{border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.06);padding:6px 10px;border-radius:999px;font-size:11px;cursor:pointer}
+  .dtab.active{border-color:#4fc3f7;background:rgba(79,195,247,.22)}
+
+  /* Floating panels (minimizable + draggable) */
+  .panel{position:fixed;z-index:45;min-width:230px;max-width:86vw;background:rgba(0,0,0,.86);border-radius:14px;padding:8px 10px;border:2px solid rgba(255,255,255,.2);backdrop-filter:blur(6px)}
+  .ph{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px}
+  .ph h3{font-size:12px;letter-spacing:.6px}
+  .ph .mini{border:1px solid rgba(255,255,255,.35);border-radius:8px;background:rgba(255,255,255,.06);color:#eaffff;font-size:11px;padding:4px 8px;cursor:pointer}
+  .panel.min .pc{display:none}
+  .row{display:flex;align-items:center;gap:8px;margin:6px 0}
+  .row label{font-size:11px;color:#cfefff;min-width:70px}
+  .row input[type=range]{flex:1}
+  .row select{flex:1;background:rgba(255,255,255,.08);color:#eaffff;border:1px solid rgba(255,255,255,.2);border-radius:8px;padding:6px 8px;font-size:12px}
+  .panel .hint{font-size:11px;color:#bfe6ff;opacity:.9}
+  #panelA{left:12px;bottom:120px;border-color:rgba(0,255,136,.35)}
+  #panelO{left:50%;bottom:120px;transform:translateX(-50%);border-color:rgba(255,170,0,.35)}
+  #panelB{right:12px;bottom:120px;border-color:rgba(255,68,136,.35)}
+  #settings{right:12px;top:64px;border-color:rgba(79,195,247,.45);min-width:220px}
+
+  /* Global HUD (minimizable) */
+  #hud{position:fixed;left:50%;bottom:12px;transform:translateX(-50%);display:flex;gap:10px;align-items:center;z-index:46;background:rgba(0,0,0,.8);border:2px solid rgba(79,195,247,.5);border-radius:14px;padding:6px 8px;backdrop-filter:blur(6px)}
+  .hbtn{border:2px solid #4fc3f7;background:rgba(79,195,247,.12);color:#e9f7ff;border-radius:10px;padding:8px 12px;font-size:12px;font-weight:700;letter-spacing:.3px;cursor:pointer}
+  .hbtn.active{background:rgba(79,195,247,.25)}
+  .hctl{display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.04);border:1px solid rgba(79,195,247,.3);padding:6px 8px;border-radius:10px}
+  .hlabel{font-size:10px;color:#9fd2ff}
+  .hslider{width:120px;height:6px;border-radius:4px;background:rgba(79,195,247,.25);-webkit-appearance:none}
+  .hslider::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:#4fc3f7;box-shadow:0 0 12px rgba(79,195,247,.7)}
+  #hud.min .hctl, #hud.min .hbtn:not(#btnHud){display:none}
+  #btnHud{border-color:#ffaa00;color:#ffaa00} 
+
+  /* Camera pad */
+  #camPad{position:fixed;right:10px;top:50%;transform:translateY(-50%);display:grid;gap:8px;z-index:44}
+  .cbtn{width:44px;height:44px;border-radius:10px;border:2px solid #4fc3f7;background:rgba(0,0,0,.85);color:#fff;font-size:10px;cursor:pointer}
+
+  /* Tool ring (stack = main surface) */
+  #toolRing{position:fixed;left:12px;top:64px;display:flex;flex-direction:column;gap:8px;z-index:44}
+  .tool{border:2px solid rgba(255,255,255,.35);background:rgba(255,255,255,.06);color:#eaffff;border-radius:12px;padding:6px 10px;font-size:11px;cursor:pointer}
+  .tool.active{border-color:#4fc3f7;background:rgba(79,195,247,.22)}
+
+  /* Onboarding / toast / tuner */
+  #ob{position:fixed;inset:0;background:rgba(0,0,0,.9);display:flex;align-items:center;justify-content:center;z-index:100}
+  #obCard{max-width:640px;width:92vw;border:2px solid #4fc3f7;border-radius:14px;padding:18px;background:rgba(0,0,0,.85)}
+  #ob h1{font-size:18px;color:#4fc3f7;margin-bottom:6px}
+  #ob p{font-size:13px;color:#d9f2ff;margin:8px 0}
+  #ob .row{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+  #toast{position:fixed;top:60px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.86);border:1px solid rgba(255,255,255,.2);padding:8px 12px;border-radius:10px;font-size:12px;color:#eaffff;z-index:60;display:none}
+  #tune{position:fixed;pointer-events:none;z-index:90;display:none;background:rgba(0,0,0,.9);border:1px solid rgba(255,255,255,.25);border-radius:8px;padding:6px 8px;font-size:12px;color:#eaffff}
+
+  @media(max-width:640px){ .hslider{width:90px} #camPad{display:none} #toolRing{left:auto;right:10px} .panel{min-width:200px} }
+</style>
+</head>
+<body>
+<div id="stage"><canvas id="canvas"></canvas></div>
+
+<!-- Decade tabs -->
+<div id="decades"></div>
+
+<!-- Panels (minimizable) -->
+<div id="panelA" class="panel"></div>
+<div id="panelO" class="panel"></div>
+<div id="panelB" class="panel"></div>
+<div id="settings" class="panel"></div>
+
+<!-- Camera pad (more angles) -->
+<div id="camPad">
+  <button class="cbtn" data-cam="front">FR</button>
+  <button class="cbtn" data-cam="isoL">IL</button>
+  <button class="cbtn" data-cam="isoR">IR</button>
+  <button class="cbtn" data-cam="sideL">SL</button>
+  <button class="cbtn" data-cam="sideR">SR</button>
+  <button class="cbtn" data-cam="back">BK</button>
+  <button class="cbtn" data-cam="top">TOP</button>
+</div>
+
+<!-- Tool ring: choose how stacks react to gestures -->
+<div id="toolRing">
+  <button class="tool active" data-tool="steps">Steps</button>
+  <button class="tool" data-tool="tune">Tune</button>
+  <button class="tool" data-tool="spacing">Spacing</button>
+  <button class="tool" data-tool="resonance">Resonance</button>
+</div>
+
+<!-- Global HUD (minimizable) -->
+<div id="hud">
+  <button id="btnHud" class="hbtn">HUD</button>
+  <button id="btnAudio" class="hbtn">Audio</button>
+  <button id="btnPlay" class="hbtn">Play</button>
+  <div class="hctl"><span class="hlabel">Resonance</span><input id="ctlRes" class="hslider" type="range" min="0" max="100" value="50"></div>
+  <div class="hctl"><span class="hlabel">Pace (BPM)</span><input id="ctlBpm" class="hslider" type="range" min="60" max="180" value="110"></div>
+  <div class="hctl"><span class="hlabel">Energy</span><input id="ctlEnergy" class="hslider" type="range" min="0" max="100" value="40"></div>
+</div>
+
+<!-- Onboarding + helpers -->
+<div id="ob">
+  <div id="obCard">
+    <h1>VOL‑MEDIA CRATES</h1>
+    <p>Stacks are the instrument. Choose a tool (left): Steps, Tune, Spacing, Resonance. Then tap/drag on layers. Every change affects both sound & visuals. Panels/HUD are minimizable, drag to reposition, and your layout is remembered.</p>
+    <div class="row"><button id="obAudio" class="hbtn">Enable Audio</button><button id="obDemo" class="hbtn">Play Demo</button><button id="obClose" class="hbtn">Close</button></div>
+  </div>
+</div>
+<div id="toast"></div>
+<div id="tune">0 st</div>
+
+<script>
+(async function(){
+  // ===== Robust THREE loader =====
+  if(!window.THREE){
+    const CDNs=[
+      'https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js',
+      'https://unpkg.com/three@0.152.2/build/three.min.js',
+      'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js'
+    ];
+    for(const src of CDNs){ try{ await new Promise((res,rej)=>{const s=document.createElement('script'); s.src=src; s.async=true; s.onload=res; s.onerror=rej; document.head.appendChild(s)}); if(window.THREE) break; }catch(e){} }
+  }
+
+  // ===== Scene =====
+  const canvas=document.getElementById('canvas');
+  const scene=new THREE.Scene(); scene.background=new THREE.Color(0x000000);
+  const camera=new THREE.PerspectiveCamera(52, innerWidth/innerHeight, .1, 2000); camera.position.set(70,50,70); camera.lookAt(0,0,0);
+  const renderer=new THREE.WebGLRenderer({canvas,antialias:true}); renderer.setSize(innerWidth,innerHeight); renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
+  addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight)});
+
+  scene.add(new THREE.AmbientLight(0xffffff,.3));
+  const keyL=new THREE.PointLight(0x66ddff,1.6,300); keyL.position.set(0,55,80); scene.add(keyL);
+  const warmL=new THREE.PointLight(0xffaa66,1.0,260); warmL.position.set(50,35,-30); scene.add(warmL);
+  const rimL=new THREE.DirectionalLight(0xffffff,.55); rimL.position.set(-60,70,-20); scene.add(rimL);
+
+  // ===== Global State =====
+  const DECADES=[
+    {id:'70s', name:'1970s', col:0xffa44d, hue:'#ffa44d', voice:'tape', pos:[-70,0,0]},
+    {id:'80s', name:'1980s', col:0x59e0ff, hue:'#59e0ff', voice:'fm', pos:[-35,0,0]},
+    {id:'90s', name:'1990s', col:0x7da1ff, hue:'#7da1ff', voice:'breaks', pos:[0,0,0]},
+    {id:'00s', name:'2000s', col:0xffffff, hue:'#ffffff', voice:'supersaw', pos:[35,0,0]},
+    {id:'10s', name:'2010s', col:0x00d4aa, hue:'#00d4aa', voice:'trap', pos:[70,0,0]},
+    {id:'20s', name:'2020s', col:0xc47dff, hue:'#c47dff', voice:'neural', pos:[105,0,0]}
+  ];
+  let active='80s';
+
+  // Sequencer
+  let playing=false; let bpm=110; let energy=.4; let resonance=.5; let AC, master; 
+  const crates={}; // per decade: {group,layers[],seq[],tune[],steps,phase,root,scale,voice,amp,spacing}
+  let tool='steps'; // steps|tune|spacing|resonance
+
+  // ===== UI helpers =====
+  const qs=(s)=>document.querySelector(s), qsa=(s)=>Array.from(document.querySelectorAll(s));
+  const toast=(m)=>{ const t=qs('#toast'); t.textContent=m; t.style.display='block'; clearTimeout(toast._id); toast._id=setTimeout(()=>t.style.display='none',1100)};
+  function saveLayout(){ const data={ hudMin:qs('#hud').classList.contains('min'),
+    panels:[...['#panelA','#panelO','#panelB','#settings'].map(id=>{const el=qs(id); return {id, min:el.classList.contains('min'), x:el.style.left||null, y:el.style.top||null}})]}; localStorage.setItem('vmc_layout',JSON.stringify(data)); }
+  function loadLayout(){ try{ const data=JSON.parse(localStorage.getItem('vmc_layout')||'{}'); if(data.hudMin) qs('#hud').classList.add('min'); if(Array.isArray(data.panels)){ data.panels.forEach(p=>{ const el=qs(p.id); if(!el) return; if(p.min) el.classList.add('min'); if(p.x) el.style.left=p.x; if(p.y) el.style.top=p.y; }); } }catch(_){} }
+
+  // ===== Build decade GUI bar =====
+  const decBar=document.getElementById('decades');
+  DECADES.forEach(d=>{ const b=document.createElement('button'); b.className='dtab'+(d.id===active?' active':''); b.textContent=d.name; b.style.borderColor='#'+d.col.toString(16).padStart(6,'0'); b.onclick=()=>{ qsa('.dtab').forEach(x=>x.classList.remove('active')); b.classList.add('active'); active=d.id; focusCrate(d.id); toast(d.name); }; decBar.appendChild(b); });
+
+  // ===== Build crates (3D) =====
+  const SIZE=10; const LAYERS=16; function mkLayer(color,op){ const g=new THREE.PlaneGeometry(SIZE,SIZE); const m=new THREE.MeshStandardMaterial({color,transparent:true,opacity:op,side:THREE.DoubleSide,depthWrite:false,roughness:.55,metalness:.08}); const mesh=new THREE.Mesh(g,m); mesh.rotation.x=-Math.PI/2; m.emissive=new THREE.Color(color); m.emissiveIntensity=.25; return mesh; }
+  function buildCrates(){
+    const defaultSpacing=1.1;
+    DECADES.forEach(d=>{
+      const grp=new THREE.Group(); grp.position.set(...d.pos);
+      const arr=[]; for(let i=0;i<LAYERS;i++){ const base=.9-(i/LAYERS)*.55; const m=mkLayer(d.col,Math.max(.2,base*.5)); m.position.y=i*defaultSpacing; grp.add(m); arr.push(m); }
+      scene.add(grp);
+      crates[d.id]={group:grp, color:d.col, layers:arr, seq:new Array(32).fill(0), tune:new Array(32).fill(0), steps:16, phase:0, root: (d.id==='80s'||d.id==='00s')?220:110, scale: (d.id==='80s'||d.id==='00s')?'majorPent':'minorPent', voice:d.voice, amp:.7, spacing:defaultSpacing};
+    });
+  }
+  buildCrates();
+
+  // ===== Camera focus + angles =====
+  function focusCrate(id){ const d=DECADES.find(x=>x.id===id); if(!d) return; const base=new THREE.Vector3(...d.pos); const target=base.clone().add(new THREE.Vector3(0,30,60)); camera.position.copy(target); camera.lookAt(base.x,10,0); }
+  const cams={
+    front:(c)=>camera.position.set(0,38,90),
+    back:(c)=>camera.position.set(0,38,-90),
+    isoL:(c)=>camera.position.set(-70,46,70),
+    isoR:(c)=>camera.position.set(70,46,70),
+    sideL:(c)=>camera.position.set(-90,38,0),
+    sideR:(c)=>camera.position.set(90,38,0),
+    top:(c)=>camera.position.set(0,110,0.01)
+  };
+  qsa('#camPad .cbtn').forEach(b=>b.addEventListener('click',()=>{ const mode=b.dataset.cam; if(cams[mode]){ cams[mode](); camera.lookAt(0,10,0); } }));
+  focusCrate(active);
+
+  // ===== Picking & gestures (stacks are the control surface) =====
+  const ray=new THREE.Raycaster(); const v2=new THREE.Vector2(); let pressTimer=null,tuning=false,tMeta=null,y0=0,x0=0; const tuneBubble=document.getElementById('tune');
+  canvas.addEventListener('pointerdown',ev=>{
+    v2.x=(ev.clientX/innerWidth)*2-1; v2.y=-(ev.clientY/innerHeight)*2+1; ray.setFromCamera(v2,camera);
+    const meshes=crates[active].layers; const hits=ray.intersectObjects(meshes); if(!hits.length) return;
+    const mesh=hits[0].object; const idx=meshes.indexOf(mesh); x0=ev.clientX; y0=ev.clientY;
+    if(tool==='tune'){
+      tuning=true; tMeta={id:active, idx}; showTune(ev.clientX,ev.clientY,getTune(active,idx)); if(navigator.vibrate) navigator.vibrate(6);
+    } else if(tool==='steps'){
+      const c=crates[active]; const step=idx % c.steps; c.seq[step]=c.seq[step]?0:1; pulse(mesh); click(); toast(`${active} step ${step} ${c.seq[step]?'ON':'off'}`);
+    }
+    const move=(e)=>{
+      if(tool==='spacing'){
+        const dy=y0-e.clientY; const c=crates[active]; c.spacing = clamp(c.spacing + dy*0.001, 0.5, 2.0); y0=e.clientY; applySpacingVisual(c); if(navigator.vibrate) navigator.vibrate(2);
+      } else if(tool==='resonance'){
+        const dx=e.clientX - x0; resonance = clamp(resonance + dx*0.001, 0, 1); x0=e.clientX; updateHUD(); if(navigator.vibrate) navigator.vibrate(2);
+      } else if(tool==='tune' && tuning && tMeta){ const dy=y0-e.clientY; const st=clamp(Math.round(dy/12),-12,12); setTune(tMeta.id,tMeta.idx,st); showTune(e.clientX,e.clientY,st); previewTone(tMeta.id,tMeta.idx,st); }
+    };
+    const up=()=>{ canvas.removeEventListener('pointermove',move); canvas.removeEventListener('pointerup',up); if(tuning){ tuning=false; tMeta=null; hideTune(); } };
+    canvas.addEventListener('pointermove',move); canvas.addEventListener('pointerup',up,{once:true});
+  });
+  function applySpacingVisual(crate){ crate.layers.forEach((m,i)=>{ m.position.y = i*crate.spacing; }); }
+  function pulse(mesh){ mesh.material.emissiveIntensity=.9; setTimeout(()=>{ mesh.material.emissiveIntensity=.25 }, 90) }
+  function showTune(x,y,v){ tuneBubble.style.display='block'; tuneBubble.style.left=(x+12)+'px'; tuneBubble.style.top=(y-28)+'px'; tuneBubble.textContent=(v>0?'+':'')+v+' st'; }
+  function hideTune(){ tuneBubble.style.display='none'; }
+  function getTune(id,idx){ return crates[id].tune[idx%32]||0 }
+  function setTune(id,idx,val){ crates[id].tune[idx%32]=val }
+  function clamp(x,a,b){ return Math.max(a,Math.min(b,x)); }
+
+  // ===== Audio Engine (WebAudio) =====
+  let voicesReady=false; let voices={};
+  function audioInit(){ if(AC) return; const C=window.AudioContext||window.webkitAudioContext; AC=new C(); master=AC.createGain(); master.gain.value=.18; master.connect(AC.destination);
+    Object.keys(crates).forEach(id=>{ const out=AC.createGain(); out.gain.value=crates[id].amp; out.connect(master); crates[id].out=out; voices[id]=buildVoice(crates[id].voice,out); }); voicesReady=true; }
+  function buildVoice(kind,out){ const env=AC.createGain(); env.gain.value=0; const filt=AC.createBiquadFilter(); filt.type='lowpass'; filt.frequency.value=1400; filt.Q.value=0.7; filt.connect(env).connect(out); function osc(type,det=0){ const o=AC.createOscillator(); o.type=type; o.detune.value=det; o.start(); o.connect(filt); return o; } let parts={env,filt}; if(kind==='tape'){ parts.o1=osc('sawtooth',-4); parts.o2=osc('triangle',+4); parts.hiss=mkNoise(0.02,filt);} else if(kind==='fm'){ parts.o1=osc('square',0); parts.o2=osc('square',+7);} else if(kind==='breaks'){ parts.o1=osc('sawtooth',0);} else if(kind==='supersaw'){ parts.o1=osc('sawtooth',-9); parts.o2=osc('sawtooth',+9);} else if(kind==='trap'){ parts.o1=osc('sine',0);} else { parts.o1=osc('triangle',0); parts.o2=osc('sine',+3);} return parts; }
+  function mkNoise(level, dest){ const n=AC.createBuffer(1,AC.sampleRate*2,AC.sampleRate); const d=n.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1; const src=AC.createBufferSource(); src.buffer=n; src.loop=true; const g=AC.createGain(); g.gain.value=level; src.connect(g).connect(dest); src.start(); return {src,g}; }
+  function trigger(env,level=.6,dur=.22){ const t=AC.currentTime; env.gain.cancelScheduledValues(t); env.gain.setValueAtTime(env.gain.value,t); env.gain.linearRampToValueAtTime(level,t+0.01); env.gain.exponentialRampToValueAtTime(0.0001,t+dur); }
+  function setFilter(parts,cut,q){ parts.filt.frequency.setTargetAtTime(cut,AC.currentTime,.02); parts.filt.Q.setTargetAtTime(q,AC.currentTime,.02); }
+  function setFreq(parts,f){ if(parts.o1) parts.o1.frequency.setTargetAtTime(f,AC.currentTime,.02); if(parts.o2) parts.o2.frequency.setTargetAtTime(f*1.001,AC.currentTime,.02); }
+  function click(){ if(!AC) return; const o=AC.createOscillator(); const g=AC.createGain(); o.type='triangle'; o.frequency.value=700; o.connect(g).connect(master); const t=AC.currentTime; g.gain.setValueAtTime(.12,t); g.gain.exponentialRampToValueAtTime(0.0001,t+.1); o.start(); o.stop(t+.12) }
+  function scaleFreq(scale,root,degree){ const tbl={minorPent:[0,3,5,7,10],majorPent:[0,2,4,7,9],dorian:[0,2,3,5,7,9,10],phrygian:[0,1,5,7,8]}; const arr=tbl[scale]||tbl.minorPent; const semi=arr[degree%arr.length]; return root*Math.pow(2,semi/12) }
+
+  // ===== Sequencer clock =====
+  function startClock(){ let last=performance.now(); function loop(){ if(playing && AC && AC.state==='running'){ const beat=60000/bpm; const stepDur=beat/4; const now=performance.now(); if(now-last>=stepDur){ last+=stepDur; tick(); } } requestAnimationFrame(loop) } loop(); }
+  function tick(){ Object.keys(crates).forEach(id=>{ const c=crates[id]; c.phase=(c.phase+1)%c.steps; if(c.seq[c.phase]){ const deg=c.phase; const f=scaleFreq(c.scale,c.root,deg); const tuned=f*Math.pow(2,(c.tune[c.phase]||0)/12); if(AC&&voicesReady){ const v=voices[id]; setFreq(v,tuned); const cut=900+2400*energy; const q=.7+5*resonance; setFilter(v,cut,q); trigger(v.env, .42 + .38*energy, .16 + .12*resonance); } const mesh=c.layers[deg%LAYERS]; if(mesh){ pulse(mesh); mesh.scale.set(1,1,1); mesh.scale.x=1+(0.12*energy); mesh.scale.z=1+(0.12*energy); setTimeout(()=>{mesh.scale.set(1,1,1)},90); } } }); }
+
+  // ===== Panels (minimizable + draggable) =====
+  function makeDraggable(el){ let dx=0,dy=0,drag=false; el.querySelector('.ph').addEventListener('pointerdown',e=>{ drag=true; dx=e.clientX-(parseInt(el.style.left)||0); dy=e.clientY-(parseInt(el.style.top)||0); el.setPointerCapture(e.pointerId); });
+    el.addEventListener('pointermove',e=>{ if(!drag) return; el.style.left=(e.clientX-dx)+'px'; el.style.top=(e.clientY-dy)+'px'; });
+    el.addEventListener('pointerup',()=>{ drag=false; saveLayout(); }); }
+
+  function panelMarkup(title, id){ return `<div class='ph'><h3>${title}</h3><div><button class='mini' data-min='${id}'>−</button></div></div><div class='pc'></div>`; }
+
+  function renderPanels(){
+    const idx=DECADES.findIndex(d=>d.id===active);
+    const A=DECADES[Math.max(0,idx-1)]||DECADES[0];
+    const O=DECADES[idx];
+    const B=DECADES[Math.min(DECADES.length-1,idx+1)]||DECADES[DECADES.length-1];
+
+    const pA=qs('#panelA'); const pO=qs('#panelO'); const pB=qs('#panelB');
+    if(!pA.innerHTML) pA.innerHTML=panelMarkup(A.name,'panelA');
+    if(!pO.innerHTML) pO.innerHTML=panelMarkup(O.name,'panelO');
+    if(!pB.innerHTML) pB.innerHTML=panelMarkup(B.name,'panelB');
+
+    fillPanel(A,pA); fillPanel(O,pO); fillPanel(B,pB);
+    [pA,pO,pB].forEach(el=>{ el.querySelector('[data-min]')?.addEventListener('click',()=>{ el.classList.toggle('min'); saveLayout(); }); if(!el._drag){ makeDraggable(el); el._drag=true; } });
+  }
+
+  function fillPanel(d, el){ const c=crates[d.id]; const pc=el.querySelector('.pc'); pc.innerHTML=`
+    <div class='row'><label>Volume</label><input id='v_${d.id}' type='range' min='0' max='100' value='${Math.round((c.amp||.7)*100)}'></div>
+    <div class='row'><label>Steps</label><input id='s_${d.id}' type='range' min='4' max='32' value='${c.steps}'></div>
+    <div class='row'><label>Scale</label><select id='sc_${d.id}'>
+      <option value='minorPent' ${sel(c.scale,'minorPent')}>Minor Pent</option>
+      <option value='majorPent' ${sel(c.scale,'majorPent')}>Major Pent</option>
+      <option value='dorian' ${sel(c.scale,'dorian')}>Dorian</option>
+      <option value='phrygian' ${sel(c.scale,'phrygian')}>Phrygian</option>
+    </select></div>
+    <div class='row'><label>Root (Hz)</label><input id='r_${d.id}' type='range' min='55' max='440' value='${c.root}'></div>
+    <div class='row'><label>Spacing</label><input id='sp_${d.id}' type='range' min='50' max='200' value='${Math.round(c.spacing*100)}'></div>
+    <div class='hint'>Tap layers (Steps). Switch tool on left to Tune/Spacing/Resonance. Drag panels; tap − to minimize.</div>`;
+    pc.querySelector(`#v_${d.id}`).oninput=e=>{ const v=parseInt(e.target.value)/100; c.amp=v; if(c.out) c.out.gain.value=v; };
+    pc.querySelector(`#s_${d.id}`).oninput=e=>{ c.steps=parseInt(e.target.value); };
+    pc.querySelector(`#sc_${d.id}`).onchange=e=>{ c.scale=e.target.value; };
+    pc.querySelector(`#r_${d.id}`).oninput=e=>{ c.root=parseInt(e.target.value); };
+    pc.querySelector(`#sp_${d.id}`).oninput=e=>{ c.spacing=parseInt(e.target.value)/100; applySpacingVisual(c); };
+  }
+  const sel=(a,b)=>a===b?'selected':'';
+
+  // Settings panel
+  const ps=qs('#settings'); ps.innerHTML = `<div class='ph'><h3>Settings</h3><div><button class='mini' data-min='settings'>−</button></div></div><div class='pc'>
+    <div class='row'><label>UI Scale</label><input id='uiScale' type='range' min='80' max='130' value='100'></div>
+    <div class='row'><label>Left‑handed</label><select id='hand'><option value='right'>Right</option><option value='left'>Left</option></select></div>
+    <div class='row'><label>Compact HUD</label><select id='hudMode'><option value='full'>Full</option><option value='mini'>Mini</option></select></div>
+  </div>`;
+  ps.querySelector('[data-min]').onclick=()=>{ ps.classList.toggle('min'); saveLayout(); };
+  makeDraggable(ps); ps.style.top='64px'; ps.style.right='12px';
+  ps.querySelector('#uiScale').oninput=e=>{ const v=parseInt(e.target.value)/100; document.body.style.transform=`scale(${v})`; document.body.style.transformOrigin='top left'; };
+  ps.querySelector('#hand').onchange=e=>{ const left=e.target.value==='left'; const a=qs('#panelA'); const b=qs('#panelB'); if(left){ a.style.left='auto'; a.style.right='12px'; b.style.right='auto'; b.style.left='12px'; } else { a.style.left='12px'; a.style.right='auto'; b.style.right='12px'; b.style.left='auto'; } saveLayout(); };
+  ps.querySelector('#hudMode').onchange=e=>{ if(e.target.value==='mini'){ qs('#hud').classList.add('min'); } else { qs('#hud').classList.remove('min'); } saveLayout(); };
+
+  // HUD controls
+  qs('#btnHud').onclick=()=>{ qs('#hud').classList.toggle('min'); saveLayout(); };
+  qs('#btnAudio').onclick=async()=>{ if(!AC) audioInit(); if(AC.state==='running'){ await AC.suspend(); qs('#btnAudio').classList.remove('active'); } else { await AC.resume(); qs('#btnAudio').classList.add('active'); } };
+  qs('#btnPlay').onclick=async()=>{ if(!AC) audioInit(); if(AC.state!=='running') await AC.resume(); playing=!playing; qs('#btnPlay').classList.toggle('active',playing); toast(playing?'Playing':'Stopped'); };
+  qs('#ctlBpm').oninput=e=>{ bpm=parseInt(e.target.value); };
+  qs('#ctlEnergy').oninput=e=>{ energy=parseInt(e.target.value)/100; };
+  qs('#ctlRes').oninput=e=>{ resonance=parseInt(e.target.value)/100; };
+
+  // Tool ring
+  qsa('#toolRing .tool').forEach(t=>t.addEventListener('click',()=>{ qsa('#toolRing .tool').forEach(x=>x.classList.remove('active')); t.classList.add('active'); tool=t.dataset.tool; toast('Tool: '+tool); }));
+
+  // Decade tab build
+  function rebuildDecadeBar(){ const dec=document.getElementById('decades'); dec.innerHTML=''; DECADES.forEach(d=>{ const b=document.createElement('button'); b.className='dtab'+(d.id===active?' active':''); b.textContent=d.name; b.style.borderColor='#'+d.col.toString(16).padStart(6,'0'); b.onclick=()=>{ qsa('.dtab').forEach(x=>x.classList.remove('active')); b.classList.add('active'); active=d.id; focusCrate(d.id); renderPanels(); toast(d.name); }; dec.appendChild(b); }); }
+
+  // Onboarding
+  qs('#obAudio').onclick=async()=>{ audioInit(); await AC.resume(); qs('#btnAudio').classList.add('active'); toast('Audio enabled'); };
+  qs('#obDemo').onclick=()=>{ seedDemo(); toast('Demo loaded'); closeOb(); };
+  qs('#obClose').onclick=()=> closeOb();
+  function closeOb(){ qs('#ob').style.display='none'; }
+
+  function seedDemo(){ Object.keys(crates).forEach(id=>{ const c=crates[id]; c.seq.fill(0); for(let i=0;i<c.steps;i+= (id==='80s'||id==='00s')?4:3){ c.seq[i]=1; } }); playing=true; qs('#btnPlay').classList.add('active'); }
+
+  // ===== Animate & clock =====
+  function animate(){ requestAnimationFrame(animate); renderer.render(scene,camera) }
+  function start(){ renderPanels(); rebuildDecadeBar(); startClock(); animate(); loadLayout(); }
+
+  // ===== Tests =====
+  ;(function tests(){ const results=[]; results.push(['T1 THREE loaded', !!window.THREE]); results.push(['T2 crates built', Object.keys(crates).length===DECADES.length]); console.table(results.map(([n,p])=>({test:n,pass:p}))); })();
+
+  start();
+})();
+</script>
+</body>
+</html>

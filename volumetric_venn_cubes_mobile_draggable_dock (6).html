@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>VennDeck — Playable Audiovisual Instrument</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:#000;color:#fff;overflow:hidden}
+  #stage{position:fixed;inset:0}
+  #canvas{width:100%;height:100%;display:block}
+
+  /* HUD */
+  #hud{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);display:flex;gap:8px;align-items:center;z-index:30;background:rgba(0,0,0,.78);border:2px solid rgba(79,195,247,.5);border-radius:14px;padding:8px 10px;backdrop-filter:blur(6px)}
+  .hbtn{border:2px solid #4fc3f7;background:rgba(79,195,247,.12);color:#e9f7ff;border-radius:10px;padding:8px 12px;font-size:12px;font-weight:700;letter-spacing:.3px;cursor:pointer}
+  .hbtn.active{background:rgba(79,195,247,.25)}
+  .hctl{display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.04);border:1px solid rgba(79,195,247,.3);padding:6px 8px;border-radius:10px}
+  .hlabel{font-size:10px;color:#9fd2ff}
+  .hslider{width:120px;height:6px;border-radius:4px;background:rgba(79,195,247,.25);-webkit-appearance:none}
+  .hslider::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:#4fc3f7;box-shadow:0 0 12px rgba(79,195,247,.7)}
+  .meter{width:72px;height:6px;background:rgba(255,255,255,.08);border:1px solid rgba(79,195,247,.35);border-radius:6px;overflow:hidden}
+  .meter>div{height:100%}
+
+  /* Top tabs */
+  #tabs{position:fixed;top:10px;left:50%;transform:translateX(-50%);display:flex;gap:8px;z-index:25}
+  .tab{border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.06);padding:6px 10px;border-radius:999px;font-size:11px;cursor:pointer}
+  .tab.active{border-color:#4fc3f7;background:rgba(79,195,247,.22)}
+
+  /* Left cam pad */
+  #cam{position:fixed;left:10px;top:50%;transform:translateY(-50%);display:grid;gap:8px;z-index:20}
+  .cbtn{width:40px;height:40px;border-radius:10px;border:2px solid #4fc3f7;background:rgba(0,0,0,.85);color:#fff;font-size:10px;cursor:pointer}
+
+  /* Onboarding */
+  #ob{position:fixed;inset:0;background:rgba(0,0,0,.9);display:flex;align-items:center;justify-content:center;z-index:100}
+  #obCard{max-width:620px;width:92vw;border:2px solid #4fc3f7;border-radius:14px;padding:18px;background:rgba(0,0,0,.85)}
+  #ob h1{font-size:18px;color:#4fc3f7;margin-bottom:6px}
+  #ob p{font-size:13px;color:#d9f2ff;margin:8px 0}
+  #ob .row{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+
+  /* Toast */
+  #toast{position:fixed;top:60px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.86);border:1px solid rgba(255,255,255,.2);padding:8px 12px;border-radius:10px;font-size:12px;color:#eaffff;z-index:60;display:none}
+
+  @media(max-width:520px){ .hslider{width:90px} #hud{flex-wrap:wrap;justify-content:center} #cam{display:none} }
+</style>
+</head>
+<body>
+<div id="stage"><canvas id="canvas"></canvas></div>
+<div id="tabs">
+  <div class="tab active" data-track="A">Deck A</div>
+  <div class="tab" data-track="O">Overlap</div>
+  <div class="tab" data-track="B">Deck B</div>
+</div>
+<div id="cam">
+  <button class="cbtn" data-cam="front">FR</button>
+  <button class="cbtn" data-cam="iso">ISO</button>
+  <button class="cbtn" data-cam="top">TOP</button>
+</div>
+<div id="hud">
+  <button id="btnAudio" class="hbtn">Audio</button>
+  <button id="btnPlay" class="hbtn">Play</button>
+
+  <div class="hctl"><span class="hlabel">Overlap</span><input id="ctlOverlap" class="hslider" type="range" min="0" max="100" value="60"></div>
+  <div class="hctl"><span class="hlabel">Spacing</span><input id="ctlSpacing" class="hslider" type="range" min="70" max="200" value="110"></div>
+  <div class="hctl"><span class="hlabel">Mix</span><input id="ctlXf" class="hslider" type="range" min="-100" max="100" value="0"></div>
+
+  <div class="meter"><div id="mA" style="background:#00ff88;width:40%"></div></div>
+  <div class="meter"><div id="mO" style="background:#ffaa00;width:50%"></div></div>
+  <div class="meter"><div id="mB" style="background:#ff4488;width:40%"></div></div>
+</div>
+<div id="ob">
+  <div id="obCard">
+    <h1>VennDeck</h1>
+    <p><b>Tap layers</b> to program beats. <b>Overlap</b> changes geometry & resonance. <b>Spacing</b> changes rhythmic feel. <b>Mix</b> is the crossfader.</p>
+    <p>Start here: 1) Enable Audio 2) Play demo 3) Tap any layer. The scene itself is your instrument.</p>
+    <div class="row">
+      <button id="obAudio" class="hbtn">Enable Audio</button>
+      <button id="obDemo" class="hbtn">Play Demo</button>
+      <button id="obClose" class="hbtn">Close</button>
+    </div>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script>
+(async function(){
+  // ---- Load THREE robustly ----
+  if(!window.THREE){
+    const CDNs=[
+      'https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js',
+      'https://unpkg.com/three@0.152.2/build/three.min.js',
+      'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js'
+    ];
+    for(const src of CDNs){
+      try{ await new Promise((res,rej)=>{const s=document.createElement('script'); s.src=src; s.async=true; s.onload=res; s.onerror=rej; document.head.appendChild(s)}); if(window.THREE) break; }catch(e){}
+    }
+  }
+
+  // ====== Core State ======
+  const SIZE=10; // side length of planes
+  let scene,camera,renderer; let cubeA=[],cubeB=[],nexus=[]; let pickList=[];
+  let layers=16;           // number of time/space layers
+  let spacing=1.1;         // vertical spacing between layers (maps to envelope/time feel)
+  let overlap=0.6;         // 0..1 real geometric overlap (and resonance)
+  let blend='screen';      // initial visual blend
+  let camMode='iso';
+
+  // Sequencer / audio
+  let playing=false; let bpm=110; let phA=0,phB=0,phO=0; let stepA=12,stepB=16,stepO=8;
+  let AC, master; let voices={A:null,B:null,O:null};
+  const seq={A:new Array(32).fill(0), B:new Array(32).fill(0), O:new Array(32).fill(0)};
+  let activeTrack='A';
+  const COLORS={A:0x00ff88, B:0xff4488, O:0xffaa00};
+  let xf=0; // -1..+1 crossfader (A..B)
+
+  // ====== Scene ======
+  const canvas=document.getElementById('canvas');
+  scene=new THREE.Scene(); scene.background=new THREE.Color(0x000000);
+  camera=new THREE.PerspectiveCamera(50, innerWidth/innerHeight, .1, 1000);
+  setCamera('iso');
+  renderer=new THREE.WebGLRenderer({canvas,antialias:true}); renderer.setSize(innerWidth,innerHeight); renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
+  addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight)});
+
+  // Lights
+  scene.add(new THREE.AmbientLight(0xffffff,.35));
+  const key=new THREE.PointLight(0x4fc3f7,2,160); key.position.set(0,40,40); scene.add(key);
+  const rim=new THREE.DirectionalLight(0xffffff,.65); rim.position.set(-40,60,-10); scene.add(rim);
+
+  build();
+  bindUI();
+  clock();
+  animate();
+
+  // ====== Build geometry ======
+  function mkLayer(color,op){ const g=new THREE.PlaneGeometry(SIZE,SIZE); const m=new THREE.MeshStandardMaterial({color,transparent:true,opacity:op,side:THREE.DoubleSide,depthWrite:false,roughness:.6,metalness:.1}); const mesh=new THREE.Mesh(g,m); mesh.rotation.x=-Math.PI/2; setBlend(m); return mesh; }
+  function setBlend(mat,isOverlap=false){
+    switch(blend){
+      case 'add': mat.blending=THREE.AdditiveBlending; break;
+      case 'multiply': mat.blending=THREE.MultiplyBlending; break;
+      case 'screen': default:
+        mat.blending=THREE.CustomBlending; mat.blendEquation=THREE.AddEquation; mat.blendSrc=THREE.OneFactor; mat.blendDst=THREE.OneMinusSrcColorFactor; break;
+    }
+    if(isOverlap){ mat.emissive=new THREE.Color(COLORS.O); mat.emissiveIntensity=.35; }
+  }
+  function build(){
+    // clear
+    for(const arr of [cubeA,cubeB,nexus]){ for(const m of arr){ scene.remove(m); m.geometry.dispose?.(); m.material.dispose?.(); } arr.length=0; }
+    pickList.length=0;
+    const dist=(SIZE - SIZE*overlap)/2; // exact overlap mapping
+    for(let i=0;i<layers;i++){
+      const y=i*spacing; const base=.85-(i/layers)*.55;
+      const a=mkLayer(COLORS.A, Math.max(.18,base*.45)); a.position.set(-dist,y,0); scene.add(a); cubeA.push(a); pickList.push({mesh:a,idx:i,deck:'A'});
+      const b=mkLayer(COLORS.B, Math.max(.18,base*.45)); b.position.set( dist,y,0); scene.add(b); cubeB.push(b); pickList.push({mesh:b,idx:i,deck:'B'});
+      const n=mkLayer(COLORS.O, Math.max(.22,base*.55)); n.position.set(0,y,0); n.scale.set(SIZE*overlap||0.001,1,1); scene.add(n); nexus.push(n); pickList.push({mesh:n,idx:i,deck:'O'}); setBlend(n.material,true);
+    }
+    updateHUD();
+  }
+
+  // ====== HUD updater (FIX for ReferenceError) ======
+  function updateHUD(){
+    const g=xfG(xf);
+    const mA=document.getElementById('mA');
+    const mB=document.getElementById('mB');
+    const mO=document.getElementById('mO');
+    if(mA) mA.style.width = `${Math.round(g.a*100)}%`;
+    if(mB) mB.style.width = `${Math.round(g.b*100)}%`;
+    if(mO) mO.style.width = `${Math.round(overlap*100)}%`;
+  }
+
+  // ====== Picking / programming ======
+  const ray=new THREE.Raycaster(); const v2=new THREE.Vector2();
+  canvas.addEventListener('pointerdown',ev=>{
+    v2.x=(ev.clientX/innerWidth)*2-1; v2.y=-(ev.clientY/innerHeight)*2+1; ray.setFromCamera(v2,camera);
+    const hits=ray.intersectObjects(pickList.map(p=>p.mesh));
+    if(hits.length){ const m=hits[0].object; const meta=pickList.find(p=>p.mesh===m); const step=meta.idx % getSteps(activeTrack); seq[activeTrack][step] = seq[activeTrack][step] ? 0 : 1; flash(m); click(); toast(`${activeTrack} step ${step} ${seq[activeTrack][step]?'ON':'off'}`); if(navigator.vibrate) navigator.vibrate(8); }
+  });
+  function flash(mesh){ mesh.material.emissive=new THREE.Color(0xffffff); mesh.material.emissiveIntensity=.9; setTimeout(()=>{ mesh.material.emissiveIntensity=.35 }, 100) }
+
+  // ====== Camera ======
+  function setCamera(mode){ camMode=mode; const r=70; if(mode==='front'){ camera.position.set(0,30,r) } else if(mode==='top'){ camera.position.set(0,100,0.01) } else { camera.position.set(60,46,60) } camera.lookAt(0,0,0) }
+
+  // ====== Audio ======
+  function audioInit(){ if(AC) return; const C=window.AudioContext||window.webkitAudioContext; AC=new C(); master=AC.createGain(); master.gain.value=.18; master.connect(AC.destination); voices.A=mkVoice('sawtooth'); voices.B=mkVoice('square'); voices.O=mkNoise(); }
+  function mkVoice(type){ const osc=AC.createOscillator(); osc.type=type; const filt=AC.createBiquadFilter(); filt.type='lowpass'; filt.frequency.value=1500; const env=AC.createGain(); env.gain.value=0; osc.connect(filt).connect(env).connect(master); osc.start(); return {osc,filt,env}; }
+  function mkNoise(){ const buf=AC.createBuffer(1,AC.sampleRate*2,AC.sampleRate); const d=buf.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1; const src=AC.createBufferSource(); src.buffer=buf; src.loop=true; const bp=AC.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=1100; bp.Q.value=1; const env=AC.createGain(); env.gain.value=0; src.connect(bp).connect(env).connect(master); src.start(); return {src,bp,env}; }
+  function env(envNode,level=.6,dur=.22){ const t=AC.currentTime; envNode.gain.cancelScheduledValues(t); envNode.gain.setValueAtTime(envNode.gain.value,t); envNode.gain.linearRampToValueAtTime(level,t+0.01); envNode.gain.exponentialRampToValueAtTime(0.0001,t+dur); }
+  function click(){ if(!AC) return; const o=AC.createOscillator(); const g=AC.createGain(); o.type='triangle'; o.frequency.value=700; o.connect(g).connect(master); const t=AC.currentTime; g.gain.setValueAtTime(.12,t); g.gain.exponentialRampToValueAtTime(0.0001,t+.1); o.start(); o.stop(t+.12) }
+
+  function scaleFreq(scale,root,degree){ const tbl={minorPent:[0,3,5,7,10],majorPent:[0,2,4,7,9],dorian:[0,2,3,5,7,9,10]}; const arr=tbl[scale]||tbl.minorPent; const semi=arr[degree%arr.length]; return root*Math.pow(2,semi/12) }
+  let scaleA='minorPent', scaleB='majorPent', rootA=110, rootB=220;
+  function xfG(x){ return {a:(1-x)/2,b:(1+x)/2} }
+  function getSteps(track){ return track==='A'?stepA:track==='B'?stepB:stepO }
+
+  // ====== Clock / Sequencer ======
+  function clock(){ let last=performance.now(); const loop=()=>{ if(playing && AC && AC.state==='running'){ const beat=60000/bpm; const stepDur=beat/4; const now=performance.now(); if(now-last>=stepDur){ last+=stepDur; advance(); } } requestAnimationFrame(loop) }; loop(); }
+  function advance(){ phA=(phA+1)%stepA; phB=(phB+1)%stepB; phO=(phO+1)%stepO; const g=xfG(xf); const ow=overlap; // resonance mapping
+    if(seq.A[phA]){ const f=scaleFreq(scaleA,rootA,phA); voices.A.osc.frequency.setTargetAtTime(f,AC.currentTime,.02); voices.A.filt.frequency.setTargetAtTime(1200+800*ow,AC.currentTime,.02); env(voices.A.env,.5*g.a+.05,.18*(1+spacing*.25)); pulse(cubeA); }
+    if(seq.O[phO]){ voices.O.bp.frequency.setTargetAtTime(900+1600*ow,AC.currentTime,.02); voices.O.bp.Q.setTargetAtTime(.7+6*ow,AC.currentTime,.02); env(voices.O.env,.6*ow+.05,.22); pulse(nexus,true); }
+    if(seq.B[phB]){ const f=scaleFreq(scaleB,rootB,phB); voices.B.osc.frequency.setTargetAtTime(f,AC.currentTime,.02); voices.B.filt.frequency.setTargetAtTime(800+1200*ow,AC.currentTime,.02); env(voices.B.env,.5*g.b+.05,.18*(1+spacing*.25)); pulse(cubeB); }
+  }
+  function pulse(arr,isO=false){ const i=Math.floor(Math.random()*Math.max(1,arr.length-1)); const m=arr[i]; if(!m) return; m.material.emissive=new THREE.Color(isO?COLORS.O:0xffffff); m.material.emissiveIntensity=.9; setTimeout(()=>{ m.material.emissiveIntensity=.35 }, 90) }
+
+  // ====== UI ======
+  function bindUI(){
+    // Tabs
+    document.querySelectorAll('#tabs .tab').forEach(t=>t.addEventListener('click',()=>{ document.querySelectorAll('#tabs .tab').forEach(x=>x.classList.remove('active')); t.classList.add('active'); activeTrack=t.dataset.track; click(); }));
+
+    // Cam
+    document.querySelectorAll('#cam .cbtn').forEach(b=>b.addEventListener('click',()=>{ setCamera(b.dataset.cam); click(); }));
+
+    // HUD controls
+    const btnAudio=document.getElementById('btnAudio');
+    btnAudio.onclick=async()=>{ if(!AC) audioInit(); if(AC.state==='running'){ await AC.suspend(); btnAudio.classList.remove('active'); } else { await AC.resume(); btnAudio.classList.add('active'); } };
+
+    const btnPlay=document.getElementById('btnPlay');
+    btnPlay.onclick=async()=>{ if(!AC) audioInit(); if(AC.state!=='running') await AC.resume(); playing=!playing; btnPlay.classList.toggle('active',playing); toast(playing?'Playing':'Stopped'); };
+
+    const ov=document.getElementById('ctlOverlap');
+    ov.oninput=e=>{ overlap=parseInt(e.target.value)/100; build(); updateHUD(); if(navigator.vibrate) navigator.vibrate(6); };
+
+    const sp=document.getElementById('ctlSpacing');
+    sp.oninput=e=>{ const v=parseInt(e.target.value); spacing = v/100; build(); if(AC) click(); };
+
+    const xfEl=document.getElementById('ctlXf');
+    xfEl.oninput=e=>{ xf=parseInt(e.target.value)/100; updateHUD(); };
+
+    // Onboarding
+    document.getElementById('obAudio').onclick=async()=>{ audioInit(); await AC.resume(); document.getElementById('btnAudio').classList.add('active'); toast('Audio enabled'); };
+    document.getElementById('obDemo').onclick=()=>{ demo(); toast('Demo loaded'); closeOb(); };
+    document.getElementById('obClose').onclick=()=> closeOb();
+  }
+
+  function closeOb(){ document.getElementById('ob').style.display='none'; }
+  function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.style.display='block'; clearTimeout(toast._id); toast._id=setTimeout(()=>t.style.display='none',1200) }
+
+  function demo(){ // seed an easy groove
+    seq.A.fill(0); seq.B.fill(0); seq.O.fill(0);
+    for(let i=0;i<stepA;i+=3) seq.A[i]=1;
+    for(let i=1;i<stepO;i+=2) seq.O[i]=1;
+    for(let i=0;i<stepB;i+=4) seq.B[i]=1;
+    if(!AC) audioInit(); playing=true; document.getElementById('btnPlay').classList.add('active'); closeOb();
+  }
+
+  // ====== Animate ======
+  function animate(){ requestAnimationFrame(animate); renderer.render(scene,camera) }
+
+  // ====== Tests (minimal, open console for logs) ======
+  ;(function runSmokeTests(){
+    const results=[]; 
+    results.push(['T1 THREE loaded', !!window.THREE]);
+    results.push(['T2 voices object exists', typeof voices==='object']);
+    audioInit(); results.push(['T3 voices initialized', !!(voices.A&&voices.B&&voices.O)]);
+    const ow=SIZE*overlap; const dist=(SIZE-ow)/2; const consistent=Math.abs(ow+2*dist-SIZE)<1e-6; results.push(['T4 overlap mapping consistent', consistent]);
+    // New tests for HUD updater
+    results.push(['T5 updateHUD exists', typeof updateHUD==='function']);
+    // T6: updateHUD reflects expected widths (non-invasive)
+    const prevXF=xf, prevOv=overlap; xf=0; overlap=0.25; updateHUD();
+    const okHUD = document.getElementById('mA').style.width==='50%' && document.getElementById('mB').style.width==='50%' && document.getElementById('mO').style.width==='25%';
+    results.push(['T6 updateHUD width mapping', okHUD]);
+    // restore
+    xf=prevXF; overlap=prevOv; updateHUD();
+
+    console.table(results.map(([n,p])=>({test:n, pass:p})));
+  })();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>VIDEO_STACKER_∞</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root { --neon:#0f0; }
+  body {
+    font-family: 'Courier New', monospace;
+    background: #000;
+    overflow: hidden;
+    touch-action: pan-y;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  #glcanvas { display:block; width:100vw; height:100vh; touch-action:none; }
+  /* CSS3D layer sits on top of GL for YouTube iframes */
+  #css3d { position:fixed; inset:0; pointer-events:none; }
+
+  #hud {
+    position: fixed;
+    top: env(safe-area-inset-top, 16px);
+    left: env(safe-area-inset-left, 12px);
+    color: var(--neon);
+    font-size: 13px;
+    pointer-events: none;
+    z-index: 15;
+    text-shadow: 0 0 8px #000;
+    line-height: 1.6;
+  }
+  #score { font-size: 28px; font-weight: bold; letter-spacing: 2px; }
+  #stability-bar { width: 140px; height: 6px; background:#101010; margin:6px 0; border:1px solid var(--neon); position:relative; box-shadow:0 0 8px rgba(0,255,0,.35); }
+  #stability-fill { height:100%; background:linear-gradient(90deg,#f00,#ff0,#0f0); transition:width .2s; }
+  #hint { font-size: 10px; opacity:.6; margin-top:4px; }
+
+  #controls {
+    position: fixed;
+    right: env(safe-area-inset-right, 10px);
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex; flex-direction: column; gap: 12px; z-index: 20;
+  }
+  .control-btn {
+    width: 56px; height: 56px; border-radius: 50%;
+    background: rgba(10,10,10,.85); color: var(--neon);
+    border:2px solid var(--neon); font-weight:700; font-size:18px;
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer; touch-action: manipulation; transition: all .15s;
+    backdrop-filter: blur(4px); box-shadow:0 0 12px rgba(0,255,0,.3);
+  }
+  .control-btn:active { background: var(--neon); color:#000; transform: scale(.92); box-shadow:0 0 20px rgba(0,255,0,.6); }
+  .control-btn.small { width: 48px; height: 48px; font-size:14px; }
+  .row { display:flex; gap:10px; }
+
+  #swipe-hint { position:fixed; bottom: env(safe-area-inset-bottom, 90px); left:50%; transform:translateX(-50%); color:var(--neon); font-size:16px; pointer-events:none; z-index:10; text-shadow:0 0 8px #000; opacity:.75; animation:pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:.75} 50%{opacity:.25} }
+
+  #game-over { position:fixed; inset:0; display:none; z-index:100; place-items:center; }
+  #game-over .panel {
+    background: rgba(0,0,0,.96); color:var(--neon);
+    border:4px solid var(--neon); max-width: min(520px, 92vw);
+    padding: 28px 22px; text-align:center; box-shadow:0 0 30px rgba(0,255,0,.5);
+  }
+  #game-over h1 { font-size: 32px; margin-bottom: 8px; letter-spacing:3px; }
+  #game-over .stats { margin: 6px 0 14px; line-height:1.5; }
+  #game-over .row { justify-content:center; margin-top: 6px; }
+  #game-over button { background:#0a0a0a; color:var(--neon); border:2px solid var(--neon); padding:12px 16px; font-family:inherit; font-size:16px; font-weight:700; cursor:pointer; }
+  #game-over button:active { background:var(--neon); color:#000; }
+
+  #loading { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); color:var(--neon); font-size:14px; z-index:200; }
+
+  /* CSS for muted badge on TV (DOM) */
+  .yt-shell { position:absolute; inset:0; pointer-events:auto; border-radius: 8px; overflow:hidden; border:1px solid rgba(0,255,0,.35); box-shadow:0 0 10px rgba(0,255,0,.15) inset; }
+  .yt-badge { position:absolute; right:6px; bottom:6px; font-size:10px; background:rgba(0,0,0,.55); color:#0f0; padding:2px 6px; border:1px solid #0f0; border-radius:999px; }
+</style>
+</head>
+<body>
+  <div id="loading">BOOTING POML_ENGINE…</div>
+  <canvas id="glcanvas"></canvas>
+  <div id="css3d"></div>
+
+  <div id="hud">
+    <div id="score">0</div>
+    <div>H: <span id="height">0.0</span>m</div>
+    <div>×<span id="streak">0</span></div>
+    <div id="stability-bar"><div id="stability-fill" style="width:100%"></div></div>
+    <div id="hint">HI: <span id="high-score">0</span></div>
+  </div>
+
+  <div id="controls">
+    <button class="control-btn" id="btn-drop" title="Drop (Swipe ↑)">⬇</button>
+    <div class="row">
+      <button class="control-btn small" id="btn-left"  title="Nudge Left">◀</button>
+      <button class="control-btn small" id="btn-right" title="Nudge Right">▶</button>
+    </div>
+    <div class="row">
+      <button class="control-btn small" id="btn-view" title="Change View">⟲</button>
+      <button class="control-btn small" id="btn-auto" title="Auto Frame">🎯</button>
+      <button class="control-btn small" id="btn-mute" title="Mute">🔊</button>
+    </div>
+    <div class="row">
+      <button class="control-btn small" id="btn-reset-soft" title="Soft Reset (keep Hi)">↺</button>
+      <button class="control-btn small" id="btn-reset-hard" title="Hard Reset">⟲⟲</button>
+    </div>
+  </div>
+
+  <div id="swipe-hint">↑ SWIPE UP TO DROP ↑</div>
+
+  <div id="game-over">
+    <div class="panel">
+      <h1>COLLAPSE</h1>
+      <div class="stats" id="final-score"></div>
+      <div class="row">
+        <button id="btn-restart">RESTART</button>
+        <button id="btn-restart-keepcam">RESTART (KEEP CAM)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- three.js core and CSS3DRenderer matching r128 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/renderers/CSS3DRenderer.js"></script>
+  <!-- cannon.js (classic) for simplicity/non-module) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
+  <!-- YouTube iframe API -->
+  <script src="https://www.youtube.com/iframe_api"></script>
+
+<script>
+// ======== Config ========
+const TV = { w: 0.6, d: 0.45, h: 0.4 };
+const SCREEN = { w: TV.w * 0.85, h: TV.h * 0.70, z: TV.d/2 + 0.002 };
+const GAP_Y = 0.05;     // spacing between settled TVs
+const K = 6;            // window for stability
+const LIMIT = 0.22;     // CoM offset soft limit
+const ALPHA = 0.7;      // overhang weight
+const SHARD_COUNT = 64; // debris count
+const SHARD_TTL = 3000; // debris lifetime
+const MAX_IFRAMES = 18; // perf guard
+
+// Provide a seed list of YouTube IDs (safe/muted inline)
+const YT_FEED = [
+  'M7FIvfx5J10','ScMzIvxBSi4','ysz5S6PUM-U','aqz-KE-bpKQ','l-gQLqv9f4o',
+  'e-ORhEE9VVg','kXYiU_JCYtU','dQw4w9WgXcQ','hTWKbfoikeg','CGyEd0aKWZE',
+  'Zi_XLOBDo_Y','60ItHLz5WEA','JGwWNGJdvx8','fJ9rUzIMcZQ','Wch3gJG2GJ4',
+  'J---aiyznGQ','3JZ4pnNtyxQ','OPf0YbXqDm0','ktvTqknDobU','CevxZvSJLk8'
+];
+
+// ======== State ========
+let glRenderer, cssRenderer, scene, camera, world, clock;
+let tvUnits = []; // {group, body, screenPlane, cssObj, ytPlayer, settled, ...}
+let falling = null;
+let score = 0, height = 0, streak = 0;
+let highScore = parseInt(localStorage.getItem('tv_stacker_high') || '0');
+let stability = 1;
+let gameOver = false;
+let muted = false;
+let camPreset = 0;
+let autoFrame = true;
+let feedIndex = 0;
+let lastTallestY = 0; // for auto-framing inertia
+
+// Touch/gesture
+let touchStart = null;
+
+// Camera rig targets
+const camPresets = [
+  { pos:[0,2,4],  look:[0,1,0] },
+  { pos:[-2.5,2.5,3], look:[0,1,0] },
+  { pos:[2.5,2.5,3], look:[0,1,0] },
+  { pos:[0,0.9,3.4], look:[0,1.2,0] },
+  { pos:[0,5,0.8],   look:[0,2.2,0] }
+];
+
+// Audio (procedural blips)
+let audioCtx = null; const sounds = {};
+function initAudio(){
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const blip = (f0=200, f1=120, t=0.25, g=0.3) => {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.frequency.setValueAtTime(f0, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(f1, audioCtx.currentTime+t);
+    gain.gain.setValueAtTime(g, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime+t);
+    osc.start(); osc.stop(audioCtx.currentTime+t);
+  };
+  sounds.drop = ()=>blip(220,160,.3,.28);
+  sounds.land = ()=>blip(180,120,.12,.22);
+  sounds.nudge= ()=>blip(320,280,.05,.14);
+  sounds.collapse = ()=>blip(200,40,.9,.42);
+}
+function playSound(n){ if(!muted && audioCtx && sounds[n]) try{sounds[n]()}catch(_){}}
+
+function haptic(style='light'){
+  if(!('vibrate' in navigator)) return;
+  const p={ light:10, medium:20, heavy:35, success:[10,50,10], error:[20,100,20,100,20] };
+  navigator.vibrate(p[style]||10);
+}
+
+// ======== YouTube glue ========
+let YT_API_READY=false;
+window.onYouTubeIframeAPIReady=()=>{ YT_API_READY=true; };
+function nextVideoId(){ const id = YT_FEED[feedIndex % YT_FEED.length]; feedIndex++; return id; }
+
+function buildYTElement(playerVars={}){
+  // shell container so we can style/mute badge, and pointer-events can pass through when needed
+  const wrap=document.createElement('div');
+  wrap.className='yt-shell';
+  wrap.style.width='320px';
+  wrap.style.height='180px';
+  const slot=document.createElement('div');
+  slot.id='yt_'+Math.random().toString(36).slice(2,9);
+  wrap.appendChild(slot);
+  const badge=document.createElement('div'); badge.className='yt-badge'; badge.textContent='MUTED'; wrap.appendChild(badge);
+
+  // Instantiate later when API ready to avoid blocking
+  const whenReady=()=>{
+    if(!YT_API_READY) { requestAnimationFrame(whenReady); return; }
+    const id = nextVideoId();
+    const player=new YT.Player(slot.id, {
+      width:320, height:180,
+      videoId:id,
+      playerVars: Object.assign({
+        autoplay:1, controls:0, modestbranding:1, rel:0, playsinline:1, mute:1, origin:location.origin
+      }, playerVars||{}),
+      events:{ onReady:(e)=>{ try{ e.target.mute(); e.target.playVideo(); }catch(_){} } }
+    });
+    wrap._player=player;
+  };
+  whenReady();
+  return wrap;
+}
+
+// ======== Scene/Physics ========
+function init(){
+  document.getElementById('loading').style.display='none';
+  clock = new THREE.Clock();
+
+  // Scene + fog
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0a0a0a);
+  scene.fog = new THREE.Fog(0x0a0a0a, 5, 18);
+
+  // Camera
+  camera = new THREE.PerspectiveCamera(50, innerWidth/innerHeight, 0.1, 200);
+  applyCamPreset(0,true);
+
+  // Renderers
+  glRenderer = new THREE.WebGLRenderer({ canvas: document.getElementById('glcanvas'), antialias:true });
+  glRenderer.setPixelRatio(Math.min(devicePixelRatio,1.6));
+  glRenderer.setSize(innerWidth, innerHeight);
+  glRenderer.shadowMap.enabled = true;
+
+  cssRenderer = new THREE.CSS3DRenderer();
+  cssRenderer.setSize(innerWidth, innerHeight);
+  cssRenderer.domElement.style.position='fixed';
+  cssRenderer.domElement.style.inset=0;
+  cssRenderer.domElement.style.pointerEvents='none';
+  document.getElementById('css3d').appendChild(cssRenderer.domElement);
+
+  // Lights
+  const amb = new THREE.AmbientLight(0x404040, 1.0); scene.add(amb);
+  const key = new THREE.DirectionalLight(0xffffff, 0.85); key.position.set(3,6,4); key.castShadow=true;
+  key.shadow.camera.left=-5; key.shadow.camera.right=5; key.shadow.camera.top=5; key.shadow.camera.bottom=-5; scene.add(key);
+  const rim = new THREE.DirectionalLight(0x4080ff, 0.35); rim.position.set(-3,2,-2); scene.add(rim);
+
+  // Physics world
+  world = new CANNON.World();
+  world.gravity.set(0,-9.8,0);
+  world.broadphase = new CANNON.SAPBroadphase(world);
+  world.allowSleep = true;
+  world.defaultContactMaterial.friction = 0.6;
+  world.defaultContactMaterial.restitution = 0.05;
+
+  // Floor
+  const floorShape = new CANNON.Plane();
+  const floorBody = new CANNON.Body({ mass:0, shape:floorShape });
+  floorBody.quaternion.setFromEuler(-Math.PI/2,0,0);
+  world.addBody(floorBody);
+  const floorMesh = new THREE.Mesh(new THREE.PlaneGeometry(20,20), new THREE.MeshStandardMaterial({ color:0x0d0d0d, roughness:.92 }));
+  floorMesh.receiveShadow=true; floorMesh.rotation.x=-Math.PI/2; scene.add(floorMesh);
+
+  const grid = new THREE.GridHelper(12, 24, 0x00ff00, 0x003000); grid.position.y=0.01; scene.add(grid);
+
+  // Events
+  addEventListeners();
+  updateHUD();
+  hideSwipeHint();
+  animate();
+}
+
+function addEventListeners(){
+  addEventListener('resize', onResize);
+  const c = document.getElementById('glcanvas');
+  c.addEventListener('touchstart', (e)=>{ if(!audioCtx) initAudio(); touchStart={x:e.touches[0].clientX,y:e.touches[0].clientY}; }, {passive:true});
+  c.addEventListener('touchmove', (e)=>{
+    if(!touchStart||gameOver||!falling) return;
+    const dx=e.touches[0].clientX - touchStart.x;
+    if(Math.abs(dx)>28){ nudgeTV(dx>0?1:-1); touchStart.x=e.touches[0].clientX; }
+  }, {passive:true});
+  c.addEventListener('touchend', (e)=>{
+    if(!touchStart||gameOver) return;
+    const dy = touchStart.y - (e.changedTouches[0]?.clientY||touchStart.y);
+    if(dy>50) dropTV();
+    touchStart=null;
+  });
+
+  // Buttons
+  document.getElementById('btn-drop').onclick=()=>dropTV();
+  document.getElementById('btn-left').onclick =()=>nudgeTV(-1);
+  document.getElementById('btn-right').onclick=()=>nudgeTV( 1);
+  document.getElementById('btn-view').onclick =()=>{camPreset=(camPreset+1)%camPresets.length; applyCamPreset(camPreset); haptic('light');};
+  document.getElementById('btn-auto').onclick =()=>{ autoFrame=!autoFrame; haptic('light'); };
+  document.getElementById('btn-mute').onclick =()=>{ muted=!muted; document.getElementById('btn-mute').textContent=muted?'🔇':'🔊'; haptic('light'); };
+  document.getElementById('btn-reset-soft').onclick =()=>{ softReset(); };
+  document.getElementById('btn-reset-hard').onclick =()=>{ hardReset(); };
+  document.getElementById('btn-restart').onclick =()=>{ softReset(); closeGameOver(); };
+  document.getElementById('btn-restart-keepcam').onclick=()=>{ softReset(false); closeGameOver(); };
+
+  // Keyboard (desktop aid)
+  addEventListener('keydown', (e)=>{
+    if(e.code==='Space'||e.key==='ArrowUp') dropTV();
+    if(e.key==='ArrowLeft')  nudgeTV(-1);
+    if(e.key==='ArrowRight') nudgeTV( 1);
+    if(e.key==='m') document.getElementById('btn-mute').click();
+  });
+}
+
+function hideSwipeHint(){ setTimeout(()=>{ const el=document.getElementById('swipe-hint'); if(el) el.style.display='none'; }, 2600); }
+
+function onResize(){
+  camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
+  glRenderer.setSize(innerWidth, innerHeight);
+  cssRenderer.setSize(innerWidth, innerHeight);
+}
+
+function applyCamPreset(idx, snap=false){
+  const p=camPresets[idx];
+  if(snap){ camera.position.set(...p.pos); camera.lookAt(new THREE.Vector3(...p.look)); return; }
+  // smooth lerp target
+  const from = camera.position.clone();
+  const to = new THREE.Vector3(...p.pos);
+  let t=0; const L=20; // frames
+  const anim=()=>{ if(t>=L) return; t++; camera.position.lerpVectors(from,to,t/L); camera.lookAt(new THREE.Vector3(...p.look)); requestAnimationFrame(anim); };
+  anim();
+}
+
+// ======== TV construction ========
+function createTV(y=5){
+  const group = new THREE.Group();
+
+  // Shell
+  const shell = new THREE.Mesh(new THREE.BoxGeometry(TV.w, TV.h, TV.d), new THREE.MeshStandardMaterial({ color:0x1a1a1a, roughness:.75, metalness:.28 }));
+  shell.castShadow = true; shell.receiveShadow=true; group.add(shell);
+
+  // Physical body
+  const body = new CANNON.Body({ mass:1, shape:new CANNON.Box(new CANNON.Vec3(TV.w/2, TV.h/2, TV.d/2)), sleepSpeedLimit:0.1, sleepTimeLimit:0.5 });
+  body.position.set(0,y,0); body.linearDamping=.3; body.angularDamping=.3; world.addBody(body);
+
+  // Face plate (for subtle highlight)
+  const bezel = new THREE.Mesh(new THREE.PlaneGeometry(SCREEN.w, SCREEN.h), new THREE.MeshStandardMaterial({ color:0x111111, roughness:.9, metalness:.05 }));
+  bezel.position.set(0,0,SCREEN.z); group.add(bezel);
+
+  // CSS3D YouTube screen (DOM) anchored to the same plane
+  const dom = buildYTElement();
+  const cssObj = new THREE.CSS3DObject(dom);
+  // scale DOM(320x180) so that width in world == SCREEN.w
+  const s = SCREEN.w/320; cssObj.scale.set(s,s,1);
+  cssObj.position.set(0, 0, SCREEN.z + 0.0001);
+  group.add(cssObj);
+
+  // LED
+  const led = new THREE.Mesh(new THREE.PlaneGeometry(0.03,0.03), new THREE.MeshBasicMaterial({ color:0x00ff00 }));
+  led.position.set(TV.w*0.35, -TV.h*0.35, SCREEN.z-0.001); group.add(led);
+
+  group.position.y=y; scene.add(group);
+
+  return { group, body, cssObj, ytPlayer:null, settled:false, led, lastMutate:0, seamPulse:0 };
+}
+
+function attachPlayer(tv){
+  // CSS object element holds player in _player once API created
+  if(tv.cssObj?.element && tv.cssObj.element._player && !tv.ytPlayer){
+    tv.ytPlayer = tv.cssObj.element._player;
+  }
+}
+
+function dropTV(){
+  if(gameOver||falling) return;
+  if(tvUnits.length >= MAX_IFRAMES){ // recycle oldest's player to avoid too many iframes
+    const old = tvUnits.find(u=>u.ytPlayer); if(old){ try{ old.ytPlayer.destroy(); }catch(_){} old.ytPlayer=null; }
+  }
+  const y = tvUnits.length>0 ? Math.max(...tvUnits.map(t=>t.group.position.y))+TV.h+GAP_Y+2 : 5;
+  falling = createTV(y);
+  tvUnits.push(falling);
+  playSound('drop'); haptic('medium');
+}
+
+function nudgeTV(dir){ if(!falling||falling.settled) return; falling.body.applyImpulse(new CANNON.Vec3(dir*2,0,0), falling.body.position); playSound('nudge'); haptic('light'); }
+
+function softReset(resetCamera=true){
+  // remove TVs & physics; keep HI
+  tvUnits.forEach(tv=>{ try{ if(tv.ytPlayer) tv.ytPlayer.destroy(); }catch(_){} scene.remove(tv.group); world.removeBody(tv.body); });
+  tvUnits=[]; falling=null; score=0; height=0; streak=0; stability=1; gameOver=false; feedIndex=0; world.gravity.y=-9.8;
+  if(resetCamera) applyCamPreset(0,true);
+  updateHUD();
+}
+function hardReset(){ highScore=0; localStorage.setItem('tv_stacker_high','0'); softReset(); }
+
+function closeGameOver(){ document.getElementById('game-over').style.display='none'; }
+
+function cullBottom(){
+  if(tvUnits.length===0||gameOver) return;
+  const bottom = tvUnits.shift();
+  try{ if(bottom.ytPlayer) bottom.ytPlayer.destroy(); }catch(_){}
+  scene.remove(bottom.group); world.removeBody(bottom.body); streak=0; updateHUD(); haptic('medium');
+}
+
+// ======== Stability & Collapse ========
+function calculateStability(){
+  if(tvUnits.length<2) return 1;
+  const recent = tvUnits.slice(-K).filter(t=>t.settled);
+  if(recent.length<2) return 1;
+  let com=0, over=0;
+  for(let i=1;i<recent.length;i++){
+    const a=recent[i], b=recent[i-1];
+    const off = Math.hypot(a.body.position.x-b.body.position.x, a.body.position.z-b.body.position.z);
+    com += off / LIMIT;
+    const overhang = Math.max(0, off - TV.w*0.3);
+    over += overhang / (TV.w*0.7);
+  }
+  const n = recent.length-1;
+  return Math.max(0, Math.min(1, 1 - (com/n + ALPHA*(over/n))));
+}
+
+function collapse(){
+  if(gameOver) return; gameOver=true; world.gravity.y *= 0.35; playSound('collapse'); haptic('error');
+  // shove top few
+  const top = tvUnits.slice(-3);
+  top.forEach(tv=>{ tv.body.applyImpulse(new CANNON.Vec3((Math.random()-.5)*5, Math.random()*3, (Math.random()-.5)*5), tv.body.position); });
+  // debris
+  const shards=[]; for(let i=0;i<SHARD_COUNT;i++){
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(.05,.05,.05), new THREE.MeshStandardMaterial({ color:0x333333 }));
+    const src = top.length? top[Math.floor(Math.random()*top.length)].group.position : new THREE.Vector3(0,2,0);
+    mesh.position.set(src.x+(Math.random()-.5)*2, src.y+Math.random()*2, src.z+(Math.random()-.5)*2);
+    scene.add(mesh);
+    const body=new CANNON.Body({ mass:0.1, shape:new CANNON.Box(new CANNON.Vec3(.025,.025,.025)) });
+    body.position.set(mesh.position.x, mesh.position.y, mesh.position.z);
+    body.velocity.set((Math.random()-.5)*8, Math.random()*8, (Math.random()-.5)*8);
+    body.angularVelocity.set((Math.random()-.5)*10,(Math.random()-.5)*10,(Math.random()-.5)*10);
+    world.addBody(body); shards.push({mesh,body});
+  }
+  setTimeout(()=>{ shards.forEach(s=>{ scene.remove(s.mesh); world.removeBody(s.body); }); }, SHARD_TTL);
+
+  if(score>highScore){ highScore=score; localStorage.setItem('tv_stacker_high', String(highScore)); }
+  setTimeout(()=>{ document.getElementById('final-score').innerHTML=`SCORE: ${score}<br>HEIGHT: ${height.toFixed(2)}m<br>STREAK: ${streak}×`; document.getElementById('game-over').style.display='grid'; }, 900);
+}
+
+// ======== HUD ========
+function updateHUD(){
+  document.getElementById('score').textContent = score;
+  document.getElementById('height').textContent = height.toFixed(1);
+  document.getElementById('streak').textContent = streak;
+  document.getElementById('high-score').textContent = highScore;
+  document.getElementById('stability-fill').style.width = `${Math.max(0,Math.min(1,stability))*100}%`;
+}
+
+// ======== Auto Framing ========
+function autoFrameCamera(dt){
+  if(!autoFrame) return;
+  // Aim to keep the tower's highest settled Y in view with some headroom
+  const tallest = tvUnits.reduce((m,t)=> t.settled? Math.max(m, t.group.position.y):m, 0);
+  const targetY = THREE.MathUtils.lerp(camera.position.y, Math.max(1.6, tallest*0.82 + 0.8), 0.08);
+
+  // Distance based on FOV to fit height
+  const visHeight = Math.max(2.5, tallest + 1.4); // world units we want visible vertically
+  const fovRad = THREE.MathUtils.degToRad(camera.fov);
+  const requiredDist = (visHeight/2) / Math.tan(fovRad/2);
+  const targetZ = THREE.MathUtils.lerp(camera.position.z, Math.max(3.2, requiredDist), 0.08);
+
+  camera.position.y = targetY;
+  camera.position.z = targetZ;
+  camera.position.x = THREE.MathUtils.lerp(camera.position.x, 0, 0.06);
+  camera.lookAt(0, Math.max(1.0, tallest*0.8), 0);
+
+  // Gentle fog far plane grows as we zoom out
+  scene.fog.far = Math.max(18, targetZ*4);
+
+  lastTallestY = tallest;
+}
+
+// ======== Main loop ========
+function animate(){
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.1);
+  world.step(1/60, dt, 3);
+
+  // Sync meshes with physics
+  for(const tv of tvUnits){
+    tv.group.position.copy(tv.body.position);
+    tv.group.quaternion.copy(tv.body.quaternion);
+
+    // Attach player when available
+    if(!tv.ytPlayer) attachPlayer(tv);
+
+    // settle detection
+    if(!tv.settled && tv.body.sleepState === CANNON.Body.SLEEPING){
+      tv.settled=true;
+      if(tv===falling){
+        const bonus=Math.floor(tv.body.position.y*10);
+        score += 10 + bonus; streak++; score += streak*2; falling=null; playSound('land'); haptic('success');
+      }
+    }
+
+    if(tv.settled) height = Math.max(height, tv.body.position.y);
+
+    // LED twinkle
+    const t = clock.elapsedTime; if(tv.led && tv.led.material && tv.led.material.color){ tv.led.material.color.setHex(Math.sin(t*5)>0?0x00ff00:0x003300); }
+  }
+
+  // stability + collapse
+  stability = calculateStability();
+  if(stability<=0 && !gameOver) collapse();
+
+  // auto camera
+  autoFrameCamera(dt);
+
+  updateHUD();
+  glRenderer.render(scene, camera);
+  cssRenderer.render(scene, camera);
+}
+
+// ======== Start ========
+if(typeof THREE!=='undefined' && typeof CANNON!=='undefined'){
+  init();
+} else { setTimeout(init, 600); }
+</script>
+</body>
+</html>

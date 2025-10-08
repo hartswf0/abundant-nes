@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Volumetric Cube Stacks — Overlap Nexus (Top-Dock Mobile)</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;touch-action:none}
+  body{font-family:'Courier New',monospace;background:#000;color:#fff;overflow:hidden}
+  #canvas{display:block;width:100vw;height:100vh}
+
+  /* HUD chips */
+  .chip{position:fixed;z-index:20;display:flex;align-items:center;gap:8px;
+        background:rgba(0,0,0,.85);border:2px solid rgba(79,195,247,.5);
+        border-radius:10px;padding:8px 10px;backdrop-filter:blur(4px)}
+  #brand{top:10px;left:10px}
+  #brand h3{font-size:11px;letter-spacing:1px;color:#4fc3f7;margin:0}
+  #brand .row{display:flex;gap:6px;margin-top:6px}
+  .pill{font-size:9px;padding:3px 6px;border-radius:6px;background:rgba(255,255,255,.06);border-left:3px solid}
+  .a{border-color:#00ff88;color:#00ff88}
+  .b{border-color:#ff4488;color:#ff4488}
+  .n{border-color:#ffaa00;color:#ffaa00}
+
+  #nexusState{top:10px;right:10px;border-color:rgba(255,170,0,.6)}
+  #nexusState .dot{width:8px;height:8px;border-radius:50%;background:#666;margin-right:6px}
+  #nexusState.on .dot{background:#ffaa00;box-shadow:0 0 12px #ffaa00}
+  #nexusState .txt{font-size:10px;color:#ffaa00}
+
+  /* Right camera pad */
+  #camPad{position:fixed;right:10px;top:50%;transform:translateY(-50%);
+          display:grid;gap:8px;z-index:22}
+  .camBtn{width:42px;height:42px;border-radius:10px;border:2px solid #4fc3f7;background:rgba(0,0,0,.85);font-size:10px}
+  .camBtn:active{transform:scale(.97)}
+
+  /* TOP DOCK (square buttons) */
+  #topDock{position:fixed;left:50%;top:10px;transform:translateX(-50%);z-index:24;display:flex;gap:8px}
+  .dockBtn{width:42px;height:42px;border-radius:10px;border:2px solid #4fc3f7;background:rgba(0,0,0,.9);
+           font-size:9px;color:#cfefff}
+  .dockBtn.active{box-shadow:0 0 14px rgba(79,195,247,.6);background:rgba(79,195,247,.2)}
+
+  /* SINGLE PANEL (one open at a time) */
+  #panel{position:fixed;left:50%;top:58px;transform:translateX(-50%);z-index:24;
+         min-width:min(92vw,560px);background:rgba(0,0,0,.92);border:2px solid rgba(79,195,247,.5);
+         border-radius:12px;opacity:0;pointer-events:none;transition:.2s ease}
+  #panel.open{opacity:1;pointer-events:auto}
+  .section{padding:10px 12px}
+  .label{font-size:10px;color:#4fc3f7;letter-spacing:1px;margin-bottom:6px;text-transform:uppercase;font-weight:700}
+  .row{display:flex;gap:10px;align-items:center}
+  input[type="range"]{flex:1;height:6px;border-radius:3px;background:rgba(79,195,247,.3);-webkit-appearance:none}
+  input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:#4fc3f7;box-shadow:0 0 10px rgba(79,195,247,.8)}
+  .val{min-width:36px;text-align:right;font-weight:700;color:#4fc3f7;font-size:12px}
+  .btn{flex:1;background:rgba(79,195,247,.18);border:2px solid #4fc3f7;color:#fff;padding:10px 12px;border-radius:8px;font-size:11px;font-weight:700}
+  .btn:active,.btn.active{transform:scale(.98);box-shadow:0 0 18px rgba(79,195,247,.6);background:rgba(79,195,247,.4)}
+  select{flex:1;background:rgba(79,195,247,.18);border:2px solid #4fc3f7;color:#fff;border-radius:8px;padding:8px 10px;font-size:11px}
+
+  /* Small helper text */
+  .hint{font-size:10px;color:#a8dffb}
+
+  @media (max-width:480px){
+    #brand{display:none} /* keep screen clean on very small phones */
+  }
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+
+<!-- Brand chip -->
+<div id="brand" class="chip">
+  <div>
+    <h3>VOLUMETRIC CUBE STACKS</h3>
+    <div class="row">
+      <div class="pill a">Agent A</div>
+      <div class="pill b">Agent B</div>
+      <div class="pill n">Nexus</div>
+    </div>
+  </div>
+</div>
+
+<!-- Nexus state chip -->
+<div id="nexusState" class="chip"><div class="dot"></div><div class="txt">NEXUS: OFF</div></div>
+
+<!-- Camera presets pad -->
+<div id="camPad">
+  <button class="camBtn" data-cam="front">FR</button>
+  <button class="camBtn" data-cam="isoL">IL</button>
+  <button class="camBtn" data-cam="isoR">IR</button>
+  <button class="camBtn" data-cam="top">TOP</button>
+</div>
+
+<!-- Top dock buttons -->
+<div id="topDock">
+  <button class="dockBtn" data-panel="layers">LYR</button>
+  <button class="dockBtn" data-panel="separation">SEP</button>
+  <button class="dockBtn" data-panel="spacing">SPC</button>
+  <button class="dockBtn" data-panel="visibility">VIS</button>
+  <button class="dockBtn" data-panel="look">LOK</button>
+  <button class="dockBtn" id="resetBtn">RST</button>
+</div>
+
+<!-- Single panel -->
+<div id="panel"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(() => {
+  // ====== State ======
+  const CUBE_SIZE = 20; // width/depth of each cube plane
+
+  let scene, camera, renderer, time=0;
+  let layersMax = 32;
+  // Separation slider now maps 0..100 -> 0..(CUBE_SIZE*0.9)
+  let cubeDistance = (25/100) * (CUBE_SIZE*0.9); // default 25% so we START WITH OVERLAP
+  let layerSpacing = 1.0;
+  let exploded = false;
+  let showA=true, showB=true, showN=true;
+  let overlapMode='physical';
+
+  const aLayers=[], bLayers=[], nLayers=[];
+
+  // ====== Init ======
+  function init(){
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x000000);
+    scene.fog = new THREE.FogExp2(0x000000, 0.003);
+
+    camera = new THREE.PerspectiveCamera(50, innerWidth/innerHeight, 0.1, 1200);
+    setCameraPreset('isoR');
+
+    renderer = new THREE.WebGLRenderer({canvas:document.getElementById('canvas'), antialias:true});
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+
+    addLights();
+    buildStacks();
+    wireTopDock();
+    addOrbitTouch();
+    updateNexusIndicator();
+
+    window.addEventListener('resize', onResize);
+    animate();
+  }
+
+  // ====== Build ======
+  function makeLayer(size, color, opacity){
+    const g = new THREE.Group();
+    const hs = size/2;
+    const pts = [
+      new THREE.Vector3(-hs,0,-hs), new THREE.Vector3(hs,0,-hs),
+      new THREE.Vector3(hs,0,hs),   new THREE.Vector3(-hs,0,hs),
+      new THREE.Vector3(-hs,0,-hs)
+    ];
+    const gl = new THREE.BufferGeometry().setFromPoints(pts);
+    const ml = new THREE.LineBasicMaterial({color, transparent:true, opacity:opacity*.9});
+    g.add(new THREE.Line(gl, ml));
+
+    const gp = new THREE.PlaneGeometry(size, size);
+    const mp = new THREE.MeshPhongMaterial({color, transparent:true, opacity:opacity*.25, side:THREE.DoubleSide, emissive:color, emissiveIntensity:.28});
+    const p = new THREE.Mesh(gp, mp); p.rotation.x = -Math.PI/2; g.add(p);
+
+    const cd = new THREE.SphereGeometry(0.4,8,8);
+    [[-hs,0,-hs],[hs,0,-hs],[hs,0,hs],[-hs,0,hs]].forEach(([x,y,z])=>{
+      const cm = new THREE.MeshBasicMaterial({color, transparent:true, opacity:opacity*1.1});
+      const m = new THREE.Mesh(cd, cm); m.position.set(x,y,z); g.add(m);
+    });
+
+    g.userData = {plane:p};
+    return g;
+  }
+
+  function buildStacks(){
+    [...aLayers,...bLayers,...nLayers].forEach(o=>o.parent&&o.parent.remove(o));
+    aLayers.length=bLayers.length=nLayers.length=0;
+
+    for(let i=0;i<32;i++){
+      const op = 0.85 - (i/32)*0.6;
+      const a = makeLayer(CUBE_SIZE, 0x00ff88, op); a.userData.index=i; scene.add(a); aLayers.push(a);
+      const b = makeLayer(CUBE_SIZE, 0xff4488, op); b.userData.index=i; scene.add(b); bLayers.push(b);
+      const n = makeLayer(0.001,    0xffaa00, Math.min(1, op*1.15)); n.userData.index=i; scene.add(n); nLayers.push(n);
+    }
+    updatePositions();
+    updateNexusGeometry();
+    applyOverlapLook();
+  }
+
+  // ====== Positioning & Overlap ======
+  function overlapWidth(){
+    // cubes centered at -d and +d, each half-size = CUBE_SIZE/2
+    // overlap along X exists when 2*half - 2*d > 0 => CUBE_SIZE - 2*d > 0
+    const ow = CUBE_SIZE - 2*cubeDistance;
+    return Math.max(0, ow);
+  }
+
+  function updatePositions(){
+    const totalH = CUBE_SIZE * layerSpacing;
+    const step = totalH / Math.max(1, layersMax-1);
+
+    aLayers.forEach((g,i)=>{
+      if(i>=layersMax){g.visible=false;return;} g.visible=showA;
+      const shift = exploded ? (layersMax/2 - i)*2*-1 : 0;
+      g.position.set(-cubeDistance + shift, -totalH/2 + i*step, 0);
+    });
+
+    bLayers.forEach((g,i)=>{
+      if(i>=layersMax){g.visible=false;return;} g.visible=showB;
+      const shift = exploded ? (layersMax/2 - i)*2*+1 : 0;
+      g.position.set(+cubeDistance + shift, -totalH/2 + i*step, 0);
+    });
+
+    nLayers.forEach((g,i)=>{
+      if(i>=layersMax){g.visible=false;return;}
+      g.visible = showN && overlapWidth()>0;
+      g.position.set(0, -totalH/2 + i*step, 0);
+    });
+
+    updateNexusIndicator();
+  }
+
+  function updateNexusGeometry(){
+    const w = overlapWidth();
+    const vis = w>0;
+    nLayers.forEach(n=>{
+      n.visible = showN && vis && (n.userData.index<layersMax);
+      const plane = n.userData.plane;
+      const sz = Math.max(0.001, w);
+      plane.geometry.dispose();
+      plane.geometry = new THREE.PlaneGeometry(sz, CUBE_SIZE);
+      if(overlapMode==='dodge'){ plane.material.opacity=.22; plane.material.emissiveIntensity=.45; }
+      else if(overlapMode==='physical'){ plane.material.opacity=.28; plane.material.emissiveIntensity=.35; }
+      else { plane.material.opacity=.18; plane.material.emissiveIntensity=.28; }
+    });
+  }
+
+  function applyOverlapLook(){
+    [...aLayers,...bLayers,...nLayers].forEach(g=>g.children.forEach(m=>{
+      if(m.material && m.material instanceof THREE.Material){ m.material.blending = THREE.NormalBlending; m.material.needsUpdate=true; }
+    }));
+
+    if(overlapMode==='additive'){
+      const setAdd = arr=>arr.forEach(g=>g.children.forEach(m=>{
+        if(m.material && m.material.emissive!==undefined){ m.material.blending=THREE.AdditiveBlending; m.material.opacity=.22; m.material.emissiveIntensity=.5; m.material.needsUpdate=true; }
+      }));
+      setAdd(aLayers); setAdd(bLayers);
+      nLayers.forEach(n=>n.children.forEach(m=>{ if(m.material&&m.material.emissive!==undefined){ m.material.opacity=.15; m.material.emissiveIntensity=.25; } }));
+    }
+
+    if(overlapMode==='dodge'){
+      nLayers.forEach(n=>n.children.forEach(m=>{ if(m.material&&m.material.emissive!==undefined){ m.material.opacity=.22; m.material.emissiveIntensity=.45; } }));
+    }
+  }
+
+  // ====== Lights ======
+  function addLights(){
+    scene.add(new THREE.AmbientLight(0xffffff, .42));
+    const lA = new THREE.PointLight(0x00ff88,2.2,180); lA.position.set(-40,24,32); scene.add(lA);
+    const lB = new THREE.PointLight(0xff4488,2.2,180); lB.position.set( 40,24,32); scene.add(lB);
+    const lN = new THREE.PointLight(0xffaa00,1.8,160); lN.position.set(0,36,0); scene.add(lN);
+    const top= new THREE.DirectionalLight(0xffffff,.75); top.position.set(0,90,0); scene.add(top);
+  }
+
+  // ====== Top Dock UI ======
+  function wireTopDock(){
+    const $ = s=>document.querySelector(s);
+    const panel = $('#panel');
+
+    const openPanel = (name)=>{
+      // Build inner content for each panel mode
+      const tpl = {
+        layers:`<div class='section'><div class='label'>Layers</div><div class='row'><input id='sLayers' type='range' min='4' max='32' value='${layersMax}'><span id='vLayers' class='val'>${layersMax}</span></div></div>`,
+        separation:`<div class='section'><div class='label'>Separation</div><div class='row'><input id='sSep' type='range' min='0' max='100' value='25'><span id='vSep' class='val'>25</span></div><div class='hint'>0 = fully merged, > ~50 = no overlap</div></div>`,
+        spacing:`<div class='section'><div class='label'>Layer Spacing</div><div class='row'><input id='sSpace' type='range' min='10' max='100' value='50'><span id='vSpace' class='val'>50</span></div></div>`,
+        visibility:`<div class='section'><div class='label'>Visibility</div><div class='row'><button id='tA' class='btn ${showA?"active":""}'>Cube A</button><button id='tB' class='btn ${showB?"active":""}'>Cube B</button><button id='tN' class='btn ${showN?"active":""}'>Nexus</button></div></div>`,
+        look:`<div class='section'><div class='label'>Overlap Look</div><div class='row'><select id='overlapMode'><option value='physical' ${overlapMode==='physical'?'selected':''}>Physical</option><option value='additive' ${overlapMode==='additive'?'selected':''}>Additive Glow</option><option value='dodge' ${overlapMode==='dodge'?'selected':''}>Dodge Pulse</option></select><button id='explode' class='btn'>Explode</button><button id='merge' class='btn'>Merge</button></div></div>`
+      }[name] || '';
+
+      panel.innerHTML = tpl;
+      panel.classList.add('open');
+
+      // Binders for the freshly injected controls
+      const vibe = (ms=12)=>('vibrate' in navigator)&&navigator.vibrate(ms);
+      const sL = $('#sLayers'); if(sL){ sL.addEventListener('input',e=>{ layersMax=parseInt(e.target.value,10); $('#vLayers').textContent=layersMax; updatePositions(); updateNexusGeometry(); vibe(4); }); }
+      const sSep = $('#sSep'); if(sSep){ sSep.addEventListener('input',e=>{ const raw=parseInt(e.target.value,10); $('#vSep').textContent=raw; cubeDistance = (raw/100)*(CUBE_SIZE*0.9); updatePositions(); updateNexusGeometry(); vibe(2); }); }
+      const sSp = $('#sSpace'); if(sSp){ sSp.addEventListener('input',e=>{ const raw=parseInt(e.target.value,10); $('#vSpace').textContent=raw; layerSpacing = 0.5 + (raw/100)*1.5; updatePositions(); }); }
+      const tA = $('#tA'); if(tA){ tA.addEventListener('click',()=>{ showA=!showA; tA.classList.toggle('active'); updatePositions(); vibe();}); }
+      const tB = $('#tB'); if(tB){ tB.addEventListener('click',()=>{ showB=!showB; tB.classList.toggle('active'); updatePositions(); vibe();}); }
+      const tN = $('#tN'); if(tN){ tN.addEventListener('click',()=>{ showN=!showN; tN.classList.toggle('active'); updatePositions(); updateNexusGeometry(); vibe();}); }
+      const om = $('#overlapMode'); if(om){ om.addEventListener('change',e=>{ overlapMode=e.target.value; applyOverlapLook(); updateNexusGeometry(); vibe(6); }); }
+      const ex = $('#explode'); if(ex){ ex.addEventListener('click',()=>{ exploded=true; updatePositions(); vibe(10); }); }
+      const mg = $('#merge'); if(mg){ mg.addEventListener('click',()=>{ exploded=false; updatePositions(); vibe(8); }); }
+    };
+
+    document.querySelectorAll('.dockBtn').forEach(btn=>{
+      const id = btn.getAttribute('data-panel');
+      if(!id){ return; }
+      btn.addEventListener('click',()=>{
+        document.querySelectorAll('.dockBtn').forEach(b=>b.classList.remove('active'));
+        btn.classList.add('active');
+        openPanel(id);
+      });
+    });
+
+    // Reset button
+    document.getElementById('resetBtn').addEventListener('click',()=>{
+      layersMax=32; cubeDistance=(25/100)*(CUBE_SIZE*0.9); layerSpacing=1.0; exploded=false;
+      showA=showB=showN=true; overlapMode='physical';
+      applyOverlapLook(); updatePositions(); updateNexusGeometry(); updateNexusIndicator();
+      document.querySelectorAll('.dockBtn').forEach(b=>b.classList.remove('active'));
+      document.getElementById('panel').classList.remove('open');
+      if('vibrate' in navigator) navigator.vibrate(18);
+    });
+  }
+
+  function updateNexusIndicator(){
+    const chip = document.getElementById('nexusState');
+    const has = overlapWidth()>0 && showN;
+    chip.classList.toggle('on', has);
+    chip.querySelector('.txt').textContent = 'NEXUS: ' + (has ? 'ON' : 'OFF');
+  }
+
+  // ====== Touch orbit ======
+  function addOrbitTouch(){
+    let drag=false, px=0, py=0;
+    const onStart=e=>{drag=true; const t=e.touches?e.touches[0]:e; px=t.clientX; py=t.clientY;};
+    const onMove=e=>{
+      if(!drag) return; const t=e.touches?e.touches[0]:e; const dx=t.clientX-px, dy=t.clientY-py; px=t.clientX; py=t.clientY;
+      const sp=0.005, v=camera.position, r=Math.sqrt(v.x*v.x+v.y*v.y+v.z*v.z);
+      let th=Math.atan2(v.x,v.z), ph=Math.acos(THREE.MathUtils.clamp(v.y/r,-1,1));
+      th -= dx*sp; ph -= dy*sp; ph=Math.max(0.1, Math.min(Math.PI-0.1, ph));
+      v.x=r*Math.sin(ph)*Math.sin(th); v.y=r*Math.cos(ph); v.z=r*Math.sin(ph)*Math.cos(th); camera.lookAt(0,0,0);
+    };
+    const onEnd=()=>{drag=false};
+    const c=document.getElementById('canvas');
+    c.addEventListener('touchstart',onStart,{passive:false}); c.addEventListener('touchmove',onMove,{passive:false}); c.addEventListener('touchend',onEnd);
+    c.addEventListener('mousedown',onStart); window.addEventListener('mousemove',onMove); window.addEventListener('mouseup',onEnd);
+  }
+
+  // ====== Camera ======
+  function setCameraPreset(kind){
+    const r=95, look=()=>camera.lookAt(0,0,0);
+    if(kind==='front'){camera.position.set(0,42,r); return look();}
+    if(kind==='isoL'){ camera.position.set(-r*.8,52,r*.6); return look();}
+    if(kind==='isoR'){ camera.position.set( r*.8,52,r*.6); return look();}
+    if(kind==='top'){  camera.position.set(0,110,0.0001);  return look();}
+    camera.position.set(60,50,60); look();
+  }
+
+  // ====== Lights ======
+  function animate(){
+    requestAnimationFrame(animate); time+=0.01;
+    const pulse=(t,i,base)=> base + (Math.sin(t+i*0.12)*0.1);
+    aLayers.forEach((g,i)=>{ if(!g.visible)return; g.userData.plane.material.emissiveIntensity=pulse(time,i, overlapMode==='additive'?0.45:0.28); });
+    bLayers.forEach((g,i)=>{ if(!g.visible)return; g.userData.plane.material.emissiveIntensity=pulse(time+0.6,i, overlapMode==='additive'?0.45:0.28); });
+    nLayers.forEach((g,i)=>{ if(!g.visible)return; const m=g.userData.plane.material; const base=(overlapMode==='dodge')?0.5:0.32; m.emissiveIntensity=base+Math.abs(Math.sin(time*1.6+i*0.15))*0.25; });
+    renderer.render(scene,camera);
+  }
+
+  function addLights(){
+    scene.add(new THREE.AmbientLight(0xffffff,0.42));
+    const lA=new THREE.PointLight(0x00ff88,2.2,180); lA.position.set(-40,24,32); scene.add(lA);
+    const lB=new THREE.PointLight(0xff4488,2.2,180); lB.position.set( 40,24,32); scene.add(lB);
+    const lN=new THREE.PointLight(0xffaa00,1.8,160); lN.position.set(0,36,0); scene.add(lN);
+    const top=new THREE.DirectionalLight(0xffffff,.75); top.position.set(0,90,0); scene.add(top);
+  }
+
+  // ====== Resize ======
+  function onResize(){
+    camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight);
+  }
+
+  // Boot
+  init();
+
+  // Camera pad
+  document.querySelectorAll('.camBtn').forEach(b=>b.addEventListener('click',()=>setCameraPreset(b.dataset.cam)));
+})();
+</script>
+</body>
+</html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Volumetric Cube Stacks — Overlap Nexus (Top-Dock Mobile)</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;touch-action:none}
+  body{font-family:'Courier New',monospace;background:#000;color:#fff;overflow:hidden}
+  #canvas{display:block;width:100vw;height:100vh}
+
+  /* HUD chips */
+  .chip{position:fixed;z-index:20;display:flex;align-items:center;gap:8px;
+        background:rgba(0,0,0,.85);border:2px solid rgba(79,195,247,.5);
+        border-radius:10px;padding:8px 10px;backdrop-filter:blur(4px)}
+  #brand{top:10px;left:10px}
+  #brand h3{font-size:11px;letter-spacing:1px;color:#4fc3f7;margin:0}
+  #brand .row{display:flex;gap:6px;margin-top:6px}
+  .pill{font-size:9px;padding:3px 6px;border-radius:6px;background:rgba(255,255,255,.06);border-left:3px solid}
+  .a{border-color:#00ff88;color:#00ff88}
+  .b{border-color:#ff4488;color:#ff4488}
+  .n{border-color:#ffaa00;color:#ffaa00}
+
+  #nexusState{top:10px;right:10px;border-color:rgba(255,170,0,.6)}
+  #nexusState .dot{width:8px;height:8px;border-radius:50%;background:#666;margin-right:6px}
+  #nexusState.on .dot{background:#ffaa00;box-shadow:0 0 12px #ffaa00}
+  #nexusState .txt{font-size:10px;color:#ffaa00}
+
+  /* Right camera pad */
+  #camPad{position:fixed;right:10px;top:50%;transform:translateY(-50%);
+          display:grid;gap:8px;z-index:22}
+  .camBtn{width:42px;height:42px;border-radius:10px;border:2px solid #4fc3f7;background:rgba(0,0,0,.85);font-size:10px}
+  .camBtn:active{transform:scale(.97)}
+
+  /* TOP DOCK (square buttons) */
+  #topDock{position:fixed;left:50%;top:10px;transform:translateX(-50%);z-index:24;display:flex;gap:8px}
+  .dockBtn{width:42px;height:42px;border-radius:10px;border:2px solid #4fc3f7;background:rgba(0,0,0,.9);
+           font-size:9px;color:#cfefff}
+  .dockBtn.active{box-shadow:0 0 14px rgba(79,195,247,.6);background:rgba(79,195,247,.2)}
+
+  /* SINGLE PANEL (one open at a time) */
+  #panel{position:fixed;left:50%;top:58px;transform:translateX(-50%);z-index:24;
+         min-width:min(92vw,560px);background:rgba(0,0,0,.92);border:2px solid rgba(79,195,247,.5);
+         border-radius:12px;opacity:0;pointer-events:none;transition:.2s ease}
+  #panel.open{opacity:1;pointer-events:auto}
+  .section{padding:10px 12px}
+  .label{font-size:10px;color:#4fc3f7;letter-spacing:1px;margin-bottom:6px;text-transform:uppercase;font-weight:700}
+  .row{display:flex;gap:10px;align-items:center}
+  input[type="range"]{flex:1;height:6px;border-radius:3px;background:rgba(79,195,247,.3);-webkit-appearance:none}
+  input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:#4fc3f7;box-shadow:0 0 10px rgba(79,195,247,.8)}
+  .val{min-width:36px;text-align:right;font-weight:700;color:#4fc3f7;font-size:12px}
+  .btn{flex:1;background:rgba(79,195,247,.18);border:2px solid #4fc3f7;color:#fff;padding:10px 12px;border-radius:8px;font-size:11px;font-weight:700}
+  .btn:active,.btn.active{transform:scale(.98);box-shadow:0 0 18px rgba(79,195,247,.6);background:rgba(79,195,247,.4)}
+  select{flex:1;background:rgba(79,195,247,.18);border:2px solid #4fc3f7;color:#fff;border-radius:8px;padding:8px 10px;font-size:11px}
+
+  /* Small helper text */
+  .hint{font-size:10px;color:#a8dffb}
+
+  @media (max-width:480px){
+    #brand{display:none} /* keep screen clean on very small phones */
+  }
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+
+<!-- Brand chip -->
+<div id="brand" class="chip">
+  <div>
+    <h3>VOLUMETRIC CUBE STACKS</h3>
+    <div class="row">
+      <div class="pill a">Agent A</div>
+      <div class="pill b">Agent B</div>
+      <div class="pill n">Nexus</div>
+    </div>
+  </div>
+</div>
+
+<!-- Nexus state chip -->
+<div id="nexusState" class="chip"><div class="dot"></div><div class="txt">NEXUS: OFF</div></div>
+
+<!-- Camera presets pad -->
+<div id="camPad">
+  <button class="camBtn" data-cam="front">FR</button>
+  <button class="camBtn" data-cam="isoL">IL</button>
+  <button class="camBtn" data-cam="isoR">IR</button>
+  <button class="camBtn" data-cam="top">TOP</button>
+</div>
+
+<!-- Top dock buttons -->
+<div id="topDock">
+  <button class="dockBtn" data-panel="layers">LYR</button>
+  <button class="dockBtn" data-panel="separation">SEP</button>
+  <button class="dockBtn" data-panel="spacing">SPC</button>
+  <button class="dockBtn" data-panel="visibility">VIS</button>
+  <button class="dockBtn" data-panel="look">LOK</button>
+  <button class="dockBtn" id="resetBtn">RST</button>
+</div>
+
+<!-- Single panel -->
+<div id="panel"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(() => {
+  // ====== State ======
+  const CUBE_SIZE = 20; // width/depth of each cube plane
+
+  let scene, camera, renderer, time=0;
+  let layersMax = 32;
+  // Separation slider now maps 0..100 -> 0..(CUBE_SIZE*0.9)
+  let cubeDistance = (25/100) * (CUBE_SIZE*0.9); // default 25% so we START WITH OVERLAP
+  let layerSpacing = 1.0;
+  let exploded = false;
+  let showA=true, showB=true, showN=true;
+  let overlapMode='physical';
+
+  const aLayers=[], bLayers=[], nLayers=[];
+
+  // ====== Init ======
+  function init(){
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x000000);
+    scene.fog = new THREE.FogExp2(0x000000, 0.003);
+
+    camera = new THREE.PerspectiveCamera(50, innerWidth/innerHeight, 0.1, 1200);
+    setCameraPreset('isoR');
+
+    renderer = new THREE.WebGLRenderer({canvas:document.getElementById('canvas'), antialias:true});
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+
+    addLights();
+    buildStacks();
+    wireTopDock();
+    addOrbitTouch();
+    updateNexusIndicator();
+
+    window.addEventListener('resize', onResize);
+    animate();
+  }
+
+  // ====== Build ======
+  function makeLayer(size, color, opacity){
+    const g = new THREE.Group();
+    const hs = size/2;
+    const pts = [
+      new THREE.Vector3(-hs,0,-hs), new THREE.Vector3(hs,0,-hs),
+      new THREE.Vector3(hs,0,hs),   new THREE.Vector3(-hs,0,hs),
+      new THREE.Vector3(-hs,0,-hs)
+    ];
+    const gl = new THREE.BufferGeometry().setFromPoints(pts);
+    const ml = new THREE.LineBasicMaterial({color, transparent:true, opacity:opacity*.9});
+    g.add(new THREE.Line(gl, ml));
+
+    const gp = new THREE.PlaneGeometry(size, size);
+    const mp = new THREE.MeshPhongMaterial({color, transparent:true, opacity:opacity*.25, side:THREE.DoubleSide, emissive:color, emissiveIntensity:.28});
+    const p = new THREE.Mesh(gp, mp); p.rotation.x = -Math.PI/2; g.add(p);
+
+    const cd = new THREE.SphereGeometry(0.4,8,8);
+    [[-hs,0,-hs],[hs,0,-hs],[hs,0,hs],[-hs,0,hs]].forEach(([x,y,z])=>{
+      const cm = new THREE.MeshBasicMaterial({color, transparent:true, opacity:opacity*1.1});
+      const m = new THREE.Mesh(cd, cm); m.position.set(x,y,z); g.add(m);
+    });
+
+    g.userData = {plane:p};
+    return g;
+  }
+
+  function buildStacks(){
+    [...aLayers,...bLayers,...nLayers].forEach(o=>o.parent&&o.parent.remove(o));
+    aLayers.length=bLayers.length=nLayers.length=0;
+
+    for(let i=0;i<32;i++){
+      const op = 0.85 - (i/32)*0.6;
+      const a = makeLayer(CUBE_SIZE, 0x00ff88, op); a.userData.index=i; scene.add(a); aLayers.push(a);
+      const b = makeLayer(CUBE_SIZE, 0xff4488, op); b.userData.index=i; scene.add(b); bLayers.push(b);
+      const n = makeLayer(0.001,    0xffaa00, Math.min(1, op*1.15)); n.userData.index=i; scene.add(n); nLayers.push(n);
+    }
+    updatePositions();
+    updateNexusGeometry();
+    applyOverlapLook();
+  }
+
+  // ====== Positioning & Overlap ======
+  function overlapWidth(){
+    // cubes centered at -d and +d, each half-size = CUBE_SIZE/2
+    // overlap along X exists when 2*half - 2*d > 0 => CUBE_SIZE - 2*d > 0
+    const ow = CUBE_SIZE - 2*cubeDistance;
+    return Math.max(0, ow);
+  }
+
+  function updatePositions(){
+    const totalH = CUBE_SIZE * layerSpacing;
+    const step = totalH / Math.max(1, layersMax-1);
+
+    aLayers.forEach((g,i)=>{
+      if(i>=layersMax){g.visible=false;return;} g.visible=showA;
+      const shift = exploded ? (layersMax/2 - i)*2*-1 : 0;
+      g.position.set(-cubeDistance + shift, -totalH/2 + i*step, 0);
+    });
+
+    bLayers.forEach((g,i)=>{
+      if(i>=layersMax){g.visible=false;return;} g.visible=showB;
+      const shift = exploded ? (layersMax/2 - i)*2*+1 : 0;
+      g.position.set(+cubeDistance + shift, -totalH/2 + i*step, 0);
+    });
+
+    nLayers.forEach((g,i)=>{
+      if(i>=layersMax){g.visible=false;return;}
+      g.visible = showN && overlapWidth()>0;
+      g.position.set(0, -totalH/2 + i*step, 0);
+    });
+
+    updateNexusIndicator();
+  }
+
+  function updateNexusGeometry(){
+    const w = overlapWidth();
+    const vis = w>0;
+    nLayers.forEach(n=>{
+      n.visible = showN && vis && (n.userData.index<layersMax);
+      const plane = n.userData.plane;
+      const sz = Math.max(0.001, w);
+      plane.geometry.dispose();
+      plane.geometry = new THREE.PlaneGeometry(sz, CUBE_SIZE);
+      if(overlapMode==='dodge'){ plane.material.opacity=.22; plane.material.emissiveIntensity=.45; }
+      else if(overlapMode==='physical'){ plane.material.opacity=.28; plane.material.emissiveIntensity=.35; }
+      else { plane.material.opacity=.18; plane.material.emissiveIntensity=.28; }
+    });
+  }
+
+  function applyOverlapLook(){
+    [...aLayers,...bLayers,...nLayers].forEach(g=>g.children.forEach(m=>{
+      if(m.material && m.material instanceof THREE.Material){ m.material.blending = THREE.NormalBlending; m.material.needsUpdate=true; }
+    }));
+
+    if(overlapMode==='additive'){
+      const setAdd = arr=>arr.forEach(g=>g.children.forEach(m=>{
+        if(m.material && m.material.emissive!==undefined){ m.material.blending=THREE.AdditiveBlending; m.material.opacity=.22; m.material.emissiveIntensity=.5; m.material.needsUpdate=true; }
+      }));
+      setAdd(aLayers); setAdd(bLayers);
+      nLayers.forEach(n=>n.children.forEach(m=>{ if(m.material&&m.material.emissive!==undefined){ m.material.opacity=.15; m.material.emissiveIntensity=.25; } }));
+    }
+
+    if(overlapMode==='dodge'){
+      nLayers.forEach(n=>n.children.forEach(m=>{ if(m.material&&m.material.emissive!==undefined){ m.material.opacity=.22; m.material.emissiveIntensity=.45; } }));
+    }
+  }
+
+  // ====== Lights ======
+  function addLights(){
+    scene.add(new THREE.AmbientLight(0xffffff, .42));
+    const lA = new THREE.PointLight(0x00ff88,2.2,180); lA.position.set(-40,24,32); scene.add(lA);
+    const lB = new THREE.PointLight(0xff4488,2.2,180); lB.position.set( 40,24,32); scene.add(lB);
+    const lN = new THREE.PointLight(0xffaa00,1.8,160); lN.position.set(0,36,0); scene.add(lN);
+    const top= new THREE.DirectionalLight(0xffffff,.75); top.position.set(0,90,0); scene.add(top);
+  }
+
+  // ====== Top Dock UI ======
+  function wireTopDock(){
+    const $ = s=>document.querySelector(s);
+    const panel = $('#panel');
+
+    const openPanel = (name)=>{
+      // Build inner content for each panel mode
+      const tpl = {
+        layers:`<div class='section'><div class='label'>Layers</div><div class='row'><input id='sLayers' type='range' min='4' max='32' value='${layersMax}'><span id='vLayers' class='val'>${layersMax}</span></div></div>`,
+        separation:`<div class='section'><div class='label'>Separation</div><div class='row'><input id='sSep' type='range' min='0' max='100' value='25'><span id='vSep' class='val'>25</span></div><div class='hint'>0 = fully merged, > ~50 = no overlap</div></div>`,
+        spacing:`<div class='section'><div class='label'>Layer Spacing</div><div class='row'><input id='sSpace' type='range' min='10' max='100' value='50'><span id='vSpace' class='val'>50</span></div></div>`,
+        visibility:`<div class='section'><div class='label'>Visibility</div><div class='row'><button id='tA' class='btn ${showA?"active":""}'>Cube A</button><button id='tB' class='btn ${showB?"active":""}'>Cube B</button><button id='tN' class='btn ${showN?"active":""}'>Nexus</button></div></div>`,
+        look:`<div class='section'><div class='label'>Overlap Look</div><div class='row'><select id='overlapMode'><option value='physical' ${overlapMode==='physical'?'selected':''}>Physical</option><option value='additive' ${overlapMode==='additive'?'selected':''}>Additive Glow</option><option value='dodge' ${overlapMode==='dodge'?'selected':''}>Dodge Pulse</option></select><button id='explode' class='btn'>Explode</button><button id='merge' class='btn'>Merge</button></div></div>`
+      }[name] || '';
+
+      panel.innerHTML = tpl;
+      panel.classList.add('open');
+
+      // Binders for the freshly injected controls
+      const vibe = (ms=12)=>('vibrate' in navigator)&&navigator.vibrate(ms);
+      const sL = $('#sLayers'); if(sL){ sL.addEventListener('input',e=>{ layersMax=parseInt(e.target.value,10); $('#vLayers').textContent=layersMax; updatePositions(); updateNexusGeometry(); vibe(4); }); }
+      const sSep = $('#sSep'); if(sSep){ sSep.addEventListener('input',e=>{ const raw=parseInt(e.target.value,10); $('#vSep').textContent=raw; cubeDistance = (raw/100)*(CUBE_SIZE*0.9); updatePositions(); updateNexusGeometry(); vibe(2); }); }
+      const sSp = $('#sSpace'); if(sSp){ sSp.addEventListener('input',e=>{ const raw=parseInt(e.target.value,10); $('#vSpace').textContent=raw; layerSpacing = 0.5 + (raw/100)*1.5; updatePositions(); }); }
+      const tA = $('#tA'); if(tA){ tA.addEventListener('click',()=>{ showA=!showA; tA.classList.toggle('active'); updatePositions(); vibe();}); }
+      const tB = $('#tB'); if(tB){ tB.addEventListener('click',()=>{ showB=!showB; tB.classList.toggle('active'); updatePositions(); vibe();}); }
+      const tN = $('#tN'); if(tN){ tN.addEventListener('click',()=>{ showN=!showN; tN.classList.toggle('active'); updatePositions(); updateNexusGeometry(); vibe();}); }
+      const om = $('#overlapMode'); if(om){ om.addEventListener('change',e=>{ overlapMode=e.target.value; applyOverlapLook(); updateNexusGeometry(); vibe(6); }); }
+      const ex = $('#explode'); if(ex){ ex.addEventListener('click',()=>{ exploded=true; updatePositions(); vibe(10); }); }
+      const mg = $('#merge'); if(mg){ mg.addEventListener('click',()=>{ exploded=false; updatePositions(); vibe(8); }); }
+    };
+
+    document.querySelectorAll('.dockBtn').forEach(btn=>{
+      const id = btn.getAttribute('data-panel');
+      if(!id){ return; }
+      btn.addEventListener('click',()=>{
+        document.querySelectorAll('.dockBtn').forEach(b=>b.classList.remove('active'));
+        btn.classList.add('active');
+        openPanel(id);
+      });
+    });
+
+    // Reset button
+    document.getElementById('resetBtn').addEventListener('click',()=>{
+      layersMax=32; cubeDistance=(25/100)*(CUBE_SIZE*0.9); layerSpacing=1.0; exploded=false;
+      showA=showB=showN=true; overlapMode='physical';
+      applyOverlapLook(); updatePositions(); updateNexusGeometry(); updateNexusIndicator();
+      document.querySelectorAll('.dockBtn').forEach(b=>b.classList.remove('active'));
+      document.getElementById('panel').classList.remove('open');
+      if('vibrate' in navigator) navigator.vibrate(18);
+    });
+  }
+
+  function updateNexusIndicator(){
+    const chip = document.getElementById('nexusState');
+    const has = overlapWidth()>0 && showN;
+    chip.classList.toggle('on', has);
+    chip.querySelector('.txt').textContent = 'NEXUS: ' + (has ? 'ON' : 'OFF');
+  }
+
+  // ====== Touch orbit ======
+  function addOrbitTouch(){
+    let drag=false, px=0, py=0;
+    const onStart=e=>{drag=true; const t=e.touches?e.touches[0]:e; px=t.clientX; py=t.clientY;};
+    const onMove=e=>{
+      if(!drag) return; const t=e.touches?e.touches[0]:e; const dx=t.clientX-px, dy=t.clientY-py; px=t.clientX; py=t.clientY;
+      const sp=0.005, v=camera.position, r=Math.sqrt(v.x*v.x+v.y*v.y+v.z*v.z);
+      let th=Math.atan2(v.x,v.z), ph=Math.acos(THREE.MathUtils.clamp(v.y/r,-1,1));
+      th -= dx*sp; ph -= dy*sp; ph=Math.max(0.1, Math.min(Math.PI-0.1, ph));
+      v.x=r*Math.sin(ph)*Math.sin(th); v.y=r*Math.cos(ph); v.z=r*Math.sin(ph)*Math.cos(th); camera.lookAt(0,0,0);
+    };
+    const onEnd=()=>{drag=false};
+    const c=document.getElementById('canvas');
+    c.addEventListener('touchstart',onStart,{passive:false}); c.addEventListener('touchmove',onMove,{passive:false}); c.addEventListener('touchend',onEnd);
+    c.addEventListener('mousedown',onStart); window.addEventListener('mousemove',onMove); window.addEventListener('mouseup',onEnd);
+  }
+
+  // ====== Camera ======
+  function setCameraPreset(kind){
+    const r=95, look=()=>camera.lookAt(0,0,0);
+    if(kind==='front'){camera.position.set(0,42,r); return look();}
+    if(kind==='isoL'){ camera.position.set(-r*.8,52,r*.6); return look();}
+    if(kind==='isoR'){ camera.position.set( r*.8,52,r*.6); return look();}
+    if(kind==='top'){  camera.position.set(0,110,0.0001);  return look();}
+    camera.position.set(60,50,60); look();
+  }
+
+  // ====== Lights ======
+  function animate(){
+    requestAnimationFrame(animate); time+=0.01;
+    const pulse=(t,i,base)=> base + (Math.sin(t+i*0.12)*0.1);
+    aLayers.forEach((g,i)=>{ if(!g.visible)return; g.userData.plane.material.emissiveIntensity=pulse(time,i, overlapMode==='additive'?0.45:0.28); });
+    bLayers.forEach((g,i)=>{ if(!g.visible)return; g.userData.plane.material.emissiveIntensity=pulse(time+0.6,i, overlapMode==='additive'?0.45:0.28); });
+    nLayers.forEach((g,i)=>{ if(!g.visible)return; const m=g.userData.plane.material; const base=(overlapMode==='dodge')?0.5:0.32; m.emissiveIntensity=base+Math.abs(Math.sin(time*1.6+i*0.15))*0.25; });
+    renderer.render(scene,camera);
+  }
+
+  function addLights(){
+    scene.add(new THREE.AmbientLight(0xffffff,0.42));
+    const lA=new THREE.PointLight(0x00ff88,2.2,180); lA.position.set(-40,24,32); scene.add(lA);
+    const lB=new THREE.PointLight(0xff4488,2.2,180); lB.position.set( 40,24,32); scene.add(lB);
+    const lN=new THREE.PointLight(0xffaa00,1.8,160); lN.position.set(0,36,0); scene.add(lN);
+    const top=new THREE.DirectionalLight(0xffffff,.75); top.position.set(0,90,0); scene.add(top);
+  }
+
+  // ====== Resize ======
+  function onResize(){
+    camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight);
+  }
+
+  // Boot
+  init();
+
+  // Camera pad
+  document.querySelectorAll('.camBtn').forEach(b=>b.addEventListener('click',()=>setCameraPreset(b.dataset.cam)));
+})();
+</script>
+</body>
+</html>

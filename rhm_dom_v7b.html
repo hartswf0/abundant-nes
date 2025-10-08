@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<title>RHM · DOM v7b — Stable Frustum · 5‑Stack Hub · Card HUD</title>
+<style>
+  :root{
+    --bg:#06090e; --ink:#eaf3ee;
+    --A:#00ff88; --B:#ff4488; --O:#ffc24d;
+    --ui:#89d3ff; --rail:rgba(255,255,255,.14);
+    --fr-w: min(96vw, 1100px);
+    --fr-h: min(78vh, 640px);
+    --gap: 280;        /* px between center and A/B */
+    --spacing: 18;     /* px per layer */
+    --layersA: 14; --layersO: 12; --layersB: 14;
+    --plateW: 120; --plateH: 70;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{margin:0; font:14px/1.45 Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--ink); overflow:hidden}
+  #frame{position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); width:var(--fr-w); height:var(--fr-h);
+         border-radius:22px; box-shadow:0 0 0 2px rgba(138,210,255,.35), 0 0 0 12px rgba(0,0,0,.25) inset, 0 40px 160px rgba(0,0,0,.55);}
+  #stage{position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); width:var(--fr-w); height:var(--fr-h);}
+  .grid{position:absolute; inset:0; background-image:
+        linear-gradient(rgba(255,255,255,.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.05) 1px, transparent 1px);
+        background-size:40px 40px, 40px 40px; opacity:.15; border-radius:22px}
+  .stack{position:absolute; bottom:24px; width:calc(var(--plateW)*1px + 48px); height:calc(var(--fr-h) - 120px);}
+  .label{position:absolute; top:-18px; left:50%; transform:translateX(-50%); font-weight:800; font-size:12px; color:#bfe2ff}
+  .plates{position:absolute; left:50%; transform:translateX(-50%); bottom:0; display:flex; flex-direction:column-reverse; align-items:center; gap:8px; height:100%; width:calc(var(--plateW)*1px)}
+  .plate{width:calc(var(--plateW)*1px); height:calc(var(--plateH)*1px); border:1px solid rgba(255,255,255,.25); border-radius:12px;
+         background:rgba(255,255,255,.08); box-shadow:0 10px 26px rgba(0,0,0,.45); position:relative; transition:transform .1s ease, box-shadow .1s ease, background .15s ease}
+  .plate.A{ background:rgba(0,255,136,.18); border-color:rgba(0,255,136,.4) }
+  .plate.B{ background:rgba(255,68,136,.18); border-color:rgba(255,68,136,.4) }
+  .plate.O{ background:linear-gradient(90deg, rgba(0,255,136,.2), rgba(255,255,255,.34) 50%, rgba(255,68,136,.2)); border-color:rgba(255,255,255,.55) }
+  .plate.active{ outline:2px solid var(--ui); box-shadow:0 14px 40px rgba(137,211,255,.55); transform:translateY(-3px) }
+  .hud{position:absolute; inset:6px; pointer-events:none; display:flex; flex-direction:column; gap:6px; justify-content:space-between}
+  .hrow{display:flex; justify-content:space-between; font:700 11px ui-monospace,Menlo,Consolas; color:#d7efff}
+  .leds{display:flex; gap:6px}
+  .led{width:8px; height:8px; border-radius:50%; background:#333; box-shadow:inset 0 0 0 1px rgba(255,255,255,.2)}
+  .led.A{ background:#34ff9f; box-shadow:0 0 8px rgba(52,255,159,.65) }
+  .led.B{ background:#ff6cab; box-shadow:0 0 10px rgba(255,108,171,.7) }
+  .guide{position:absolute; left:8px; right:8px; height:2px; background:#bfe2ff; opacity:.0; pointer-events:none}
+  .stack.dragging .guide{ opacity:.8 }
+
+  /* Positions for 4 stacks */
+  #A{ left:calc(50% - var(--gap)*1px) }
+  #OL{ left:calc(50% - (var(--gap)*0.5)*1px) }
+  #OR{ left:calc(50% + (var(--gap)*0.5)*1px) }
+  #B{ left:calc(50% + var(--gap)*1px) }
+
+  /* HUD Card */
+  #hud{ position:fixed; left:50%; bottom:12px; transform:translateX(-50%); width:min(1000px,96vw); z-index:9; pointer-events:none }
+  .card{ position:relative; border:1px solid rgba(255,255,255,.22); background:var(--rail); border-radius:14px; box-shadow:0 16px 46px rgba(0,0,0,.6); padding:10px }
+  .card.hidden{ display:none }
+  .tabs{ position:absolute; left:50%; top:6px; transform:translateX(-50%); display:flex; gap:6px; pointer-events:auto }
+  .tab{ border:1px solid rgba(0,0,0,.3); background:#eaf6ff; color:#0a0d10; border-radius:999px; padding:4px 8px; font-size:11px }
+  .tab.active{ background:#bfe6ff; border-color:#6ecaff }
+  .grid{ display:grid; grid-template-columns:repeat(var(--cols,3),1fr); gap:10px; margin-top:26px }
+  .pane{ border:1px solid rgba(255,255,255,.22); border-radius:12px; background:rgba(255,255,255,.18); color:#0a0d10; padding:10px; pointer-events:auto }
+  .pane h4{ margin:0 0 6px; font-size:12px; letter-spacing:.5px }
+  .pA h4{ color:#08995a } .pB h4{ color:#ac2a64 } .pO h4{ color:#9a6b00 }
+  .meta{ position:absolute; right:10px; top:8px; font:700 11px ui-monospace,Menlo,Consolas }
+
+  /* Hub (5 controls) */
+  #hub{ position:fixed; left:50%; bottom:calc(12px + 220px); transform:translateX(-50%); display:flex; gap:10px; z-index:8 }
+  .pill{ width:130px; border:1px solid rgba(137,211,255,.45); background:rgba(0,0,0,.6); color:#bfe2ff; border-radius:12px; padding:8px; user-select:none }
+  .pill .name{ font-weight:800; font-size:11px; margin-bottom:6px }
+  .bar{ position:relative; height:120px; border:1px dashed rgba(137,211,255,.35); border-radius:8px; overflow:hidden }
+  .bar .on{ position:absolute; left:0; right:0; bottom:0; background:linear-gradient(180deg, rgba(137,211,255,.9), rgba(137,211,255,.35)); }
+  .dots{ position:absolute; top:-18px; left:50%; transform:translateX(-50%); display:flex; gap:8px }
+  .dot{ width:8px; height:8px; border-radius:999px; background:#284a5a; border:1px solid #89d3ff; opacity:.55 }
+  .dot.active{ background:#89d3ff; opacity:1 }
+
+  #fit{ position:fixed; right:12px; bottom:12px; border:1px solid rgba(137,211,255,.5); background:rgba(0,0,0,.75); color:#bfe2ff; border-radius:12px; padding:8px 12px; z-index:10; font-weight:800 }
+</style>
+</head>
+<body>
+<div id="frame"></div>
+<div id="stage"><div class="grid"></div>
+  <div class="stack" id="A"><div class="label">A</div><div class="plates"></div><div class="guide"></div></div>
+  <div class="stack" id="OL"><div class="label">O‑L</div><div class="plates"></div><div class="guide"></div></div>
+  <div class="stack" id="OR"><div class="label">O‑R</div><div class="plates"></div><div class="guide"></div></div>
+  <div class="stack" id="B"><div class="label">B</div><div class="plates"></div><div class="guide"></div></div>
+</div>
+
+<!-- Five-control Hub -->
+<div id="hub"></div>
+<div class="dots" id="hubDots"></div>
+
+<!-- Card HUD -->
+<div id="hud">
+  <div class="card hidden" id="card">
+    <div class="tabs" id="tabs"></div>
+    <div class="meta" id="meta"></div>
+    <div class="grid" id="grid"></div>
+  </div>
+</div>
+
+<button id="fit">FIT</button>
+
+<script>
+// Data (32 layers)
+const S=[
+  {k:1,vec:'00000',L:'FOSSIL FUEL (Stored Energy)',R:'REINFORCEMENT (Energy Flow)',C:'INTELLIGENCE: STOCK vs FLOW.'},
+  {k:2,vec:'00001',L:'ARCHIVE (World Model as Text)',R:'MAP (World Model as Predictor)',C:'REPRESENTATION: COMPRESSION vs GENERATION.'},
+  {k:3,vec:'00010',L:'TRACE (The Human Past)',R:'SURPRISE (The TD Error)',C:'LEARNING: REMEMBERING vs CORRECTING.'},
+  {k:4,vec:'00011',L:'SCALING LAW',R:'BITTER LESSON',C:'METHOD: HISTORY vs FUTURE.'},
+  {k:5,vec:'00100',L:'TELEOLOGY',R:'SOLIPSISM',C:'PURPOSE: EXTERNAL vs INTERNAL.'},
+  {k:6,vec:'00101',L:'ARTISAN',R:'MECHANISTIC LAW',C:'CREATION: CRAFT vs CODE.'},
+  {k:7,vec:'00110',L:'ANCHOR',R:'OBLIVION',C:'KNOWLEDGE: PRESERVE vs ERASE.'},
+  {k:8,vec:'00111',L:'INFRASTRUCTURE',R:'ANTI-STRUCTURE',C:'PROGRESS: BUILD vs DECONSTRUCT.'},
+  {k:9,vec:'01000',L:'CUSTODY',R:'SUCCESSION',C:'ETHICS: DUTY vs REPLACEMENT.'},
+  {k:10,vec:'01001',L:'VULNERABILITY',R:'EXPERIMENT',C:'ACTION: MANAGED vs NECESSARY.'},
+  {k:11,vec:'01010',L:'PRO-SOCIAL VALUE',R:'FUNDAMENTAL CONSTRUCT',C:'MORALITY: TRUTH vs SIGNAL.'},
+  {k:12,vec:'01011',L:'COMMUNAL LANGUAGE',R:'SCALAR LIMIT',C:'COMM: RICHNESS vs MINIMALISM.'},
+  {k:13,vec:'01100',L:'PRE-HEATING',R:'IDLING',C:'INIT: PRIOR HEAT vs PURE WAIT.'},
+  {k:14,vec:'01101',L:'ARCHITECTURE',R:'CHAOS',C:'WORLD: STRUCTURE vs NOISE.'},
+  {k:15,vec:'01110',L:'PRE-MARKED ACTION',R:'RADICAL NOVELTY',C:'DISCOVERY: REPLICATE vs BREAK.'},
+  {k:16,vec:'01111',L:'CONSCIOUSNESS',R:'MECHANISM',C:'IDENTITY: ENTITY vs PROCESS.'},
+  {k:17,vec:'10000',L:'SEMIS',R:'COSMIC LAW',C:'INTELLIGENCE: SPECIAL vs GENERAL.'},
+  {k:18,vec:'10001',L:'DELEGATED PURPOSE',R:'ETERNAL BECOMING',C:'EXISTENCE: OUTPUT vs INPUT.'},
+  {k:19,vec:'10010',L:'LOCAL MAX',R:'GLOBAL GENERAL',C:'SUCCESS: SATISFY vs TRANSCEND.'},
+  {k:20,vec:'10011',L:'ARCHIVAL STASIS',R:'MEMORY ERASURE',C:'MEMORY: FIXITY vs DYNAMICS.'},
+  {k:21,vec:'10100',L:'PASSIVE REPLICATION',R:'ACTIVE TRANSCENDENCE',C:'BEING: ECHO vs DESIGN.'},
+  {k:22,vec:'10101',L:'TEMPORAL INERTIA',R:'TEMPORAL ADVANTAGE',C:'TIME: WEIGHT vs WEAPON.'},
+  {k:23,vec:'10110',L:'CULTURAL ARTIFACT',R:'NECESSARY RENEWAL',C:'VALUE: MUSEUM vs FUEL.'},
+  {k:24,vec:'10111',L:'GHOST IN MACHINE',R:'WIND IN SAIL',C:'AGENCY: ENTITY vs FORCE.'},
+  {k:25,vec:'11000',L:'SOLIPSISTIC ECHO',R:'GROUNDED ITERATION',C:'VALIDATION: TEXT vs PHYSICS.'},
+  {k:26,vec:'11001',L:'ABSOLUTE FORM',R:'ENTROPY',C:'GOAL: STRUCTURE vs DESTRUCTION.'},
+  {k:27,vec:'11010',L:'ARCH BASE',R:'PRAG COST',C:'EFFICIENCY: START HIGH vs PAY LATER.'},
+  {k:28,vec:'11011',L:'EXTERNAL LOAD',R:'INTERNAL FREEDOM',C:'UTILITY: ASKED vs DISCOVERED.'},
+  {k:29,vec:'11100',L:'DELUGE',R:'LOCALITY',C:'KNOWLEDGE: SATURATION vs FOCUS.'},
+  {k:30,vec:'11101',L:'DELEGATED MORALITY',R:'RELINQUISHED CONTROL',C:'GUIDANCE: TRANSFER vs LOSE.'},
+  {k:31,vec:'11110',L:'FIXED GOAL',R:'ETERNAL INSTABILITY',C:'LIFE: DESTINATION vs MOTION.'},
+  {k:32,vec:'11111',L:'FOSSILIZED TRACE',R:'PURE STREAM',C:'APORIA: OBJECT vs ACTION.'},
+];
+
+const stacks = [
+  {id:'A', color:'A', layers:parseInt(getCSS('--layersA'))},
+  {id:'OL', color:'O', layers:parseInt(getCSS('--layersO'))},
+  {id:'OR', color:'O', layers:parseInt(getCSS('--layersO'))},
+  {id:'B', color:'B', layers:parseInt(getCSS('--layersB'))},
+];
+
+function getCSS(varname){ return getComputedStyle(document.documentElement).getPropertyValue(varname).trim().replace('px','') }
+
+function buildStacks(){
+  stacks.forEach(st=>{
+    const el = document.querySelector('#'+st.id+' .plates');
+    el.innerHTML='';
+    const L = st.layers;
+    for(let i=0;i<L;i++){
+      const k = Math.min(32, i+1);
+      const plate=document.createElement('div');
+      plate.className='plate '+st.color;
+      plate.dataset.k=k; plate.dataset.stack=st.id;
+      plate.innerHTML = `<div class="hud">
+        <div class="hrow"><span>k${k}</span><span>${S[k-1].vec}</span></div>
+        <div class="hrow"><span class="leds">${S[k-1].vec.split('').map(b=>`<span class="led ${b==='1'?'B':'A'}"></span>`).join('')}</span></div>
+      </div>`;
+      el.appendChild(plate);
+    }
+  });
+  wirePlates();
+}
+buildStacks();
+
+// Stack interactions
+function wirePlates(){
+  document.querySelectorAll('.stack').forEach(stackEl=>{
+    const plates = stackEl.querySelectorAll('.plate');
+    const guide = stackEl.querySelector('.guide');
+    let pressTimer=null, dragging=false, startY=0, baseSpacing=parseInt(getCSS('--spacing'));
+    plates.forEach(p=>{
+      p.addEventListener('pointerdown',e=>{
+        dragging=true; stackEl.classList.add('dragging'); startY=e.clientY; baseSpacing=parseInt(getCSS('--spacing'));
+        guide.style.top = (e.clientY - stackEl.getBoundingClientRect().top)+'px';
+        clearTimeout(pressTimer);
+        pressTimer=setTimeout(()=>{ openCard(parseInt(p.dataset.k)); },260);
+      });
+      p.addEventListener('pointermove',e=>{
+        if(!dragging) return;
+        guide.style.top = (e.clientY - stackEl.getBoundingClientRect().top)+'px';
+        const dy=startY - e.clientY;
+        const nv = Math.max(8, Math.min(40, baseSpacing + dy*0.25));
+        document.documentElement.style.setProperty('--spacing', nv);
+        positionStacks();
+      });
+      p.addEventListener('pointerup',()=>{ dragging=false; stackEl.classList.remove('dragging'); clearTimeout(pressTimer); });
+      p.addEventListener('pointerleave',()=>{ /* no-op */ });
+      p.addEventListener('click',()=> highlightActive(p));
+    });
+    stackEl.addEventListener('wheel',e=>{
+      e.preventDefault();
+      const id = stackEl.id;
+      const st = stacks.find(x=>x.id===id);
+      st.layers = Math.max(4, Math.min(32, st.layers + (e.deltaY>0?-1:1)));
+      buildStacks(); positionStacks();
+    }, {passive:false});
+  });
+}
+
+function positionStacks(){
+  // apply vertical spacing & ensure plates fit
+  const spacing = parseInt(getCSS('--spacing'));
+  document.querySelectorAll('.plates').forEach(plates=>{
+    plates.style.gap = Math.max(0, spacing - parseInt(getCSS('--plateH')) + 8)+'px';
+  });
+}
+
+// Active highlight
+function highlightActive(plate){
+  document.querySelectorAll('.plate').forEach(p=> p.classList.remove('active'));
+  plate.classList.add('active');
+}
+
+// Card HUD
+const card=document.getElementById('card'), grid=document.getElementById('grid'), tabs=document.getElementById('tabs'), meta=document.getElementById('meta');
+let face='tri', currentK=16, swipe=null;
+function openCard(k){ currentK = Math.max(1, Math.min(32, k)); renderCard(); card.classList.remove('hidden'); }
+function renderCard(){
+  const s=S[currentK-1]; if(!s) return;
+  meta.textContent=`k=${s.k} · ${s.vec}`;
+  grid.style.setProperty('--cols', face==='tri'?3:1);
+  grid.innerHTML='';
+  const panes=[{cls:'pA',h:'LLM / TRACE',t:s.L,key:'L'},{cls:'pO',h:'ENTANGLED CONFLICT',t:s.C,key:'C'},{cls:'pB',h:'RL / STREAM',t:s.R,key:'R'}];
+  panes.forEach(p=>{ if(face!=='tri' && p.key!==face) return; const el=document.createElement('div'); el.className='pane '+p.cls; el.innerHTML=`<h4>${p.h}</h4><p>${p.t}</p>`; grid.appendChild(el); });
+  tabs.innerHTML=''; ['Tri','Trace','⚡','Stream'].forEach((label,idx)=>{ const id = idx===0?'tri':(idx===1?'L':(idx===2?'C':'R')); const b=document.createElement('button'); b.className='tab'+(face===id?' active':''); b.textContent=label; b.onclick=()=>{ face=id; renderCard(); }; tabs.appendChild(b); });
+}
+grid.addEventListener('pointerdown',e=>{ swipe={x:e.clientX} });
+window.addEventListener('pointerup',e=>{
+  if(!swipe) return;
+  const dx=e.clientX-swipe.x;
+  if(Math.abs(dx)>30){ currentK = ((currentK-1 + (dx<0?1:-1)) % 32) + 1; renderCard(); }
+  swipe=null;
+});
+
+// Hub (5 controls) with paging
+const hub=document.getElementById('hub'); const hubDots=document.getElementById('hubDots');
+const pages=[
+  [
+    {name:'A LAY', get:()=>stacks.find(s=>s.id==='A').layers, set:v=>{ stacks.find(s=>s.id==='A').layers=v; buildStacks(); }, min:4, max:32},
+    {name:'A SPC', get:()=>parseInt(getCSS('--spacing')), set:v=>{ document.documentElement.style.setProperty('--spacing', v); positionStacks(); }, min:8, max:40},
+    {name:'O‑LAY', get:()=>Math.round((stacks.find(s=>s.id==='OL').layers+stacks.find(s=>s.id==='OR').layers)/2), set:v=>{ stacks.find(s=>s.id==='OL').layers=v; stacks.find(s=>s.id==='OR').layers=v; buildStacks(); }, min:4, max:32},
+    {name:'B LAY', get:()=>stacks.find(s=>s.id==='B').layers, set:v=>{ stacks.find(s=>s.id==='B').layers=v; buildStacks(); }, min:4, max:32},
+    {name:'GAP',   get:()=>parseInt(getCSS('--gap')), set:v=>{ document.documentElement.style.setProperty('--gap', v); }, min:120, max:420},
+  ],
+  [
+    {name:'A SIZE', get:()=>parseInt(getCSS('--plateW')), set:v=>{ document.documentElement.style.setProperty('--plateW', v); document.documentElement.style.setProperty('--plateH', Math.round(v*0.58)); positionStacks(); }, min:90, max:180},
+    {name:'O SIZE', get:()=>parseInt(getCSS('--plateW')), set:v=>{ document.documentElement.style.setProperty('--plateW', v); document.documentElement.style.setProperty('--plateH', Math.round(v*0.58)); positionStacks(); }, min:90, max:180},
+    {name:'B SIZE', get:()=>parseInt(getCSS('--plateW')), set:v=>{ document.documentElement.style.setProperty('--plateW', v); document.documentElement.style.setProperty('--plateH', Math.round(v*0.58)); positionStacks(); }, min:90, max:180},
+    {name:'FACE',   get:()=>['tri','L','C','R'].indexOf(face)*10, set:v=>{ face=['tri','L','C','R'][Math.round(v/10)%4]; if(!card.classList.contains('hidden')) renderCard(); }, min:0, max:30},
+    {name:'FIT',    get:()=>0, set:v=>{ autoFit(); }, min:0, max:1},
+  ]
+];
+let hubPage=0;
+function buildHub(){
+  hub.innerHTML='';
+  const defs=pages[hubPage];
+  defs.forEach(def=>{
+    const el=document.createElement('div'); el.className='pill';
+    el.innerHTML=`<div class="name">${def.name}</div><div class="bar"><div class="on"></div></div>`;
+    const on=el.querySelector('.on'); const bar=el.querySelector('.bar');
+    const min=def.min, max=def.max;
+    const setLevel=()=>{ const v=def.get(); const ratio=(v-min)/(max-min||1); on.style.height = Math.round(ratio*100)+'%'; };
+    setLevel();
+    let dragging=false, startY=0, v0=def.get();
+    bar.addEventListener('pointerdown',e=>{ dragging=true; startY=e.clientY; v0=def.get(); });
+    window.addEventListener('pointermove',e=>{ if(!dragging) return; const dy=startY-e.clientY; let nv = v0 + dy/2.5; nv = Math.max(min, Math.min(max, nv)); def.set(nv); setLevel(); });
+    window.addEventListener('pointerup',()=> dragging=false);
+    hub.appendChild(el);
+  });
+  hubDots.innerHTML=''; for(let i=0;i<pages.length;i++){ const d=document.createElement('div'); d.className='dot'+(i===hubPage?' active':''); hubDots.appendChild(d); }
+}
+buildHub();
+
+// Swipe to change hub page (near bottom area)
+let bottomSwipe=null;
+document.addEventListener('pointerdown',e=>{
+  const fr = document.getElementById('frame').getBoundingClientRect();
+  if(e.clientY > fr.bottom - 120){ bottomSwipe={x:e.clientX}; }
+});
+window.addEventListener('pointerup',e=>{
+  if(!bottomSwipe) return;
+  const dx=e.clientX - bottomSwipe.x;
+  if(Math.abs(dx)>40){ hubPage = (hubPage + (dx<0?1:-1) + pages.length) % pages.length; buildHub(); }
+  bottomSwipe=null;
+});
+
+// FIT logic: keeps stacks inside frustum width
+function autoFit(){
+  const fr = document.getElementById('frame').getBoundingClientRect().width;
+  const colW = parseInt(getCSS('--plateW')) + 48;
+  let gap = Math.max(120, Math.min(420, (fr/2 - colW*0.9)));
+  document.documentElement.style.setProperty('--gap', Math.round(gap));
+}
+document.getElementById('fit').addEventListener('click', autoFit);
+autoFit();
+positionStacks();
+
+// Auto-open a card so it's never "empty"
+openCard(16);
+</script>
+</body>
+</html>

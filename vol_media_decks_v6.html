@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>VOL‑MEDIA DECKS v6 — Dual Overlap · Better Stack Control</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;touch-action:none}
+  html,body{height:100%}
+  body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:#000;color:#fff;overflow:hidden}
+  #canvas{width:100vw;height:100vh;display:block}
+  #toast{position:fixed;bottom:10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.85);border:1px solid rgba(255,255,255,.2);padding:6px 10px;border-radius:10px;font-size:12px;color:#fff;z-index:6;display:none}
+  #fit{position:fixed;right:10px;bottom:10px;background:rgba(0,0,0,.85);border:1px solid rgba(255,255,255,.25);border-radius:12px;padding:8px 12px;font-weight:700;z-index:7}
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+<button id="fit">FIT</button>
+<div id="toast"></div>
+<script>
+(async function(){
+  // ---- Load THREE safely if absent
+  if(!window.THREE){
+    const CDNs=['https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js','https://unpkg.com/three@0.152.2/build/three.min.js','https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js'];
+    for(const src of CDNs){ try{ await new Promise((res,rej)=>{const s=document.createElement('script'); s.src=src; s.onload=res; s.onerror=rej; document.head.appendChild(s)}); if(window.THREE) break; }catch(e){} }
+  }
+  const rand=(a,b)=>a+Math.random()*(b-a);
+  const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+  const lerp=(a,b,t)=>a*(1-t)+b*t;
+  // ===== Scene =====
+  const canvas=document.getElementById('canvas');
+  const scene=new THREE.Scene(); scene.background=new THREE.Color(0x020305);
+  scene.fog = new THREE.Fog(0x020305, 120, 420);
+  const camera=new THREE.PerspectiveCamera(54, innerWidth/innerHeight, .1, 3000); camera.position.set(82,58,104); camera.lookAt(0,16,0);
+  const renderer=new THREE.WebGLRenderer({canvas,antialias:true}); renderer.setSize(innerWidth,innerHeight); renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
+  addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight)});
+
+  // Ground grid for contrast
+  const grid=new THREE.GridHelper(1200, 120, 0x0e2a36, 0x103a49); grid.material.opacity=0.35; grid.material.transparent=true; grid.position.y=-0.05; scene.add(grid);
+
+  // Lighting
+  scene.add(new THREE.AmbientLight(0xffffff,.25));
+  const key=new THREE.PointLight(0x66ddff,1.8,620); key.position.set(0,90,140); scene.add(key);
+  const warm=new THREE.PointLight(0xffaa66,1.2,520); warm.position.set(120,62,-60); scene.add(warm);
+  const rim=new THREE.DirectionalLight(0xffffff,.6); rim.position.set(-100,130,-40); scene.add(rim);
+
+  // ===== Labels =====
+  function mkSprite(text,col='#ffffff'){ const cvs=document.createElement('canvas'); const s=256; cvs.width=cvs.height=s; const ctx=cvs.getContext('2d'); ctx.clearRect(0,0,s,s); ctx.fillStyle='rgba(0,0,0,0)'; ctx.fillRect(0,0,s,s); ctx.fillStyle=col; ctx.font='bold 48px Inter, system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.shadowColor='rgba(0,0,0,0.6)'; ctx.shadowBlur=12; ctx.fillText(text,s/2,s/2); const tex=new THREE.CanvasTexture(cvs); const mat=new THREE.SpriteMaterial({map:tex,transparent:true,depthWrite:false}); const spr=new THREE.Sprite(mat); spr.scale.set(8,8,1); return spr; }
+  function updateSpriteText(sprite,txt,col='#ffffff'){ const t = sprite.material.map.image; const ctx=t.getContext('2d'); const s=t.width; ctx.clearRect(0,0,s,s); ctx.fillStyle='rgba(0,0,0,0)'; ctx.fillRect(0,0,s,s); ctx.fillStyle=col; ctx.font='bold 48px Inter, system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.shadowColor='rgba(0,0,0,0.7)'; ctx.shadowBlur=14; ctx.fillText(txt,s/2,s/2); sprite.material.map.needsUpdate=true; }
+  const viewLabel=mkSprite(''); viewLabel.position.set(0, 56, 0); scene.add(viewLabel);
+  function showViewLabel(txt){ updateSpriteText(viewLabel, txt, '#bfe2ff'); clearTimeout(showViewLabel._id); showViewLabel._id=setTimeout(()=>{ updateSpriteText(viewLabel,'') }, 900); }
+
+  // Camera Presets
+  const VIEWS=[
+    {name:'FRONT',pos:[0,40,130]},
+    {name:'ISO L',pos:[-95,48,90]},
+    {name:'ISO R',pos:[95,48,90]},
+    {name:'SIDE',pos:[0,42,-120]},
+    {name:'TOP',pos:[0,150,0.01]}
+  ];
+  let viewIdx=2, orbit=false, orbitSpeed=18, tOrbit=0, dist=140;
+  function applyView(){ const v=VIEWS[viewIdx%VIEWS.length]; camera.position.set(...v.pos); camera.lookAt(0,16,0); showViewLabel(v.name); }
+
+  // ===== Stacks =====
+  function mkPlate(color,op){ const SIZE=12; const g=new THREE.PlaneGeometry(SIZE,SIZE); const m=new THREE.MeshStandardMaterial({color,transparent:true,opacity:op,side:THREE.DoubleSide,depthWrite:false,roughness:.55,metalness:.08}); const mesh=new THREE.Mesh(g,m); mesh.rotation.x=-Math.PI/2; m.emissive=new THREE.Color(color); m.emissiveIntensity=.22; return mesh; }
+
+  const MAX_PLATES=32;
+  const stacks={};
+  function buildStack(id, color, x=0, z=0){
+    const S={id,color,spacing:1.12,layers:16,size:1.0,group:new THREE.Group(),plates:[],tag:mkSprite(id)};
+    S.group.position.set(x,0,z);
+    for(let i=0;i<MAX_PLATES;i++){ const base=.9-(i/MAX_PLATES)*.55; const p=mkPlate(color,Math.max(.22,base*.5)); p.position.y=i*S.spacing; S.group.add(p); S.plates.push(p); }
+    S.tag.position.set(0,2,0); S.group.add(S.tag);
+    scene.add(S.group); stacks[id]=S; refreshStack(id,true);
+    return S;
+  }
+  function refreshStack(id){
+    const S=stacks[id]; const activeColor=new THREE.Color(S.color).lerp(new THREE.Color(0xffffff), 0.15);
+    const EI=0.24; const OP=0.35;
+    S.plates.forEach((p,i)=>{
+      const vis=i<S.layers; p.visible=vis; if(!vis) return;
+      p.position.y=i*S.spacing;
+      p.scale.set(S.size*(1+0.04),1,S.size*(1+0.04));
+      p.material.color.copy(activeColor);
+      p.material.emissive.copy(new THREE.Color(S.color));
+      p.material.emissiveIntensity = EI*(0.95 - (i/Math.max(1,S.layers))*0.5);
+      p.material.opacity = OP*(0.95 - (i/Math.max(1,S.layers))*0.4);
+    });
+  }
+
+  // Main stacks: A, O1, O2, B
+  let sepBase=34, sepX=sepBase, sepMin=10, couple=0.0;
+  const A = buildStack('A', 0x00ff88, -sepX, 0);
+  const O1 = buildStack('O‑L', 0xffc24d, -sepX*0.5, 0);
+  const O2 = buildStack('O‑R', 0xffc24d, +sepX*0.5, 0);
+  const B = buildStack('B', 0xff4488, +sepX, 0);
+
+  function applySeparation(){
+    stacks['A'].group.position.x = -sepX;
+    stacks['B'].group.position.x = +sepX;
+    stacks['O‑L'].group.position.x = -sepX*0.5;
+    stacks['O‑R'].group.position.x = +sepX*0.5;
+  }
+  function updateCoupledSeparation(xf=0){
+    const t=Math.abs(xf);
+    const blend = couple*(1 - t);
+    sepX = lerp(sepBase, sepMin, blend);
+    applySeparation();
+  }
+
+  // ===== Picking / gestures =====
+  const ray=new THREE.Raycaster(); const v2=new THREE.Vector2();
+  function pickAt(clientX,clientY,objects){ v2.x=(clientX/innerWidth)*2-1; v2.y=-(clientY/innerHeight)*2+1; ray.setFromCamera(v2,camera); return ray.intersectObjects(objects); }
+
+  // Active highlight
+  function pulse(p){ p.material.emissiveIntensity=.98; p.scale.set(1.2,1,1.2); setTimeout(()=>{ p.scale.set(1.04,1,1.04); p.material.emissiveIntensity=.24; },120) }
+  function highlightByY(stack, y){
+    const plates=stack.plates.filter((_,i)=>i<stack.layers);
+    if(!plates.length) return;
+    const minY=plates[0].position.y, maxY=plates[plates.length-1].position.y;
+    const rel = clamp((y-minY)/(maxY-minY+1e-6),0,1);
+    const idx = Math.round(rel*(plates.length-1));
+    const p = plates[idx]; if(p) pulse(p);
+  }
+
+  // Drag on a stack to scrub layers (changes its spacing by vertical drag; optional: mouse wheel steps index visual)
+  Object.values(stacks).forEach(S=>{
+    let dragging=false, y0=0, baseSpace=S.spacing, baseLayers=S.layers;
+    canvas.addEventListener('pointerdown',(e)=>{
+      const hits=pickAt(e.clientX,e.clientY,S.plates);
+      if(hits.length){
+        dragging=true; y0=e.clientY; baseSpace=S.spacing; baseLayers=S.layers;
+        highlightByY(S, hits[0].point.y);
+      }
+    });
+    addEventListener('pointermove',(e)=>{
+      if(!dragging) return;
+      const dy = y0 - e.clientY;
+      if(Math.abs(dy)<2) return;
+      // vertical drag = adjust spacing (compression) with some scaling
+      S.spacing = clamp(baseSpace + dy*0.004, 0.6, 2.0);
+      refreshStack(S.id);
+    });
+    addEventListener('pointerup',()=>{ dragging=false; });
+    // Wheel = step layers quickly
+    canvas.addEventListener('wheel',(e)=>{
+      const hits=pickAt(e.clientX,e.clientY,[S.group]);
+      if(hits.length){
+        e.preventDefault();
+        S.layers = clamp(S.layers + (e.deltaY>0?-1:1), 4, MAX_PLATES);
+        refreshStack(S.id);
+      }
+    }, {passive:false});
+  });
+
+  // ===== Hub stacks (left-to-right, between A and B) =====
+  const hub={group:new THREE.Group(), stacks:[], yHidden:-26, yShown:2, shown:true}; scene.add(hub.group);
+  function buildHub(){
+    const defs=[
+      {name:'A LAY', color:0x6af3b5, getter:()=>A.layers, setter:v=>{ A.layers=clamp(Math.round(v),4,MAX_PLATES); refreshStack('A'); }, min:4, max:MAX_PLATES},
+      {name:'A SPC', color:0x00ff88, getter:()=>A.spacing*100, setter:v=>{ A.spacing=clamp(v/100,0.6,2.0); refreshStack('A'); }, min:60, max:200},
+      {name:'O‑LAY', color:0xffd688, getter:()=>Math.round((O1.layers+O2.layers)/2), setter:v=>{ const L=clamp(Math.round(v),4,MAX_PLATES); O1.layers=L; O2.layers=L; refreshStack('O‑L'); refreshStack('O‑R'); }, min:4, max:MAX_PLATES},
+      {name:'O‑SPC', color:0xffc24d, getter:()=>((O1.spacing+O2.spacing)/2)*100, setter:v=>{ const s=clamp(v/100,0.6,2.0); O1.spacing=s; O2.spacing=s; refreshStack('O‑L'); refreshStack('O‑R'); }, min:60, max:200},
+      {name:'B LAY', color:0xff88b9, getter:()=>B.layers, setter:v=>{ B.layers=clamp(Math.round(v),4,MAX_PLATES); refreshStack('B'); }, min:4, max:MAX_PLATES},
+      {name:'B SPC', color:0xff4488, getter:()=>B.spacing*100, setter:v=>{ B.spacing=clamp(v/100,0.6,2.0); refreshStack('B'); }, min:60, max:200},
+      {name:'SEP',   color:0x7da1ff, getter:()=>sepBase*10, setter:v=>{ sepBase=clamp(v/10,8,120); updateCoupledSeparation(); }, min:80, max:1200},
+      {name:'COUP',  color:0x00d4aa, getter:()=>couple*100, setter:v=>{ couple=clamp(v/100,0,1); updateCoupledSeparation(); }, min:0, max:100},
+      {name:'VIEW',  color:0x9ad7ff, getter:()=>viewIdx*20, setter:v=>{ viewIdx=Math.round(clamp(v/20,0,VIEWS.length-1)); applyView(); }, min:0, max:(VIEWS.length-1)*20},
+      {name:'ORBT',  color:0xff88cc, getter:()=>orbit?orbitSpeed:0, setter:v=>{ orbit = v>1; orbitSpeed = clamp(v,0,40); }, min:0, max:40}
+    ];
+    const spacingX=12; const offset=-(defs.length-1)/2;
+    defs.forEach((d,i)=>{
+      const g=new THREE.Group(); g.position.set((i+offset)*spacingX, hub.yShown, 0);
+      const plates=[]; const N=16;
+      for(let j=0;j<N;j++){ const p=mkPlate(d.color, 0.22); p.position.y=j*1.15; g.add(p); plates.push(p); }
+      const tag=mkSprite(d.name,'#bfe2ff'); tag.position.set(0, N*1.15+2, 0); g.add(tag);
+      hub.group.add(g); hub.stacks.push({def:d, group:g, plates, tag});
+    });
+  }
+  function refreshHub(){
+    hub.stacks.forEach(S=>{
+      const v=clamp((S.def.getter()-S.def.min)/(S.def.max-S.def.min),0,1);
+      const nOn=Math.round(v*S.plates.length);
+      S.plates.forEach((p,idx)=>{
+        const on=idx<nOn;
+        p.material.opacity = on? 0.76 : 0.14;
+        p.material.emissiveIntensity = on? 0.92 : 0.12;
+        p.scale.set(1+(on?0.08:0),1,1+(on?0.08:0));
+      });
+    });
+  }
+  buildHub(); refreshHub();
+
+  // Hub input (drag vertical on a hub stack)
+  const rayHub=new THREE.Raycaster();
+  function pickHub(x,y){
+    const kids = hub.group.children.flatMap(g=>g.children).filter(o=>o.isMesh);
+    v2.x=(x/innerWidth)*2-1; v2.y=-(y/innerHeight)*2+1; rayHub.setFromCamera(v2,camera);
+    const is=rayHub.intersectObjects(kids); if(!is.length) return null;
+    for(const i of is){
+      for(const S of hub.stacks){ if(S.plates.includes(i.object)) return S; }
+    }
+    return null;
+  }
+  let hubDrag=null;
+  canvas.addEventListener('pointerdown',(e)=>{
+    const S=pickHub(e.clientX,e.clientY);
+    if(S){ hubDrag={S, y0:e.clientY, v0:S.def.getter()}; if(navigator.vibrate) navigator.vibrate(4); }
+  }, {capture:true});
+  addEventListener('pointermove',(e)=>{
+    if(!hubDrag) return;
+    const {S,y0,v0}=hubDrag;
+    const dy=y0-e.clientY;
+    const newVal = v0 + dy/2.5;
+    const bounded = clamp(newVal, S.def.min, S.def.max);
+    S.def.setter(bounded); refreshHub();
+  });
+  addEventListener('pointerup',()=> hubDrag=null);
+
+  // Background double/triple tap
+  function emptyHit(x,y){
+    const objs=[...A.plates,...B.plates,...O1.plates,...O2.plates, ...hub.group.children.flatMap(g=>g.children).filter(o=>o.isMesh)];
+    return pickAt(x,y,objs).length===0;
+  }
+  let lastTap=0, tapCount=0;
+  canvas.addEventListener('pointerdown',e=>{
+    if(!emptyHit(e.clientX,e.clientY)) return;
+    const now=performance.now(); tapCount = (now-lastTap<280) ? tapCount+1 : 1; lastTap=now;
+    clearTimeout(canvas._tapTimer);
+    canvas._tapTimer=setTimeout(()=>{
+      if(tapCount===2){ viewIdx=(viewIdx+1)%VIEWS.length; applyView(); }
+      else if(tapCount>=3){ orbit=!orbit; showViewLabel(orbit?'ORBIT ON':'ORBIT OFF'); }
+      tapCount=0;
+    },300);
+  }, {capture:true});
+
+  // FIT button → make all stacks visible within width
+  document.getElementById('fit').addEventListener('click',()=>{
+    const frW = Math.min(innerWidth*0.9, 980);
+    const colW = 12*1.08 + 50; // plate size + margin
+    let gap = Math.max(16, Math.min(120, (frW/2 - colW*0.9)/10)); // rough
+    sepBase = gap;
+    updateCoupledSeparation();
+    showViewLabel('FIT');
+  });
+
+  // Orbit camera
+  function updateCam(){ if(orbit){ tOrbit+=0.0015*orbitSpeed; const R=dist; camera.position.x=Math.sin(tOrbit)*R; camera.position.z=Math.cos(tOrbit)*R; camera.position.y=58; camera.lookAt(0,16,0);} }
+
+  // Render
+  function animate(){ requestAnimationFrame(animate); updateCam(); renderer.render(scene,camera) }
+  applySeparation(); applyView(); animate();
+
+  // Smoke tests
+  ;(function tests(){
+    const results=[]; const ok=(n,p)=>results.push([n,!!p]);
+    ok('THREE loaded', !!window.THREE);
+    ok('Stacks built', !!(A&&B&&O1&&O2));
+    ok('Hub built', !!hub.group && hub.stacks.length>0);
+    console.table(results.map(([n,p])=>({test:n,pass:p})));
+  })();
+
+})();
+</script>
+</body>
+</html>

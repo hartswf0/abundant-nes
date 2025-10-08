@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<title>RHM·32 — Layer Instrument (Post‑it Stack)</title>
+<style>
+  :root{
+    --bg:#070a0c; --ink:#eaf3ee; --ghost:#a6b3ae;
+    --A:#21ff86; --B:#ff4b9a; --O:#ffb13a; --sky:#4fc3f7;
+    --card:#0f1417; --edge:#1b262a; --gold:#ffcc55;
+    --safe-top: env(safe-area-inset-top,0px);
+    --safe-left: env(safe-area-inset-left,0px);
+    --safe-right: env(safe-area-inset-right,0px);
+    --safe-bottom: env(safe-area-inset-bottom,0px);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{margin:0; font:14px/1.45 Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:var(--bg); color:var(--ink); overflow:hidden}
+
+  /* Header (tiny) */
+  #hdr{
+    position:fixed; left:0; right:0; top:var(--safe-top);
+    height:42px; display:flex; align-items:center; justify-content:space-between;
+    padding:0 12px; z-index:60;
+    background:rgba(0,0,0,.85); backdrop-filter:blur(8px);
+    border-bottom:2px solid rgba(79,195,247,.5);
+  }
+  #hdr h1{margin:0; font-size:12px; letter-spacing:1px; color:var(--sky)}
+  #hdr .mini{font-size:11px; color:#bde9ff; opacity:.9}
+
+  /* Dock (iconic) */
+  #dock{
+    position:fixed; top:calc(var(--safe-top) + 46px); left:50%; transform:translateX(-50%);
+    display:flex; gap:8px; z-index:55;
+  }
+  .btn{
+    border:2px solid var(--sky); background:rgba(79,195,247,.12); color:#dff7ff;
+    border-radius:10px; padding:8px 10px; font-size:11px; letter-spacing:.4px;
+  }
+  .btn:active,.btn.active{background:rgba(79,195,247,.28); transform:scale(.98)}
+
+  /* Panel (minimal controls) */
+  #panel{
+    position:fixed; top:calc(var(--safe-top) + 92px); left:50%; transform:translateX(-50%);
+    min-width:320px; max-width:94vw; max-height:46vh; overflow:auto;
+    background:rgba(0,0,0,.92); border:2px solid rgba(79,195,247,.5);
+    border-radius:12px; padding:10px 12px; display:none; z-index:50;
+  }
+  #panel.open{display:block}
+  .label{font-size:10px; color:var(--sky); text-transform:uppercase; letter-spacing:1px; margin:6px 0 4px}
+  .row{display:flex; gap:8px; flex-wrap:wrap; align-items:center}
+  select,input[type=range]{background:rgba(79,195,247,.15); color:#e8fbff; border:1px solid rgba(79,195,247,.45); border-radius:8px; padding:6px 8px; font-size:11px}
+  .chip{display:flex; align-items:center; gap:6px; border:1px solid rgba(255,255,255,.18); background:rgba(255,255,255,.06); border-radius:999px; padding:6px 8px; font-size:11px}
+  .state{min-width:18px; text-align:center; font-weight:800; padding:2px 6px; border-radius:6px}
+  .state[data-val="*"]{background:rgba(255,193,64,.14); color:#ffe4aa; border:1px solid rgba(255,193,64,.36)}
+  .state[data-val="A"]{background:rgba(33,255,134,.16); color:#baffdd; border:1px solid rgba(33,255,134,.38)}
+  .state[data-val="B"]{background:rgba(255,75,154,.16); color:#ffd7e6; border:1px solid rgba(255,75,154,.38)}
+
+  /* Stage (CSS 3D) */
+  #stage{
+    position:fixed; inset:0;
+    perspective: 1200px; transform-style: preserve-3d;
+  }
+  #stack{
+    position:absolute; left:50%; top:50%; transform-style:preserve-3d;
+    width:820px; height:540px; /* will scale for mobile */
+    transform: translate(-50%,-50%) rotateX(58deg) rotateZ(0deg) translateZ(0px);
+    transition: transform .35s ease;
+  }
+  @media (max-width:760px){ #stack{ width:92vw; height:66vh; } }
+
+  /* Layers (planes) */
+  .plane{
+    position:absolute; left:50%; top:50%; transform-style:preserve-3d;
+    width:720px; height:420px; transform: translate(-50%,-50%) translateZ(var(--z)) rotateX(90deg);
+    opacity:.96;
+  }
+  /* Post-it grid on each plane */
+  .grid{
+    display:grid; grid-template-columns: repeat(8, 1fr); grid-auto-rows: 1fr; gap:10px;
+    width:100%; height:100%; padding:10px;
+  }
+  @media (max-width:760px){ .grid{ gap:8px; padding:8px; grid-template-columns: repeat(8, 1fr);} }
+
+  .note{
+    position:relative; border:1px solid var(--edge); border-radius:12px;
+    background:
+      radial-gradient(120px 60px at -20% -20%, rgba(255,255,255,.10), transparent 60%),
+      linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02)),
+      #12171a;
+    box-shadow: 0 6px 14px rgba(0,0,0,.35), inset 0 0 0 1px rgba(255,255,255,.04);
+    display:flex; align-items:center; justify-content:center; overflow:hidden;
+    cursor:pointer; transition: transform .12s ease, box-shadow .12s ease, opacity .2s ease;
+  }
+  .note:hover{ transform: translateY(-2px); box-shadow: 0 10px 22px rgba(0,0,0,.45), inset 0 0 0 1px rgba(255,255,255,.08) }
+  .note[data-hide="1"]{ opacity:.12; pointer-events:none }
+  .k{ position:absolute; top:6px; left:6px; font-weight:800; font-size:11px; color:#bfe8ff }
+  .vec{ position:absolute; top:6px; right:6px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size:11px; letter-spacing:.5px; opacity:.9 }
+  .leds{ display:flex; gap:6px }
+  .led{
+    width:8px; height:8px; border-radius:50%;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.2), 0 0 8px rgba(0,0,0,.5);
+    background: rgba(255,255,255,.12);
+  }
+  .led.A{ background: var(--A); box-shadow: 0 0 8px rgba(33,255,134,.6) }
+  .led.B{ background: var(--B); box-shadow: 0 0 10px rgba(255,75,154,.7) }
+
+  /* HUD */
+  #hud{ position:fixed; right:calc(10px + var(--safe-right)); bottom:calc(12px + var(--safe-bottom)); z-index:70; display:flex; flex-direction:column; gap:8px; align-items:flex-end }
+  #nexus{ display:flex; gap:8px; align-items:center; background:rgba(0,0,0,.85); border:2px solid var(--gold); border-radius:10px; padding:6px 10px }
+  #nexus .dot{ width:8px; height:8px; border-radius:50%; background:#666 }
+  #nexus.on .dot{ background:var(--gold); box-shadow:0 0 10px var(--gold) }
+  #nexus span{ font-size:11px; color:var(--gold) }
+  #legend{ display:flex; gap:8px; align-items:center; background:rgba(0,0,0,.7); border:1px solid rgba(255,255,255,.18); border-radius:10px; padding:6px 10px; font-size:11px; color:#bde9ff }
+
+  /* Camera pad */
+  #cam{ position:fixed; right:calc(10px + var(--safe-right)); top:50%; transform:translateY(-50%); display:grid; gap:8px; z-index:50 }
+  .camBtn{ width:40px; height:40px; border-radius:10px; border:2px solid var(--sky); background:rgba(0,0,0,.85); color:#fff; font-size:10px }
+
+  /* Compare dialog */
+  dialog{ border:none; border-radius:14px; width:min(720px,94vw); background:#0e1316; color:var(--ink); padding:12px 14px; box-shadow:0 20px 60px rgba(0,0,0,.55) }
+  dialog::backdrop{ background:rgba(0,0,0,.6) }
+  .cmpRow{ display:grid; grid-template-columns:1fr 1fr; gap:10px }
+  .card{ border:1px solid var(--edge); border-radius:12px; padding:10px; background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02)) }
+  .axisDiff{ display:flex; gap:6px; flex-wrap:wrap; margin-top:6px }
+  .hit{ border:1px dashed rgba(255,255,255,.25); padding:4px 6px; border-radius:8px; font-size:11px }
+  .close{ position:absolute; right:10px; top:10px }
+</style>
+</head>
+<body>
+  <div id="hdr">
+    <h1>RHM·32 — LAYER INSTRUMENT</h1>
+    <div class="mini">0=A (Sutton) · 1=B (Patel)</div>
+  </div>
+
+  <div id="dock">
+    <button class="btn" data-panel="axes">AXES</button>
+    <button class="btn" data-panel="layout">LAY</button>
+    <button class="btn" data-panel="order">ORD</button>
+    <button class="btn" id="compact">CMP</button>
+    <button class="btn" id="export">JSON</button>
+  </div>
+
+  <div id="panel"></div>
+
+  <div id="stage">
+    <div id="stack"></div>
+  </div>
+
+  <div id="cam">
+    <button class="camBtn" data-view="front">FR</button>
+    <button class="camBtn" data-view="isoL">IL</button>
+    <button class="camBtn" data-view="isoR">IR</button>
+    <button class="camBtn" data-view="top">TOP</button>
+  </div>
+
+  <div id="hud">
+    <div id="legend">k1..k5 LEDs → <span style="color:var(--A)">A</span>/<span style="color:var(--B)">B</span> · tap 2 notes = compare</div>
+    <div id="nexus"><div class="dot"></div><span id="nexusText">NEXUS: OFF</span></div>
+  </div>
+
+  <dialog id="cmp">
+    <button class="close" onclick="cmp.close()">✕</button>
+    <h3 style="margin:0 0 6px;color:var(--sky)">Quick Compare</h3>
+    <div class="cmpRow">
+      <div class="card" id="left"></div>
+      <div class="card" id="right"></div>
+    </div>
+    <div class="axisDiff" id="diff"></div>
+  </dialog>
+
+<script>
+"use strict";
+
+// ===== Axes metadata =====
+const AXES = [
+  { id:'k1', name:'Technical/Source', A:'TRIAL & ERROR', B:'CULTURAL DATA' },
+  { id:'k2', name:'Sociological/Trap', A:'TRAP', B:'PRIOR' },
+  { id:'k3', name:'Philosophical/Goal', A:'EXTERNAL', B:'INTERNAL' },
+  { id:'k4', name:'Epistemological',   A:'CONSTRUCTED', B:'TRANSMITTED' },
+  { id:'k5', name:'Ontological/Success', A:'ADAPTATION', B:'PRESERVATION' },
+];
+
+// ===== 32 strata (less text; title optional) =====
+const STRATA = [
+  {k:1, vec:'00000', title:'Foundational Bitter Lesson'},
+  {k:2, vec:'00001', title:'RL → Preservation'},
+  {k:3, vec:'00010', title:'RL Internalism'},
+  {k:4, vec:'00011', title:'RL Construct→Preserve'},
+  {k:5, vec:'00100', title:'Externalized Trap'},
+  {k:6, vec:'00101', title:'Trap vs Preservation'},
+  {k:7, vec:'00110', title:'Trap: Internal Construct'},
+  {k:8, vec:'00111', title:'Trap: Solo Preservation'},
+  {k:9, vec:'01000', title:'Prior dismissed → Adapt'},
+  {k:10, vec:'01001', title:'Prior Trap vs Preserve'},
+  {k:11, vec:'01010', title:'External Construct vs Prior'},
+  {k:12, vec:'01011', title:'Epistemic Trap'},
+  {k:13, vec:'01100', title:'Prior + Internal Construct'},
+  {k:14, vec:'01101', title:'Prior + Internal Preserve'},
+  {k:15, vec:'01110', title:'Transmission → Consistency'},
+  {k:16, vec:'01111', title:'Prior → Preservation'},
+  {k:17, vec:'10000', title:'Data→External Construct'},
+  {k:18, vec:'10001', title:'Data→External Preserve'},
+  {k:19, vec:'10010', title:'Data→Internal Construct'},
+  {k:20, vec:'10011', title:'Data→Internal Preserve'},
+  {k:21, vec:'10100', title:'Data Trap→Adapt'},
+  {k:22, vec:'10101', title:'Data Trap→Preserve'},
+  {k:23, vec:'10110', title:'Data Trap→Construct'},
+  {k:24, vec:'10111', title:'Data Trap→Corpus'},
+  {k:25, vec:'11000', title:'Prior→External Construct'},
+  {k:26, vec:'11001', title:'Prior→External Preserve'},
+  {k:27, vec:'11010', title:'Prior→Internal Construct'},
+  {k:28, vec:'11011', title:'Prior→Internal Preserve'},
+  {k:29, vec:'11100', title:'Cultural Imperative'},
+  {k:30, vec:'11101', title:'Preservation Imperative'},
+  {k:31, vec:'11110', title:'Transmitted Paradigm'},
+  {k:32, vec:'11111', title:'Ultimate Cultural Axiom'},
+].map(s=>({...s, bits:s.vec.split('').map(x=>+x)}));
+
+// ===== Stage build (CSS 3D) =====
+const stack = document.getElementById('stack');
+const planes=[];
+let LAYERS = 8; // planes (each plane holds 4 tiles x 8 columns = 32 total). Keep vertical dimension compact.
+const ROWS = 4, COLS = 8; // 4x8 grid = 32
+const SPACING_Z = 16; // depth spacing (px)
+
+function buildStack(){
+  stack.innerHTML=''; planes.length=0;
+  for(let p=0;p<LAYERS;p++){
+    const plane=document.createElement('div');
+    plane.className='plane';
+    plane.style.setProperty('--z', `${(p-(LAYERS/2))*SPACING_Z}px`);
+    const grid=document.createElement('div'); grid.className='grid'; plane.appendChild(grid);
+    planes.push({el:plane,grid});
+    stack.appendChild(plane);
+  }
+  // place tiles row-major across planes: 4 rows x 8 cols, spread across 8 planes (one row per plane)
+  for(let i=0;i<STRATA.length;i++){
+    const s=STRATA[i];
+    const row = Math.floor((i%32)/COLS); // 0..3
+    const planeIdx = row; // row maps to plane (0..3) — repeat with offset further for visual thickness
+    const plane = planes[planeIdx % LAYERS];
+    plane.grid.appendChild(makeNote(s));
+  }
+  updateNexus();
+}
+
+function makeNote(s){
+  const div=document.createElement('div');
+  div.className='note';
+  div.dataset.k=s.k; div.dataset.vec=s.vec;
+  const w = s.bits.reduce((a,b)=>a+b,0);
+  // subtle hue shift by weight
+  div.style.outline = `1px solid rgba(255,255,255,.06)`;
+  div.style.background = `conic-gradient(from 180deg at 20% -10%, rgba(255,255,255,.08), rgba(255,255,255,.02) 30%), #12171a`;
+  // content
+  const k = document.createElement('div'); k.className='k'; k.textContent=`k${s.k}`; div.appendChild(k);
+  const vec = document.createElement('div'); vec.className='vec'; vec.textContent=s.vec; div.appendChild(vec);
+  const leds=document.createElement('div'); leds.className='leds'; div.appendChild(leds);
+  for(let i=0;i<5;i++){ const led=document.createElement('div'); led.className='led '+(s.bits[i]?'B':'A'); leds.appendChild(led); }
+  // interactions
+  div.addEventListener('click', ()=> selectNote(s, div));
+  return div;
+}
+
+// Selection + compare
+let sel=[];
+const cmp = document.getElementById('cmp');
+function selectNote(s, el){
+  if(!sel.find(x=>x.k===s.k)){ sel.push(s); if(sel.length>2) sel.shift(); }
+  if(sel.length===2){ showCompare(sel[0], sel[1]); }
+  el.animate([{transform:'translateY(0)'},{transform:'translateY(-3px)'}],{duration:120,iterations:1});
+}
+
+// Compare overlay
+function showCompare(L,R){
+  document.getElementById('left').innerHTML = `<div><b>k=${L.k}</b> · ${L.vec}</div><div style="margin-top:8px">${renderAxis(L)}</div>`;
+  document.getElementById('right').innerHTML = `<div><b>k=${R.k}</b> · ${R.vec}</div><div style="margin-top:8px">${renderAxis(R)}</div>`;
+  const diffs=[];
+  for(let i=0;i<5;i++){ if(L.bits[i]!==R.bits[i]) diffs.push(`<span class="hit">${AXES[i].id}: ${L.bits[i]?'B':'A'}→${R.bits[i]?'B':'A'} <em style="opacity:.7">(${AXES[i].name})</em></span>`); }
+  document.getElementById('diff').innerHTML = diffs.join('') || '<span class="hit">No axis differences</span>';
+  cmp.showModal();
+}
+function renderAxis(s){
+  return AXES.map((ax,i)=>`<div style="margin:4px 0;display:flex;align-items:center;gap:8px">
+    <span style="font:600 11px ui-monospace">${ax.id}</span>
+    <span class="led ${s.bits[i]?'B':'A'}" style="width:10px;height:10px;border-radius:50%"></span>
+    <span style="font-size:11px;color:#bde9ff">${s.bits[i]?'B':'A'}</span>
+    <span style="font-size:11px;color:#99a8a3">${ax.name}</span>
+  </div>`).join('');
+}
+
+// ===== Controls =====
+const panel = document.getElementById('panel');
+document.querySelectorAll('#dock .btn[data-panel]').forEach(b=>{
+  b.addEventListener('click',()=>{
+    document.querySelectorAll('#dock .btn').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+    openPanel(b.dataset.panel);
+  });
+});
+
+function openPanel(kind){
+  panel.innerHTML='';
+  panel.classList.add('open');
+  if(kind==='axes'){
+    const wrap=document.createElement('div');
+    wrap.innerHTML = `<div class="label">Axis Filters (tap to cycle *→A→B)</div>`;
+    const row=document.createElement('div'); row.className='row';
+    AXES.forEach(ax=>{
+      const chip=document.createElement('div'); chip.className='chip'; chip.dataset.axis=ax.id;
+      const st=document.createElement('span'); st.className='state'; st.dataset.val='*'; st.textContent='*'; chip.appendChild(st);
+      const tx=document.createElement('span'); tx.textContent = `${ax.id} ${ax.name}`; chip.appendChild(tx);
+      chip.addEventListener('click',()=>{ cycle(st); applyFilters(); });
+      row.appendChild(chip);
+    });
+    wrap.appendChild(row); panel.appendChild(wrap);
+  }
+  if(kind==='layout'){
+    panel.appendChild(makeLabel('Layout / View'));
+    const row=document.createElement('div'); row.className='row';
+    const sel=document.createElement('select'); sel.innerHTML = `<option value="stack">Stack</option><option value="grid">Grid</option>`;
+    sel.addEventListener('change',()=>setLayout(sel.value));
+    row.appendChild(sel);
+    const sel2=document.createElement('select'); sel2.innerHTML = `<option value="front">Front</option><option value="isoL">Iso-L</option><option value="isoR">Iso-R</option><option value="top">Top</option>`;
+    sel2.addEventListener('change',()=>setView(sel2.value));
+    row.appendChild(sel2);
+    panel.appendChild(row);
+  }
+  if(kind==='order'){
+    panel.appendChild(makeLabel('Ordering'));
+    const row=document.createElement('div'); row.className='row';
+    const sel=document.createElement('select');
+    sel.innerHTML = `<option value="k">Index</option><option value="bin">Binary</option><option value="weight">A↔B Mix</option>`;
+    sel.addEventListener('change',()=> reorder(sel.value));
+    row.appendChild(sel);
+    panel.appendChild(row);
+  }
+}
+
+function makeLabel(t){ const el=document.createElement('div'); el.className='label'; el.textContent=t; return el; }
+
+function cycle(st){ st.dataset.val = st.dataset.val==='*' ? 'A' : (st.dataset.val==='A' ? 'B' : '*'); st.textContent = st.dataset.val; }
+
+function applyFilters(){
+  const state = AXES.map(ax => document.querySelector(`.chip[data-axis="${ax.id}"] .state`)?.dataset.val || '*');
+  document.querySelectorAll('.note').forEach(el=>{
+    const vec = el.dataset.vec.split('').map(x=>+x);
+    let hide=false;
+    for(let i=0;i<5;i++){
+      const s=state[i]; if(s==='*') continue;
+      const want = (s==='A'?0:1); if(vec[i]!==want){ hide=true; break; }
+    }
+    el.dataset.hide = hide ? '1' : '0';
+  });
+}
+
+document.getElementById('compact').addEventListener('click',()=>{
+  document.querySelectorAll('.vec, .k').forEach(el=> el.style.display = (el.style.display==='none'?'':'none'));
+});
+
+document.getElementById('export').addEventListener('click',()=>{
+  const ks=[...document.querySelectorAll('.note')].filter(n=>n.dataset.hide!=='1').map(n=>+n.dataset.k);
+  const out=STRATA.filter(s=>ks.includes(s.k));
+  const blob=new Blob([JSON.stringify(out,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='RHM_visible_layers.json'; a.click(); URL.revokeObjectURL(url);
+});
+
+// Camera/view
+function setView(v){
+  if(v==='front') stack.style.transform = 'translate(-50%,-50%) rotateX(90deg)';
+  if(v==='isoL') stack.style.transform = 'translate(-50%,-50%) rotateX(58deg) rotateZ(-18deg)';
+  if(v==='isoR') stack.style.transform = 'translate(-50%,-50%) rotateX(58deg) rotateZ(18deg)';
+  if(v==='top')  stack.style.transform = 'translate(-50%,-50%) rotateX(0deg)';
+}
+document.querySelectorAll('.camBtn').forEach(b=> b.addEventListener('click',()=> setView(b.dataset.view)));
+
+// Layout: stack vs flat grid (no depth)
+function setLayout(mode){
+  const isStack = mode==='stack';
+  planes.forEach((p,i)=>{
+    p.el.style.transform = isStack
+      ? `translate(-50%,-50%) translateZ(${(i-(LAYERS/2))*SPACING_Z}px) rotateX(90deg)`
+      : `translate(-50%,-50%) translateZ(0px) rotateX(90deg)`;
+    p.el.style.opacity = isStack ? 0.96 : 1;
+  });
+}
+
+// Ordering (rebuild grid tiles order)
+function reorder(kind){
+  const items = [...STRATA];
+  if(kind==='bin') items.sort((a,b)=> a.vec.localeCompare(b.vec));
+  else if(kind==='weight') items.sort((a,b)=> (a.bits.reduce((x,y)=>x+y,0) - b.bits.reduce((x,y)=>x+y,0)) || a.k-b.k);
+  else items.sort((a,b)=> a.k-b.k);
+  // clear grids
+  planes.forEach(p=> p.grid.innerHTML='');
+  // repopulate
+  for(let i=0;i<items.length;i++){
+    const s=items[i];
+    const row = Math.floor((i%32)/COLS);
+    const planeIdx = row;
+    planes[planeIdx % LAYERS].grid.appendChild(makeNote(s));
+  }
+  applyFilters();
+}
+
+// Nexus indicator = how many visible notes mix A/B (simple proxy: deviation from all-A/all-B)
+function updateNexus(){
+  const weights = STRATA.map(s => s.bits.reduce((a,b)=>a+b,0));
+  const avg = weights.reduce((a,b)=>a+b,0)/weights.length;
+  const on = avg>0 && avg<5;
+  const hud = document.getElementById('nexus'); hud.classList.toggle('on',on);
+  document.getElementById('nexusText').textContent = on ? `NEXUS: MIX ${avg.toFixed(1)}/5` : 'NEXUS: OFF';
+}
+
+// Boot
+buildStack();
+setView('isoR');
+
+// Panel default
+openPanel('axes');
+
+</script>
+</body>
+</html>

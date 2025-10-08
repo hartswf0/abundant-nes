@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>VIDEO_STACKER_∞</title>
+<style>
+  :root{
+    --green:#19ff48; --bg:#000; --hud:#b8ffbf; --shadow:rgba(0,0,0,.55);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{margin:0; background:var(--bg); font:13px/1.2 "SFMono-Regular","Courier New",monospace; color:#ddd; overflow:hidden; touch-action:none;}
+  canvas{display:block; width:100vw; height:100vh}
+
+  /* Super-minimal HUD (single line, top-left) */
+  .hud{position:fixed; left:8px; top:8px; z-index:10; color:var(--hud); text-shadow:0 0 10px black; background:rgba(0,0,0,.35); border:1px solid #143; border-radius:10px; padding:6px 8px}
+  .hud .score{font-weight:900}
+  .hud .meter{height:6px; width:160px; border:1px solid var(--green); background:#222; margin-left:8px; display:inline-block; vertical-align:middle}
+  .hud .meter>i{display:block; height:100%; width:100%; background:linear-gradient(90deg,#f33,#ff0,#1f5,#0f5); transition:width .2s}
+
+  /* Remote (right edge) */
+  .controls{position:fixed; right:6px; top:50%; transform:translateY(-50%); z-index:12; display:flex; flex-direction:column; gap:6px; align-items:flex-end; pointer-events:auto; opacity:.32}
+  .controls:hover{opacity:.9}
+  .btn{background:rgba(0,0,0,.35); color:var(--green); border:1px solid var(--green); padding:7px 8px; font-weight:800; box-shadow:0 6px 16px var(--shadow); border-radius:10px; min-width:34px; text-align:center; font-size:16px}
+  .btn:active{background:var(--green); color:#000}
+  .btnRow{display:flex; gap:6px}
+
+  /* Redundant micro-remote (bottom-left) */
+  .micro{position:fixed; left:8px; bottom:8px; z-index:12; display:flex; gap:6px; opacity:.28}
+  .micro:hover{opacity:.85}
+
+  /* Hint (now bottom-center, auto-hides) */
+  .hint{position:fixed; left:50%; transform:translateX(-50%); bottom:10px; z-index:9; color:#9affac; background:rgba(0,0,0,.45); border:1px solid #144; padding:5px 10px; border-radius:20px; font-size:12px; opacity:.85}
+  .hint.hide{opacity:0; pointer-events:none; transition:opacity .4s}
+
+  /* Settings flyout */
+  .settings{position:fixed; right:6px; bottom:6px; z-index:20}
+  .gear{background:rgba(0,0,0,.45); color:var(--green); border:1px solid var(--green); border-radius:10px; padding:6px 9px; font-size:16px}
+  .panel{position:absolute; right:0; bottom:42px; width:min(92vw,340px); background:rgba(0,0,0,.94); border:1px solid var(--green); border-radius:12px; padding:10px; display:none; color:#bdfabf}
+  .row{display:flex; align-items:center; gap:8px; margin:6px 0}
+  .row label{min-width:90px}
+  input[type="range"], select, input[type="text"]{width:100%}
+
+  /* Game over */
+  .over{position:fixed; inset:0; display:none; place-items:center; z-index:30;}
+  .over .card{background:rgba(0,0,0,.92); border:3px solid var(--green); color:var(--green); padding:22px; width:min(88vw,420px); text-align:center; border-radius:18px; box-shadow:0 20px 60px var(--shadow)}
+
+  /* YT overlay */
+  #ytOverlay{position:fixed; pointer-events:auto; z-index:11; border:none; display:none; box-shadow:0 10px 30px rgba(0,0,0,.5)}
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+<iframe id="ytOverlay" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+
+<!-- HUD (single line) -->
+<div class="hud" id="hud">
+  <span class="score" id="hudScore">0</span>
+  <span>H:<span id="hudH">0</span>m</span>
+  <span>S:<span id="hudS">0</span>x</span>
+  <span>HI:<span id="hudHi">0</span></span>
+  <span class="meter"><i id="hudStab" style="width:100%"></i></span>
+</div>
+
+<!-- Remote (right) -->
+<div class="controls" id="controls" aria-label="retro-remote">
+  <button class="btn" id="bDrop" title="DROP">▲</button>
+  <div class="btnRow">
+    <button class="btn" id="bLeft" title="NUDGE LEFT">◀</button>
+    <button class="btn" id="bRight" title="NUDGE RIGHT">▶</button>
+  </div>
+  <button class="btn" id="bCull" title="CULL">▼</button>
+  <div class="btnRow">
+    <button class="btn" id="bView" title="VIEW">⟳</button>
+    <button class="btn" id="bMute" title="MUTE">🔇</button>
+  </div>
+  <div class="btnRow"><button class="btn" id="bFrame" title="FOLLOW TOP / STATIC">⌗</button></div>
+</div>
+<!-- Micro-remote (redundant) -->
+<div class="micro">
+  <button class="btn" id="mDrop" title="DROP">▲</button>
+  <button class="btn" id="mCull" title="CULL">▼</button>
+</div>
+
+<!-- Compact hint -->
+<div class="hint" id="hint">tap TV to focus • double‑tap retune • swipe ↑ drop / ◀▶ nudge / ↓ cull</div>
+
+<!-- Settings (themes, lights, feed) -->
+<div class="settings">
+  <button class="gear" id="gear">⚙</button>
+  <div class="panel" id="panel">
+    <div class="row"><label>Theme</label>
+      <select id="theme">
+        <option value="neo">Neo Grid</option>
+        <option value="studio">Studio Grey</option>
+        <option value="night">Night Cyan</option>
+      </select>
+    </div>
+    <div class="row"><label>Key Light</label><input id="keyInt" type="range" min="0" max="2" step="0.05" value="0.9"></div>
+    <div class="row"><label>Fill Light</label><input id="fillInt" type="range" min="0" max="1.2" step="0.05" value="0.35"></div>
+    <div class="row"><label>Feed</label><input id="playlist" type="text" placeholder="MP4 URLs or yt:ID, comma‑separated"></div>
+    <div class="row"><button class="gear" id="apply">Apply</button><small id="applyStatus" style="margin-left:6px;opacity:.8"></small></div>
+  </div>
+</div>
+
+<!-- Game Over -->
+<div class="over" id="over"><div class="card">
+  <h2>GAME OVER</h2>
+  <div id="final">—</div>
+  <button class="btn" id="bRestart">RESTART</button>
+</div></div>
+
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js';
+import * as CANNON from 'https://cdn.skypack.dev/cannon-es@0.20.0';
+
+/***** Config *****/
+const TV={w:.6,d:.45,h:.4};
+const GAP=.05, LIMIT=.22, WINDOW_K=6, ALPHA=.7; // stability
+let FEED = (localStorage.getItem('tv_feed')||'/videos/a.mp4,/videos/b.mp4,/videos/c.mp4').split(/\s*,\s*/);
+const MAX_TVS=60; // ring buffer size
+
+/***** Cameras *****/
+const cams=[
+  {pos:[0,2,4], look:[0,1,0]},
+  {pos:[-3,2,3], look:[0,1,0]},
+  {pos:[3,2,3], look:[0,1,0]},
+  {pos:[0,0.9,3], look:[0,1,0]},
+  {pos:[0,6,0.1], look:[0,1,0]},
+];
+
+/***** State *****/
+let scene,camera,renderer,world,clock; 
+let tvs=[], falling=null; 
+let score=0, height=0, streak=0, stability=1, gameOver=false, muted=false, feedI=0, camI=0; 
+let high=Number(localStorage.getItem('tv_hi')||0);
+let focusTV=null; 
+let followMode=localStorage.getItem('tv_follow')||'top'; // 'top' | 'static'
+
+/***** Audio *****/
+const actx = new (window.AudioContext||window.webkitAudioContext)();
+const beep=(type='sine',f=440,d=.06,g=.02)=>{ if(actx.state==='suspended') actx.resume(); const o=actx.createOscillator(), G=actx.createGain(); o.type=type; o.frequency.value=f; G.gain.value=g; o.connect(G).connect(actx.destination); o.start(); o.stop(actx.currentTime+d); };
+const snd={drop:()=>beep('square',320,.07,.03), nudge:()=>beep('triangle',520,.05,.02), thump:()=>beep('sine',90,.09,.04), over:()=>beep('sawtooth',220,.25,.05), focus:()=>beep('triangle',720,.06,.025), retune:()=>beep('sine',880,.05,.02)}
+const buzz = (p)=>{ if(navigator.vibrate) navigator.vibrate(p) };
+
+/***** Shaders *****/
+const v=`varying vec2 vUv; void main(){vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`;
+const fNoise=`varying vec2 vUv; uniform float t; float r(vec2 s){return fract(sin(dot(s,vec2(12.9898,78.233)))*43758.5453);} void main(){float n=r(vUv*vec2(640.,360.)+t); gl_FragColor=vec4(vec3(n),1.);}`;
+const fGlass=`varying vec2 vUv; uniform sampler2D tex; uniform float t; uniform float pulse; void main(){vec2 u=vUv; u.x+=sin(u.y*110.+t*5.)*.002; float scan=sin(u.y*800.)*.03; vec4 c=texture2D(tex,u); c.rgb+=scan; float chr=sin(t*3.+u.y*20.)*.02; c.r+=chr; c.b-=chr; c.rgb=mix(c.rgb,vec3(1.),pulse*.6*(1.-u.y)); gl_FragColor=c;}`;
+
+/***** Three + Cannon setup *****/
+const view=document.getElementById('view');
+const ytOverlay=document.getElementById('ytOverlay');
+renderer=new THREE.WebGLRenderer({canvas:view,antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,1.7));
+renderer.setSize(innerWidth,innerHeight);
+renderer.shadowMap.enabled=true;
+scene=new THREE.Scene(); scene.background=new THREE.Color(0x0a0a0a); scene.fog=new THREE.Fog(0x0a0a0a,5,16);
+
+let amb=new THREE.AmbientLight(0xffffff,.8); scene.add(amb);
+let key=new THREE.DirectionalLight(0xffffff,.9); key.position.set(3,6,4); key.castShadow=true; scene.add(key);
+let fill=new THREE.DirectionalLight(0x66aaff,.35); fill.position.set(-3,2,-3); scene.add(fill);
+
+camera=new THREE.PerspectiveCamera(55,innerWidth/innerHeight,.1,100); setCam(0);
+clock=new THREE.Clock();
+
+world=new CANNON.World(); world.gravity.set(0,-9.82,0); world.broadphase=new CANNON.SAPBroadphase(world); world.allowSleep=true; world.defaultContactMaterial.friction=.6; world.defaultContactMaterial.restitution=.05;
+const gnd=new CANNON.Body({mass:0,shape:new CANNON.Plane()}); gnd.quaternion.setFromEuler(-Math.PI/2,0,0); world.addBody(gnd);
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(20,20), new THREE.MeshStandardMaterial({color:0x111111,roughness:.92})); ground.rotation.x=-Math.PI/2; ground.receiveShadow=true; scene.add(ground);
+scene.add(new THREE.GridHelper(10,20,0x00ff00,0x003300)).position.set(0,.01,0);
+
+/***** HUD refs *****/
+const $=id=>document.getElementById(id);
+const hudScore=$('hudScore'), hudH=$('hudH'), hudStreak=$('hudS'), hudHi=$('hudHi'), hudStab=$('hudStab'); hudHi.textContent=high;
+
+/***** Remotes *****/
+const bDrop=$('bDrop'), bLeft=$('bLeft'), bRight=$('bRight'), bCull=$('bCull'), bView=$('bView'), bMute=$('bMute'), bFrame=$('bFrame');
+const mDrop=$('mDrop'), mCull=$('mCull');
+const over=$('over'), final=$('final'), bRestart=$('bRestart');
+const hint=$('hint'); setTimeout(()=>hint.classList.add('hide'), 4000);
+
+bDrop.onclick=dropTV; bLeft.onclick=()=>nudge(-1); bRight.onclick=()=>nudge(1); bCull.onclick=cull; bView.onclick=cycleCam; bMute.onclick=toggleMute; bRestart.onclick=restart; bFrame.onclick=toggleFrameMode;
+mDrop.onclick=dropTV; mCull.onclick=cull;
+
+/***** Settings *****/
+const gear=$('gear'), panel=$('panel'), themeSel=$('theme'), keyInt=$('keyInt'), fillInt=$('fillInt'), playlist=$('playlist'), applyBtn=$('apply'), applyStatus=$('applyStatus');
+// restore UI from storage
+try{
+  themeSel.value = localStorage.getItem('tv_theme')||'neo';
+  keyInt.value = localStorage.getItem('tv_key')||'0.9';
+  fillInt.value = localStorage.getItem('tv_fill')||'0.35';
+  playlist.value = FEED.join(', ');
+  applyTheme(themeSel.value); key.intensity=parseFloat(keyInt.value); fill.intensity=parseFloat(fillInt.value);
+}catch{}
+gear.onclick=()=> panel.style.display = (panel.style.display==='block')?'none':'block';
+applyBtn.onclick=()=>{
+  try{
+    const raw=playlist.value.trim();
+    const list = raw.split(/\s*,\s*/).filter(Boolean);
+    if(!list.length){ applyStatus.textContent='(empty)'; return; }
+    FEED = list; feedI = 0; localStorage.setItem('tv_feed', FEED.join(','));
+    applyStatus.textContent='✓ applied'; setTimeout(()=>applyStatus.textContent='',1500);
+  }catch(e){ applyStatus.textContent='⚠ failed'; console.error(e); }
+};
+keyInt.oninput=()=>{ key.intensity=parseFloat(keyInt.value); localStorage.setItem('tv_key', keyInt.value); };
+fillInt.oninput=()=>{ fill.intensity=parseFloat(fillInt.value); localStorage.setItem('tv_fill', fillInt.value); };
+themeSel.onchange=()=>{ applyTheme(themeSel.value); localStorage.setItem('tv_theme', themeSel.value); };
+function applyTheme(mode){ if(mode==='neo'){ scene.background.set(0x0a0a0a); scene.fog.color.set(0x0a0a0a); ground.material.color.set(0x111111); } if(mode==='studio'){ scene.background.set(0x151515); scene.fog.color.set(0x151515); ground.material.color.set(0x1a1a1a); } if(mode==='night'){ scene.background.set(0x02040a); scene.fog.color.set(0x02040a); ground.material.color.set(0x071019); } }
+
+/***** Cameras *****/
+function setCam(i){ const c=cams[i]||cams[0]; camera.position.set(...c.pos); camera.lookAt(...c.look); }
+function cycleCam(){ camI=(camI+1)%cams.length; setCam(camI); beep('triangle',660,.06,.02) }
+function toggleFrameMode(){ followMode = followMode==='top' ? 'static' : 'top'; localStorage.setItem('tv_follow', followMode); bFrame.textContent = followMode==='top' ? '⌗' : '⌖'; }
+
+/***** Gestures (swipe + tap focus + double-tap retune) *****/
+let swipeStart=null, swipeT=null, lastTap=0, tapPos=null; const SWIPE=20; // px per 100ms
+const ray=new THREE.Raycaster(); const pointer=new THREE.Vector2();
+addEventListener('touchstart',e=>{ if(e.touches.length!==1) return; const t=e.touches[0]; swipeStart={x:t.clientX,y:t.clientY,ts:performance.now()}; swipeT=swipeStart; tapPos={x:t.clientX,y:t.clientY}; });
+addEventListener('touchmove',e=>{ if(!swipeStart) return; const t=e.touches[0]; swipeT={x:t.clientX,y:t.clientY,ts:performance.now()}; });
+addEventListener('touchend',()=>{
+  if(!swipeStart||!swipeT){ swipeStart=null; swipeT=null; return; }
+  const dx=swipeT.x-swipeStart.x, dy=swipeT.y-swipeStart.y, dt=Math.max(1,swipeT.ts-swipeStart.ts); const vx=dx/dt*100, vy=dy/dt*100;
+  const moved=Math.hypot(dx,dy)>12;
+  if(!moved){ const now=performance.now(); const dbl=now-lastTap<280; lastTap=now; if(tapPos) handleTap(tapPos.x,tapPos.y,dbl); }
+  else{
+    if(Math.abs(vy)<Math.abs(vx)){ if(vx>SWIPE) nudge(1); else if(vx<-SWIPE) nudge(-1); } else { if(-vy>SWIPE) dropTV(); else if(vy>SWIPE) cull(); }
+  }
+  swipeStart=null; swipeT=null; tapPos=null;
+});
+
+function screenRectFromTV(tv){
+  const corners=[new THREE.Vector3(TV.w*.42, TV.h*.35, TV.d/2), new THREE.Vector3(-TV.w*.42, TV.h*.35, TV.d/2), new THREE.Vector3(TV.w*.42, -TV.h*.35, TV.d/2), new THREE.Vector3(-TV.w*.42, -TV.h*.35, TV.d/2)];
+  const pts=corners.map(v=> tv.group.localToWorld(v.clone()));
+  const toXY=v=>{ v.project(camera); return {x:(v.x*0.5+0.5)*innerWidth, y:(-v.y*0.5+0.5)*innerHeight}; };
+  const s=pts.map(p=>toXY(p)); const xs=s.map(p=>p.x), ys=s.map(p=>p.y); const left=Math.min(...xs), right=Math.max(...xs), top=Math.min(...ys), bottom=Math.max(...ys);
+  return {left, top, width:Math.max(40,right-left), height:Math.max(30,bottom-top)};
+}
+
+function handleTap(x,y, dbl){ pointer.x=(x/innerWidth)*2-1; pointer.y=-(y/innerHeight)*2+1; ray.setFromCamera(pointer, camera); const objs=tvs.map(t=>t.group); const hits=ray.intersectObjects(objs,true); if(!hits.length){ hideYT(); return; } const obj=hits[0].object; const tv=tvs.find(t=>obj===t.group || obj.parent?.isDescendantOf?.(t.group) || t.group.children.includes(obj)); focus(tv,dbl); }
+THREE.Object3D.prototype.isDescendantOf=function(p){ let n=this; while(n){ if(n===p) return true; n=n.parent; } return false };
+
+function focus(tv,dbl){ if(!tv) return; focusTV=tv; snd.focus(); buzz(10); if(dbl) retune(tv); attachYTIfNeeded(tv); }
+function retune(tv){ if(!tv?.video) return; tv.video.currentTime = Math.random()*(tv.video.duration||1); tv.pulse=1; snd.retune(); }
+
+/***** Core Game *****/
+function dropTV(){ if(gameOver||falling) return; const x = focusTV? focusTV.body.position.x : 0; const y=tvs.length? Math.max(...tvs.map(t=>t.group.position.y))+TV.h+GAP+2 : 5; falling=createTV(y,x); tvs.push(falling); if(tvs.length>MAX_TVS){ const bot=tvs.shift(); scene.remove(bot.group); world.removeBody(bot.body); bot.video?.pause(); if(bot===focusTV) { focusTV=null; hideYT(); } }
+  bDrop.disabled=true; snd.drop(); buzz(15); }
+function nudge(dir){ if(!falling||falling.settled) return; falling.body.applyImpulse(new CANNON.Vec3(dir*2,0,0), falling.body.position); snd.nudge(); buzz(7); }
+function cull(){ if(!tvs.length||gameOver) return; const bot=tvs.shift(); scene.remove(bot.group); world.removeBody(bot.body); bot.video?.pause(); if(focusTV===bot){ focusTV=null; hideYT(); } streak=0; updateHUD(); buzz([18,28]); }
+function toggleMute(){ muted=!muted; tvs.forEach(t=>t.video&&(t.video.muted=muted)); bMute.textContent=muted?'🔊':'🔇'; }
+
+function createTV(y=5,x=0){
+  const g=new THREE.Group();
+  const shell=new THREE.Mesh(new THREE.BoxGeometry(TV.w,TV.h,TV.d), new THREE.MeshStandardMaterial({color:0x2a2a2a,roughness:.86,metalness:.05})); shell.castShadow=true; shell.receiveShadow=true; g.add(shell);
+  const source = FEED[feedI%FEED.length]; feedI++;
+  let isYT = source.startsWith('yt:');
+  let video=null, tex, mat;
+  if(isYT){
+    const vid=source.slice(3); const thumb=`https://i.ytimg.com/vi/${vid}/hqdefault.jpg`; tex=new THREE.TextureLoader().load(thumb); mat=new THREE.MeshBasicMaterial({map:tex});
+  }else{
+    video=document.createElement('video'); video.src=source; video.loop=true; video.muted=muted; video.playsInline=true; video.crossOrigin='anonymous';
+    function noise(){ mat=new THREE.ShaderMaterial({vertexShader:v, fragmentShader:fNoise, uniforms:{t:{value:Math.random()*100}}}); }
+    video.play().catch(()=>noise()); if(!mat){ tex=new THREE.VideoTexture(video); tex.minFilter=THREE.LinearFilter; tex.magFilter=THREE.LinearFilter; mat=new THREE.MeshBasicMaterial({map:tex}); }
+  }
+  const screen=new THREE.Mesh(new THREE.PlaneGeometry(TV.w*.84, TV.h*.7), mat); screen.position.z=TV.d/2+.001; g.add(screen);
+  const glassMat=new THREE.ShaderMaterial({vertexShader:v, fragmentShader:fGlass, uniforms:{tex:{value:tex||new THREE.Texture()}, t:{value:0}, pulse:{value:0}}, transparent:true});
+  const glass=new THREE.Mesh(new THREE.PlaneGeometry(TV.w*.84, TV.h*.7), glassMat); glass.position.z=TV.d/2+.002; g.add(glass);
+  const led=new THREE.Mesh(new THREE.PlaneGeometry(.03,.03), new THREE.MeshBasicMaterial({color:0x00ff00})); led.position.set(TV.w*.35,-TV.h*.35, TV.d/2+.001); g.add(led);
+
+  g.position.set(x,y,0); scene.add(g);
+  const body=new CANNON.Body({mass:1, shape:new CANNON.Box(new CANNON.Vec3(TV.w/2,TV.h/2,TV.d/2)), sleepSpeedLimit:.1, sleepTimeLimit:.5}); body.position.copy(g.position); body.linearDamping=.3; body.angularDamping=.3; world.addBody(body);
+  return {group:g, body, video, screen, glassMat, led, settled:false, pulse:0, source};
+}
+
+function calcStability(){ if(tvs.length<2) return 1; const r=tvs.slice(-WINDOW_K).filter(t=>t.settled); if(r.length<2) return 1; let com=0, over=0; for(let i=1;i<r.length;i++){ const a=r[i], b=r[i-1]; const off=Math.hypot(a.body.position.x-b.body.position.x, a.body.position.z-b.body.position.z); com+=off/LIMIT; const oh=Math.max(0, off - TV.w*.3); over+=oh/(TV.w*.7); } const n=r.length-1; return THREE.MathUtils.clamp(1-(com/n + ALPHA*(over/n)), 0, 1); }
+
+function topple(){ if(gameOver) return; gameOver=true; world.gravity.y*=.35; snd.over(); buzz([80,30,80,30,120]); if(score>high){ high=score; localStorage.setItem('tv_hi',String(high)); }
+  setTimeout(()=>{ final.textContent=`FINAL SCORE: ${score} — HEIGHT: ${height.toFixed(2)}m`; over.style.display='grid'; }, 900);
+}
+
+function restart(){ tvs.forEach(t=>{scene.remove(t.group); world.removeBody(t.body); t.video?.pause();}); tvs.length=0; falling=null; focusTV=null; hideYT(); score=height=streak=0; stability=1; gameOver=false; feedI=0; world.gravity.y=-9.82; over.style.display='none'; updateHUD(); }
+
+/***** YouTube overlay *****/
+function attachYTIfNeeded(tv){ if(!tv?.source?.startsWith('yt:')){ hideYT(); return; } const vid=tv.source.slice(3); const rect=screenRectFromTV(tv); ytOverlay.style.display='block'; ytOverlay.style.left=rect.left+'px'; ytOverlay.style.top=rect.top+'px'; ytOverlay.style.width=rect.width+'px'; ytOverlay.style.height=rect.height+'px'; ytOverlay.src=`https://www.youtube.com/embed/${vid}?autoplay=1&mute=${muted?1:0}&playsinline=1&rel=0`; }
+function hideYT(){ ytOverlay.style.display='none'; ytOverlay.src=''; }
+
+/***** Loop *****/
+function animate(){ requestAnimationFrame(animate); const dt=Math.min(clock.getDelta(),.1); world.step(1/60, dt, 3); const t=clock.getElapsedTime();
+  tvs.forEach(tv=>{ tv.group.position.copy(tv.body.position); tv.group.quaternion.copy(tv.body.quaternion);
+    if(!tv.settled && tv.body.sleepState===CANNON.Body.SLEEPING){ tv.settled=true; snd.thump(); buzz(10); if(tv===falling){ const bonus=Math.floor(tv.body.position.y*10); score+=10+bonus; streak++; score+=streak*2; falling=null; bDrop.disabled=false; } }
+    if(tv.settled) height=Math.max(height, tv.body.position.y);
+    if(tv.glassMat){ tv.glassMat.uniforms.t.value=t; tv.glassMat.uniforms.pulse.value=Math.max(0, tv.pulse-=dt*2); }
+    if(tv.screen.material.uniforms?.t) tv.screen.material.uniforms.t.value+=dt;
+  });
+
+  // Camera framing
+  if(followMode==='top' && tvs.length){ const topTV=tvs[tvs.length-1]; const targetY=Math.max(1.4, topTV.group.position.y+0.6); const dist=2.8 + Math.min(6, topTV.group.position.y*0.35); camera.position.lerp(new THREE.Vector3(0,targetY,dist), .08); camera.lookAt(0, targetY-0.8, 0); if(focusTV?.source?.startsWith('yt:')) attachYTIfNeeded(focusTV); }
+  updateHUD(); if(followMode==='static' && focusTV?.source?.startsWith('yt:')) attachYTIfNeeded(focusTV); renderer.render(scene,camera);
+  stability=calcStability(); if(stability<=0 && !gameOver) topple();
+}
+requestAnimationFrame(animate);
+
+/***** HUD helpers *****/
+function updateHUD(){ hudScore.textContent=String(score); hudH.textContent=height.toFixed(2); hudStreak.textContent=streak; hudHi.textContent=high; hudStab.style.width=`${stability*100}%`; }
+
+/***** Resize *****/
+addEventListener('resize',()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); if(focusTV?.source?.startsWith('yt:')) attachYTIfNeeded(focusTV); });
+
+/***** Self-tests *****/
+(function runSelfTests(){
+  console.log('%c[VIDEO_STACKER_∞] self-tests','color:#19ff48');
+  console.assert(Array.isArray(cams)&&cams.length>0,'cams present');
+  console.assert(typeof dropTV==='function' && typeof nudge==='function','controls wired');
+  console.assert(MAX_TVS>0,'ring buffer configured');
+})();
+
+</script>
+</body>
+</html>

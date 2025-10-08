@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<title>RHM · Deck A / Overlap / Deck B</title>
+<style>
+  :root{
+    --bg:#06080a; --ink:#eaf3ee; --ghost:#a6b3ae;
+    --A:#21ff86; --B:#ff4b9a; --O:#ffffff;
+    --edge:#17323a; --ui:#56d2ff; --warn:#ffb13a;
+    --panel:#0a0f12; --panelEdge:#1b2d33;
+    --safe-top: env(safe-area-inset-top,0px);
+    --safe-right: env(safe-area-inset-right,0px);
+    --safe-left: env(safe-area-inset-left,0px);
+    --safe-bottom: env(safe-area-inset-bottom,0px);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{margin:0; background:var(--bg); color:var(--ink); font:14px/1.45 Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif; overflow:hidden}
+
+  /* Header mini */
+  #hdr{position:fixed; top:var(--safe-top); left:0; right:0; height:42px;
+       display:flex; align-items:center; justify-content:space-between; padding:0 12px;
+       background:rgba(0,0,0,.82); backdrop-filter:blur(8px); z-index:60; border-bottom:2px solid rgba(86,210,255,.5)}
+  #hdr .title{font-size:12px; letter-spacing:.9px; color:#bde9ff}
+  #hdr .crumbs{font-size:11px; color:#9bccff; opacity:.9}
+
+  /* Camera pad */
+  #cam{position:fixed; right:calc(10px + var(--safe-right)); top:50%; transform:translateY(-50%);
+       display:grid; gap:8px; z-index:55}
+  .camBtn{width:48px; height:48px; border-radius:12px; border:2px solid var(--ui); background:rgba(0,0,0,.85); color:#dff7ff; font-weight:700}
+  .camBtn:active{transform:scale(.98)}
+
+  /* Stage CSS 3D */
+  #stage{position:fixed; inset:0; perspective:1200px; transform-style:preserve-3d}
+  #world{position:absolute; left:50%; top:50%; width:1200px; height:700px; transform-style:preserve-3d;
+         transform: translate(-50%,-50%) rotateX(62deg) rotateZ(0deg); transition:transform .35s ease}
+  @media (max-width:860px){ #world{ width:1000px; height:640px } }
+
+  /* Columns */
+  .col{position:absolute; top:50%; transform-style:preserve-3d; width:280px; height:480px}
+  .col .label{position:absolute; top:-22px; left:0; font-size:12px; letter-spacing:.6px; opacity:.9}
+  #colA{ left:10%; transform: translateZ(0) translateY(-50%) }
+  #colO{ left:calc(50% - 140px); transform: translateZ(0) translateY(-50%); }
+  #colB{ right:10%; transform: translateZ(0) translateY(-50%) }
+
+  /* Layer plate */
+  .plate{
+    position:absolute; left:50%; width:220px; height:140px; transform: translateX(-50%);
+    background: rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.12); border-radius:10px;
+    box-shadow: 0 8px 20px rgba(0,0,0,.45); opacity:.95;
+    transition: transform .1s ease, box-shadow .12s ease, opacity .2s ease, background .15s ease;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .plate.A{ background: rgba(33,255,134,.18); border-color: rgba(33,255,134,.35) }
+  .plate.B{ background: rgba(255,75,154,.18); border-color: rgba(255,75,154,.35) }
+  .plate.O{ background: rgba(255,255,255,.2); border-color: rgba(255,255,255,.4) }
+  .plate .vec{ position:absolute; top:6px; right:8px; font:600 11px ui-monospace,Menlo,Consolas,monospace; letter-spacing:.4px; opacity:.9 }
+  .plate .k{ position:absolute; top:6px; left:8px; font-weight:800; font-size:11px; color:#bfe8ff }
+  .plate .leds{ position:absolute; bottom:6px; left:8px; display:flex; gap:6px }
+  .led{ width:8px; height:8px; border-radius:50%; background:#333; box-shadow:inset 0 0 0 1px rgba(255,255,255,.2) }
+  .led.A{ background:var(--A); box-shadow:0 0 8px rgba(33,255,134,.6) }
+  .led.B{ background:var(--B); box-shadow:0 0 10px rgba(255,75,154,.7) }
+
+  .plate:hover{ transform: translateX(-50%) translateY(-2px); box-shadow: 0 12px 26px rgba(0,0,0,.55) }
+  .plate.dim{ opacity:.12; pointer-events:none }
+  .plate.active{ outline:2px solid var(--ui) }
+  .pulse{ animation: pulse 0.9s ease-in-out 2 }
+  @keyframes pulse{ 0%{filter:brightness(1)} 50%{filter:brightness(1.5)} 100%{filter:brightness(1)} }
+
+  /* Control dock */
+  #dock{position:fixed; left:50%; transform:translateX(-50%); bottom:calc(12px + var(--safe-bottom));
+        width:min(740px,94vw); z-index:60}
+  .panel{
+    background:rgba(0,0,0,.88); border:2px solid var(--panelEdge); border-radius:20px; padding:12px;
+    box-shadow:0 12px 36px rgba(0,0,0,.6)
+  }
+  .tabs{display:flex; gap:8px; margin-bottom:8px}
+  .tab{border:1px solid rgba(86,210,255,.45); background:rgba(86,210,255,.13); color:#dff7ff; padding:6px 10px; border-radius:10px; font-size:12px}
+  .tab.active{background:rgba(86,210,255,.28)}
+  .grid{display:grid; grid-template-columns:1fr 1fr; gap:8px}
+  .row{display:flex; align-items:center; gap:10px}
+  .lab{width:88px; font-size:12px; opacity:.85}
+  input[type=range], select{width:100%; background:rgba(86,210,255,.12); border:1px solid rgba(86,210,255,.35); border-radius:999px; height:28px; color:#eaf3ee; padding:0 8px}
+  .pill{border:1px solid rgba(255,255,255,.18); background:rgba(255,255,255,.06); border-radius:999px; padding:4px 8px; font-size:11px}
+  .axisChips{display:flex; gap:6px; flex-wrap:wrap}
+  .state{min-width:18px; text-align:center; font-weight:800; padding:2px 6px; border-radius:6px}
+  .state[data-val="*"]{background:rgba(255,177,58,.14); color:#ffe2b0; border:1px solid rgba(255,177,58,.36)}
+  .state[data-val="A"]{background:rgba(33,255,134,.16); color:#baffdd; border:1px solid rgba(33,255,134,.38)}
+  .state[data-val="B"]{background:rgba(255,75,154,.16); color:#ffd7e6; border:1px solid rgba(255,75,154,.38)}
+</style>
+</head>
+<body>
+  <div id="hdr">
+    <div class="title">RHM · DECKS</div>
+    <div class="crumbs">A · Overlap · B</div>
+  </div>
+
+  <div id="stage">
+    <div id="world">
+      <div class="col" id="colA"><div class="label">Deck A</div></div>
+      <div class="col" id="colO"><div class="label">Overlap</div></div>
+      <div class="col" id="colB"><div class="label">Deck B</div></div>
+    </div>
+  </div>
+
+  <div id="cam">
+    <button class="camBtn" data-view="FR">FR</button>
+    <button class="camBtn" data-view="IL">IL</button>
+    <button class="camBtn" data-view="IR">IR</button>
+    <button class="camBtn" data-view="SD">SD</button>
+    <button class="camBtn" data-view="TP">TP</button>
+  </div>
+
+  <div id="dock">
+    <div class="panel">
+      <div class="tabs">
+        <button class="tab active" data-tab="A">Deck A</button>
+        <button class="tab" data-tab="O">Overlap</button>
+        <button class="tab" data-tab="B">Deck B</button>
+      </div>
+      <div class="grid">
+        <div class="row"><div class="lab">Volume</div><input type="range" min="0" max="1" step="0.01" value="0.8" id="vol"></div>
+        <div class="row"><div class="lab">Steps</div><input type="range" min="1" max="16" step="1" value="12" id="steps"></div>
+        <div class="row"><div class="lab">Spacing</div><input type="range" min="8" max="40" step="1" value="18" id="spacing"></div>
+        <div class="row"><div class="lab">Mix</div><input type="range" min="0" max="1" step="0.01" value="0.5" id="mix"></div>
+        <div class="row"><div class="lab">Resonance</div><input type="range" min="0" max="1" step="0.01" value="0.8" id="res"></div>
+        <div class="row">
+          <div class="lab">Axes</div>
+          <div class="axisChips" id="chips"></div>
+        </div>
+      </div>
+      <div style="margin-top:6px; display:flex; gap:8px; flex-wrap:wrap">
+        <span class="pill">Tip: tap layer to select · long‑press to tune</span>
+        <span class="pill">FR/IL/IR/SD/TP = camera</span>
+      </div>
+    </div>
+  </div>
+
+<script>
+"use strict";
+
+// Axes
+const AXES=[
+  {id:'k1',name:'Technical',A:'TRIAL&ERROR',B:'DATA'},
+  {id:'k2',name:'Sociological',A:'TRAP',B:'PRIOR'},
+  {id:'k3',name:'Goal',A:'EXTERNAL',B:'INTERNAL'},
+  {id:'k4',name:'Epistemic',A:'CONSTRUCTED',B:'TRANSMITTED'},
+  {id:'k5',name:'Ontological',A:'ADAPT',B:'PRESERVE'},
+];
+
+// 32 Strata
+const STRATA=[
+  {k:1,vec:'00000'},{k:2,vec:'00001'},{k:3,vec:'00010'},{k:4,vec:'00011'},
+  {k:5,vec:'00100'},{k:6,vec:'00101'},{k:7,vec:'00110'},{k:8,vec:'00111'},
+  {k:9,vec:'01000'},{k:10,vec:'01001'},{k:11,vec:'01010'},{k:12,vec:'01011'},
+  {k:13,vec:'01100'},{k:14,vec:'01101'},{k:15,vec:'01110'},{k:16,vec:'01111'},
+  {k:17,vec:'10000'},{k:18,vec:'10001'},{k:19,vec:'10010'},{k:20,vec:'10011'},
+  {k:21,vec:'10100'},{k:22,vec:'10101'},{k:23,vec:'10110'},{k:24,vec:'10111'},
+  {k:25,vec:'11000'},{k:26,vec:'11001'},{k:27,vec:'11010'},{k:28,vec:'11011'},
+  {k:29,vec:'11100'},{k:30,vec:'11101'},{k:31,vec:'11110'},{k:32,vec:'11111'},
+].map(s=>({...s,bits:s.vec.split('').map(x=>+x),weight:s.vec.split('').reduce((a,b)=>a+ +b,0)}));
+
+// DOM
+const world=document.getElementById('world');
+const colA=document.getElementById('colA');
+const colO=document.getElementById('colO');
+const colB=document.getElementById('colB');
+const spacingEl=document.getElementById('spacing');
+const mixEl=document.getElementById('mix');
+const resEl=document.getElementById('res');
+const stepsEl=document.getElementById('steps');
+const chips=document.getElementById('chips');
+
+// Build axis chips (tri-state *→A→B)
+AXES.forEach(ax=>{
+  const chip=document.createElement('span'); chip.className='pill';
+  chip.dataset.axis=ax.id;
+  chip.innerHTML = `<span class="state" data-val="*">*</span> ${ax.id}`;
+  chip.addEventListener('click',()=>{ const st=chip.querySelector('.state'); st.dataset.val = st.dataset.val==='*'?'A':(st.dataset.val==='A'?'B':'*'); st.textContent=st.dataset.val; refresh(); });
+  chips.appendChild(chip);
+});
+
+// Build plates
+let plates=[];
+function build(){
+  [colA,colO,colB].forEach(c=>c.querySelectorAll('.plate').forEach(n=>n.remove()));
+  plates = [];
+  // Partition via mix slider (A-major, Overlap, B-major)
+  const mix = +mixEl.value; // 0..1, center = 0.5
+  const aMax = Math.floor( (1-mix)*2 + 1 ); // threshold of ones for A (0..2 typically)
+  const bMin = Math.ceil( mix*2 + 3 );      // threshold of ones for B (3..5 typically)
+  const spacing = +spacingEl.value;
+  const res = +resEl.value;
+
+  const Aset = STRATA.filter(s=> s.weight <= aMax);
+  const Bset = STRATA.filter(s=> s.weight >= bMin);
+  const Oset = STRATA.filter(s=> s.weight>aMax && s.weight<bMin);
+
+  function add(c, arr, cls){
+    arr.sort((a,b)=> a.weight-b.weight || a.k-b.k);
+    arr.forEach((s,i)=>{
+      const p=document.createElement('div'); p.className='plate '+cls;
+      p.style.transform = `translateX(-50%) translateY(${(i-(arr.length/2))*-2}px) translateZ(${i*spacing}px)`;
+      p.style.opacity = 0.6 + res*0.4;
+      p.dataset.k=s.k; p.dataset.vec=s.vec; p.dataset.weight=s.weight; p.dataset.cls=cls;
+      p.innerHTML = `<div class="k">k${s.k}</div><div class="vec">${s.vec}</div><div class="leds">${s.bits.map(b=>`<span class="led ${b?'B':'A'}"></span>`).join('')}</div>`;
+      p.addEventListener('click',()=>{ p.classList.toggle('active') });
+      p.addEventListener('pointerdown', e=>{ p._press = setTimeout(()=> p.classList.add('pulse'), 400) });
+      p.addEventListener('pointerup', e=>{ clearTimeout(p._press) });
+      p.addEventListener('pointerleave', e=>{ clearTimeout(p._press) });
+      c.appendChild(p);
+      plates.push(p);
+    });
+  }
+  add(colA, Aset, 'A');
+  add(colO, Oset, 'O');
+  add(colB, Bset, 'B');
+}
+
+// Filters
+function refresh(){
+  const state = AXES.map((ax,i)=>{
+    const st=document.querySelector(`.pill[data-axis="${ax.id}"] .state`).dataset.val;
+    return st;
+  });
+  plates.forEach(p=>{
+    const vec = p.dataset.vec.split('').map(x=>+x);
+    let hide=false;
+    for(let i=0;i<5;i++){
+      const st=state[i]; if(st==='*') continue;
+      const want = (st==='A'?0:1); if(vec[i]!==want){ hide=true; break; }
+    }
+    p.classList.toggle('dim', hide);
+  });
+}
+
+spacingEl.addEventListener('input', build);
+mixEl.addEventListener('input', build);
+resEl.addEventListener('input', build);
+stepsEl.addEventListener('input', ()=>{/* reserved for future sequencer tie-in */});
+
+// Camera
+function setView(v){
+  if(v==='FR') world.style.transform='translate(-50%,-50%) rotateX(90deg)';
+  if(v==='IL') world.style.transform='translate(-50%,-50%) rotateX(62deg) rotateZ(-18deg)';
+  if(v==='IR') world.style.transform='translate(-50%,-50%) rotateX(62deg) rotateZ(18deg)';
+  if(v==='SD') world.style.transform='translate(-50%,-50%) rotateX(62deg) rotateZ(90deg)';
+  if(v==='TP') world.style.transform='translate(-50%,-50%) rotateX(0deg)';
+}
+document.querySelectorAll('.camBtn').forEach(b=> b.addEventListener('click',()=> setView(b.dataset.view)));
+
+// Tabs (placeholder to reflect schema)
+document.querySelectorAll('.tab').forEach(t=>{
+  t.addEventListener('click',()=>{
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+    t.classList.add('active');
+  });
+});
+
+// Boot
+build();
+setView('IR');
+refresh();
+</script>
+</body>
+</html>

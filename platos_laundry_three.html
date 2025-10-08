@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"/>
+  <meta name="theme-color" content="#0b0f14"/>
+  <title>Plato’s Laundry · A Mythopoetic Apparatus</title>
+  <style>
+    :root{
+      --bg:#0b0f14; --ink:#0f1722; --fg:#e6f2ff; --muted:#9fb4cc; --accent:#46e2c2; --warm:#ffb44d; --ring:#94a3b8;
+      --glass:#1dd3b09c;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;background:radial-gradient(1200px 800px at 50% 60%, var(--ink) 0%, var(--bg) 60%);color:var(--fg);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Inter,"Helvetica Neue",Arial,sans-serif;}
+    #app{position:fixed;inset:0;overflow:hidden}
+    canvas{display:block;outline:none}
+
+    /* UI Overlay */
+    .ui{position:fixed;inset:0;pointer-events:none}
+    .topbar{position:absolute;left:clamp(12px,3vw,32px);top:clamp(10px,3.5vw,32px);display:flex;gap:14px;align-items:center;filter:drop-shadow(0 4px 10px rgba(0,0,0,.5));pointer-events:auto}
+    .dot{width:22px;height:22px;border-radius:999px;border:3px solid var(--accent);box-shadow:0 0 30px var(--accent) inset,0 0 24px var(--accent);}
+    h1{margin:0;font-weight:650;letter-spacing:.2px;font-size:clamp(18px,3.6vw,34px)}
+    .subtitle{opacity:.72;margin-left:2px;font-size:clamp(12px,2.6vw,16px)}
+
+    .controls{position:absolute;left:clamp(12px,3vw,32px);top:calc(clamp(10px,3.5vw,32px) + clamp(28px,5vw,40px) + 10px);display:flex;gap:12px;flex-wrap:wrap;pointer-events:auto}
+    .btn{appearance:none;border:1px solid #26404f;background:linear-gradient(180deg,#16323e,#0f2730);color:#cfe7ff;border-radius:10px;padding:10px 14px;font-size:14px;letter-spacing:.3px;cursor:pointer;transition:.2s transform,.2s box-shadow,.2s background;box-shadow:0 2px 0 #0b1d26,0 0 24px rgba(70,226,194,.0)}
+    .btn:hover{transform:translateY(-1px);box-shadow:0 4px 22px rgba(70,226,194,.25)}
+    .btn[aria-pressed="true"]{outline:0;border-color:var(--accent);background:linear-gradient(180deg,#144b43,#0f2f2a);box-shadow:0 0 22px rgba(70,226,194,.45)}
+
+    .quote{position:absolute;left:50%;bottom:6vh;transform:translateX(-50%);font-size:clamp(14px,2.8vw,24px);opacity:.9;font-style:italic;text-shadow:0 2px 24px #000}
+
+    .filepick{position:absolute;right:clamp(10px,3vw,24px);top:clamp(10px,3.5vw,24px);display:flex;gap:8px;align-items:center;pointer-events:auto}
+    .filepick input{display:none}
+    .label{border:1px dashed #274255;border-radius:10px;padding:8px 12px;color:#c6def3;cursor:pointer;opacity:.9}
+    .help{opacity:.65;font-size:12px}
+
+    .play{position:absolute;inset:auto 0 18vh 0;display:grid;place-items:center;pointer-events:none}
+    .play .glyph{pointer-events:auto;width:90px;height:90px;border-radius:999px;background:radial-gradient(closest-side,#fff,#eee);display:grid;place-items:center;box-shadow:0 20px 80px rgba(255,255,255,.3),0 0 120px rgba(70,226,194,.3);cursor:pointer}
+    .play .glyph::before{content:"";display:block;border-left:26px solid #333;border-top:16px solid transparent;border-bottom:16px solid transparent;margin-left:6px}
+
+    @media (max-width: 480px){ .play .glyph{width:72px;height:72px} }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <div class="ui" aria-hidden="false">
+    <div class="topbar">
+      <div class="dot" aria-hidden="true"></div>
+      <div>
+        <h1>Plato’s Laundry</h1>
+        <div class="subtitle">Saul Bass intro — video through the door</div>
+      </div>
+    </div>
+
+    <div class="controls" role="toolbar" aria-label="Wash Cycle Controls">
+      <button class="btn" data-mode="wash">wash</button>
+      <button class="btn" data-mode="rinse">rinse</button>
+      <button class="btn" data-mode="spin">spin</button>
+      <button class="btn" data-mode="dry">dry</button>
+      <button class="btn" id="pause">pause</button>
+    </div>
+
+    <div class="filepick">
+      <label class="label" for="videoFile">Load video</label>
+      <input id="videoFile" type="file" accept="video/*"/>
+      <div class="help">or tap ▶ to run with procedural film</div>
+    </div>
+
+    <div class="play">
+      <div class="glyph" id="bigPlay" title="Play/Pause"></div>
+    </div>
+
+    <div class="quote">“Not escape, but authorship of light.”</div>
+  </div>
+
+  <!-- Hidden video element used for texturing (user-provided or fallback generated) -->
+  <video id="vid" playsinline webkit-playsinline muted loop style="display:none"></video>
+
+  <script type="module">
+    import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+
+    // ---- Scene basics ----
+    const app = document.getElementById('app');
+    const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true, powerPreference:'high-performance' });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    app.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.Fog(0x081018, 18, 64);
+
+    const camera = new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 0.1, 200);
+    camera.position.set(0, 0.4, 8.2);
+
+    // Lighting
+    const hemi = new THREE.HemisphereLight(0x6bded0, 0x0b0e11, 0.6); scene.add(hemi);
+    const key = new THREE.SpotLight(0x77fff0, 2.0, 40, Math.PI/6, 0.3, 1.2);
+    key.position.set(5, 6, 8); key.target.position.set(0,0,0); scene.add(key, key.target);
+    const rim = new THREE.DirectionalLight(0xffbb66, 1.0); rim.position.set(-6, 1, -4); scene.add(rim);
+
+    // ---- Washer Door Assembly ----
+    const group = new THREE.Group();
+    scene.add(group);
+
+    // Outer ring (thick torus)
+    const ringGeom = new THREE.TorusGeometry(3.1, 0.28, 40, 200);
+    const ringMat = new THREE.MeshStandardMaterial({ color:0x0c2a33, metalness:0.9, roughness:0.25, envMapIntensity:1.2 });
+    const ring = new THREE.Mesh(ringGeom, ringMat); group.add(ring);
+
+    // Inner chromed bezel
+    const bezelGeom = new THREE.TorusGeometry(2.45, 0.16, 36, 180);
+    const bezelMat = new THREE.MeshStandardMaterial({ color:0x0f3f49, metalness:1.0, roughness:0.12 });
+    const bezel = new THREE.Mesh(bezelGeom, bezelMat); group.add(bezel);
+
+    // Glass (thick disc with transmission-like look)
+    const glassGeom = new THREE.CylinderGeometry(2.2, 2.2, 0.24, 96, 1, true);
+    const glassMat = new THREE.MeshPhysicalMaterial({ color:0x1dd3b0, metalness:0.0, roughness:0.1, clearcoat:0.9, clearcoatRoughness:0.2, transmission:0.85, thickness:0.5, opacity:0.9, transparent:true, envMapIntensity:1.0 });
+    const glass = new THREE.Mesh(glassGeom, glassMat); glass.rotation.x = Math.PI/2; group.add(glass);
+
+    // Drum interior (a shallow bowl) + a plane for the video
+    const bowlGeom = new THREE.SphereGeometry(2.3, 64, 48, 0, Math.PI*2, 0, Math.PI/2.2);
+    const bowlMat = new THREE.MeshStandardMaterial({ color:0x0a1a22, metalness:0.6, roughness:0.5 });
+    const bowl = new THREE.Mesh(bowlGeom, bowlMat); bowl.position.z = -0.35; group.add(bowl);
+
+    // Dust motes (particles inside the drum)
+    const pgeo = new THREE.BufferGeometry();
+    const N = 2500, pos = new Float32Array(N*3);
+    for(let i=0;i<N;i++){ const r= 1.9*Math.random(); const a= Math.random()*Math.PI*2; const t = Math.random()*Math.PI/2.2; pos[i*3+0]= r*Math.cos(a)*Math.sin(t); pos[i*3+1]= r*Math.sin(a)*Math.sin(t); pos[i*3+2]= -0.3 - 1.5*Math.cos(t); }
+    pgeo.setAttribute('position', new THREE.BufferAttribute(pos,3));
+    const pmat = new THREE.PointsMaterial({ size:0.02, color:0xa7d9ff, transparent:true, opacity:0.55, depthWrite:false });
+    const dust = new THREE.Points(pgeo, pmat); group.add(dust);
+
+    // Video plane (the shadow theatre / cave world)
+    const videoEl = document.getElementById('vid');
+    const videoTex = new THREE.VideoTexture(videoEl);
+    videoTex.minFilter = THREE.LinearFilter;
+    videoTex.magFilter = THREE.LinearFilter;
+    videoTex.colorSpace = THREE.SRGBColorSpace;
+
+    const vPlane = new THREE.Mesh(
+      new THREE.CircleGeometry(1.9, 96),
+      new THREE.MeshBasicMaterial({ map: videoTex, toneMapped:false })
+    );
+    vPlane.position.z = -0.85; group.add(vPlane);
+
+    // Title ring text (simple engraved look using edges)
+    const title = new THREE.Mesh(
+      new THREE.RingGeometry(2.55, 2.7, 90, 1, 0, Math.PI*2),
+      new THREE.MeshStandardMaterial({ color:0x143845, metalness:.9, roughness:.35, emissive:0x03333a, emissiveIntensity:.15 })
+    );
+    title.rotation.x = Math.PI/2; group.add(title);
+
+    // Ground plane vignette
+    const ground = new THREE.Mesh(new THREE.CircleGeometry(12,64), new THREE.MeshBasicMaterial({ color:0x0b1117 }));
+    ground.rotation.x = -Math.PI/2; ground.position.y = -2.2; scene.add(ground);
+
+    // Beam / projector cone
+    const coneGeom = new THREE.ConeGeometry(6, 10, 64, 1, true);
+    const coneMat = new THREE.MeshBasicMaterial({ color:0x7fffff, transparent:true, opacity:0.08, depthWrite:false });
+    const cone = new THREE.Mesh(coneGeom, coneMat);
+    cone.rotation.x = Math.PI/2; cone.position.z = -5.6; cone.position.y = 0.2; group.add(cone);
+
+    // Subtle camera parallax via mouse/touch
+    let pointer = new THREE.Vector2(), targetRot = new THREE.Vector2();
+    const onPointer = e=>{
+      const x = ('touches' in e) ? e.touches[0].clientX : e.clientX;
+      const y = ('touches' in e) ? e.touches[0].clientY : e.clientY;
+      pointer.set((x/innerWidth)*2-1,(y/innerHeight)*2-1);
+      targetRot.x = THREE.MathUtils.lerp(targetRot.x, pointer.y*0.25, 0.2);
+      targetRot.y = THREE.MathUtils.lerp(targetRot.y, pointer.x*0.35, 0.2);
+    };
+    window.addEventListener('mousemove', onPointer, {passive:true});
+    window.addEventListener('touchmove', onPointer, {passive:true});
+
+    // Responsive
+    addEventListener('resize', ()=>{
+      camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+
+    // ---- Wash cycle state machine ----
+    const state = {
+      mode: 'wash',
+      t: 0,
+      spinSpeed: 0.45,
+      wobble: 0.02,
+      tint: new THREE.Color(0x46e2c2)
+    };
+
+    const modes = {
+      wash(){ state.spinSpeed=.45; state.wobble=.035; glassMat.color.set(0x1dd3b0); pmat.opacity=.55; },
+      rinse(){ state.spinSpeed=.25; state.wobble=.02; glassMat.color.set(0x9fd9ff); pmat.opacity=.45; },
+      spin(){ state.spinSpeed=2.6; state.wobble=.09; glassMat.color.set(0x41e2c3); pmat.opacity=.65; },
+      dry(){ state.spinSpeed=.9; state.wobble=.015; glassMat.color.set(0xffb44d); pmat.opacity=.40; }
+    };
+
+    function setMode(m){ state.mode=m; modes[m](); highlight(m); }
+
+    const toolbar = document.querySelector('.controls');
+    function highlight(m){
+      toolbar.querySelectorAll('.btn[data-mode]')
+        .forEach(b=> b.setAttribute('aria-pressed', b.dataset.mode===m));
+    }
+    toolbar.addEventListener('click', (e)=>{
+      const btn = e.target.closest('.btn'); if(!btn) return;
+      if(btn.id==='pause'){ playing? pause() : play(); return; }
+      const m = btn.dataset.mode; if(m) setMode(m);
+    });
+
+    // ---- Video handling ----
+    const bigPlay = document.getElementById('bigPlay');
+    const fileInput = document.getElementById('videoFile');
+    let playing = false;
+
+    function ensureStream(){
+      // If no src provided, synthesize a tiny procedural film via CanvasCaptureStream
+      if(!videoEl.src && videoEl.captureStream==null){
+        const c=document.createElement('canvas'); const ctx=c.getContext('2d'); c.width=640; c.height=360;
+        let t=0; const draw=()=>{
+          t+=1/60; ctx.fillStyle='#0a0f14'; ctx.fillRect(0,0,c.width,c.height);
+          // Saul Bass blocks
+          ctx.save();
+          for(let i=0;i<12;i++){
+            ctx.fillStyle = `hsl(${180+80*Math.sin(t*.7+i)}, 60%, ${28+22*Math.sin(t*1.1+i*0.7)}%)`;
+            const w = 40+30*Math.sin(t*1.6+i);
+            const h = 140+80*Math.cos(t*1.2+i);
+            const x = (i*64 + 40 + 20*Math.sin(t*0.8+i))% (c.width+80) - 80;
+            const y = (c.height-h)/2 + 20*Math.sin(t+i);
+            ctx.fillRect(x,y,w,h);
+          }
+          // Title card
+          ctx.font='700 44px system-ui, sans-serif'; ctx.fillStyle='#ffb44d'; ctx.textAlign='center';
+          ctx.fillText("PLATO’S LAUNDRY", c.width/2, 86);
+          ctx.font='bold 16px system-ui, sans-serif'; ctx.fillStyle='#c7e7ff';
+          ctx.fillText("A MYTHOPOETIC APPARATUS", c.width/2, 112);
+          ctx.restore();
+          requestAnimationFrame(draw);
+        }; draw();
+        const stream = c.captureStream(30);
+        videoEl.srcObject = stream; videoEl.muted = true; videoEl.loop = true;
+      }
+    }
+
+    fileInput.addEventListener('change', (e)=>{
+      const file = e.target.files[0];
+      if(!file) return;
+      const url = URL.createObjectURL(file);
+      videoEl.srcObject = null; videoEl.src = url; videoEl.load();
+      if(playing) videoEl.play();
+    });
+
+    function play(){ ensureStream(); videoEl.play(); playing=true; bigPlay.style.display='none'; document.getElementById('pause').textContent='pause'; }
+    function pause(){ videoEl.pause(); playing=false; bigPlay.style.display='grid'; document.getElementById('pause').textContent='play'; }
+
+    bigPlay.addEventListener('click', ()=> playing? pause(): play());
+
+    // Autoplay attempt (mobile requires gesture; the big ▶ is visible if blocked)
+    (async()=>{ try{ ensureStream(); await videoEl.play(); playing=true; bigPlay.style.display='none'; }catch{ playing=false; } })();
+
+    // ---- Animate ----
+    let last=performance.now();
+    function tick(now){
+      const dt = Math.min(0.06, (now-last)/1000); last=now; state.t += dt;
+
+      // Gentle orbit and wobble
+      group.rotation.y += state.spinSpeed * dt * 0.35;
+      group.rotation.x = THREE.MathUtils.lerp(group.rotation.x, targetRot.x, 0.08);
+      group.rotation.y += (targetRot.y - group.rotation.y)*0.05;
+
+      // Dust swirl
+      dust.rotation.z += state.spinSpeed * dt * 0.25;
+      dust.position.x = Math.sin(state.t*1.7)*state.wobble;
+      dust.position.y = Math.cos(state.t*1.3)*state.wobble;
+
+      // Beam pulse
+      cone.material.opacity = 0.07 + 0.03*Math.sin(state.t*3.2);
+
+      renderer.render(scene, camera);
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+
+    // Defaults
+    setMode('wash');
+  </script>
+</body>
+</html>

@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>MYTHOS_∞ Cosmogram — Mobile Haptic Media OS</title>
+<style>
+/*
+  MYTHOS_∞ — Single-file, mobile-first, haptic media instrument
+  Aesthetic: cobalt/teal/coral/gold bioluminescence on deep ocean black.
+  No external dependencies. Vanilla JS only.
+*/
+:root{
+  --bg:#070b12; --ink:#e6e6e6; --dim:#8aa0b4;
+  --cobalt:#2f6fff; --teal:#00c7b7; --coral:#ff6b5a; --gold:#f1c453;
+  --grid:#0c1521;
+}
+*{box-sizing:border-box;}
+html,body{height:100%;}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,system-ui,sans-serif;overflow:hidden;}
+button{font:inherit}
+
+/* Layout */
+#app{position:fixed;inset:0;display:grid;grid-template-rows:48px 1fr 120px;}
+@media (max-width:480px){#app{grid-template-rows:56px 1fr 128px}}
+
+/* Top HUD */
+#hud{position:relative;display:flex;align-items:center;justify-content:space-between;padding:0 10px;background:linear-gradient(180deg, rgba(12,21,33,.9), rgba(12,21,33,.2));backdrop-filter:blur(6px);border-bottom:1px solid rgba(255,255,255,.05)}
+#brand{font-weight:700;letter-spacing:.6px;color:var(--dim)}
+#hud .btn{appearance:none;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.04);color:var(--ink);padding:6px 10px;border-radius:10px;cursor:pointer}
+#hud .btn:active{transform:translateY(1px)}
+#hud .btn.toggle[aria-pressed="true"]{background:rgba(241,196,83,.15);border-color:rgba(241,196,83,.4);}
+
+/* Canvas stage */
+#stage{position:relative;overflow:hidden;background:radial-gradient(1200px 800px at 50% 60%, rgba(0,199,183,.08), transparent 70%), radial-gradient(800px 600px at 20% 20%, rgba(47,111,255,.07), transparent 70%);}
+#cosmo{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+#veil{position:absolute;inset:0;pointer-events:none;opacity:0;background:radial-gradient(circle at 50% 50%, rgba(241,196,83,.35), rgba(241,196,83,0) 60%);transition:opacity .35s ease}
+
+/* Bottom Dock */
+#dock{position:relative;padding:10px;display:flex;gap:10px;align-items:center;justify-content:center;background:linear-gradient(0deg, rgba(12,21,33,.9), rgba(12,21,33,.2));border-top:1px solid rgba(255,255,255,.05)}
+.cmd{appearance:none;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);color:var(--ink);padding:12px 14px;border-radius:14px;min-width:92px;font-weight:700;letter-spacing:.3px;box-shadow:0 0 24px rgba(0,199,183,.15);}
+.cmd.primary{background:linear-gradient(180deg, rgba(0,199,183,.15), rgba(0,199,183,.06));border-color:rgba(0,199,183,.35)}
+.cmd.warn{background:linear-gradient(180deg, rgba(255,107,90,.15), rgba(255,107,90,.06));border-color:rgba(255,107,90,.35)}
+#more{position:absolute;right:12px;top:8px}
+
+/* Sheet */
+#sheet{position:fixed;left:0;right:0;bottom:-55%;height:55%;background:rgba(7,11,18,.96);border-top:1px solid rgba(255,255,255,.08);box-shadow:0 -10px 40px rgba(0,0,0,.5);border-radius:18px 18px 0 0;transition:transform .35s ease, bottom .35s ease;transform:translateY(0);display:grid;grid-template-rows:auto 1fr;}
+#sheet.open{bottom:0}
+#sheet header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid rgba(255,255,255,.06)}
+#sheet .grid{padding:12px;display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+#sheet .grid .cmd{min-width:auto}
+
+/* Logs */
+#log{position:fixed;left:10px;right:10px;bottom:calc(120px + 12px);max-height:32vh;overflow:auto;background:rgba(7,11,18,.6);border:1px solid rgba(255,255,255,.06);backdrop-filter:blur(6px);padding:10px;border-radius:12px;font-size:12px;line-height:1.4}
+#log h3{margin:0 0 6px 0;font-size:12px;color:var(--dim)}
+#log pre{white-space:pre-wrap;margin:0}
+
+/* Help panel */
+#help{position:fixed;inset:0;background:rgba(7,11,18,.96);display:none;padding:18px;overflow:auto}
+#help.open{display:block}
+#help article{max-width:900px;margin:0 auto}
+#help h2{margin-top:0}
+#help .close{position:sticky;top:0;display:inline-block;margin-bottom:12px}
+
+/* Accessibility & states */
+.hidden{display:none !important}
+[aria-live]{outline:none}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce){
+  #veil{transition:none}
+}
+</style>
+</head>
+<body>
+<div id="app" role="application" aria-label="MYTHOS Cosmogram">
+  <div id="hud">
+    <div id="brand">MYTHOS_∞</div>
+    <div style="display:flex; gap:8px">
+      <button id="modeBtn" class="btn toggle" aria-pressed="false" aria-label="Toggle Mode">MODE: RITUAL</button>
+      <button id="audioBtn" class="btn toggle" aria-pressed="false" aria-label="Toggle Audio">AUDIO: OFF</button>
+      <button id="helpBtn" class="btn" aria-label="Help">HELP</button>
+    </div>
+  </div>
+  <div id="stage">
+    <canvas id="cosmo" aria-label="Cosmogram canvas" role="img"></canvas>
+    <div id="veil"></div>
+  </div>
+  <div id="dock" role="toolbar" aria-label="Command Dock">
+    <button class="cmd primary" data-cmd="INIT">INIT</button>
+    <button class="cmd primary" data-cmd="SEED">SEED</button>
+    <button class="cmd warn" data-cmd="REBOOT">REBOOT</button>
+    <button id="more" class="btn" aria-expanded="false">•••</button>
+  </div>
+</div>
+
+<!-- Bottom sheet with secondary commands -->
+<section id="sheet" aria-hidden="true" aria-label="More Commands">
+  <header>
+    <strong>Commands</strong>
+    <button id="closeSheet" class="btn">Close</button>
+  </header>
+  <div class="grid">
+    <button class="cmd" data-cmd="TRACE">TRACE</button>
+    <button class="cmd" data-cmd="RITUALIZE">RITUALIZE</button>
+    <button class="cmd" data-cmd="CANONIZE">CANONIZE</button>
+    <button class="cmd" data-cmd="RESET_SOFT">SOFT RESET</button>
+    <button class="cmd" data-cmd="RESET_HARD">FACTORY RESET</button>
+  </div>
+</section>
+
+<!-- Logs (polite live region) -->
+<section id="log" aria-live="polite" aria-atomic="false">
+  <h3>Runtime Log</h3>
+  <pre id="logText"></pre>
+</section>
+
+<!-- Help panel -->
+<section id="help" aria-modal="true" role="dialog" aria-label="Help">
+  <button class="btn close" id="helpClose">Close</button>
+  <article>
+    <h2>Welcome to MythOS</h2>
+    <p>Tap rings and nodes to focus. Swipe along a ring to bias its loop. Pinch to zoom the cosmogram. Use the dock to issue commands. Long-press the core to toggle modes.</p>
+    <ul>
+      <li><strong>INIT</strong> — boot the system; reset visual field.</li>
+      <li><strong>SEED</strong> — germinate a theme (e.g., <em>Atlantis_Resurrection</em>).</li>
+      <li><strong>TRACE</strong> — render a quick lineage overlay.</li>
+      <li><strong>RITUALIZE</strong> — turn last output into a ritual token.</li>
+      <li><strong>REBOOT</strong> — novelty shock; controlled chaos.</li>
+      <li><strong>CANONIZE</strong> — archive a stabilized artifact.</li>
+    </ul>
+    <p><strong>Accessibility:</strong> Reduced motion is honored; logs are announced as a live region; all controls are buttons with labels. No external assets or network access.</p>
+  </article>
+</section>
+
+<noscript>
+  <div style="position:fixed;inset:0;padding:2rem;color:#fff;background:#000;overflow:auto">
+    <h1>MYTHOS_∞ (Static)</h1>
+    <p>JavaScript is disabled; a static diagram would render here with textual commands.</p>
+  </div>
+</noscript>
+
+<script>
+/* === MYTHOS_∞ Runtime (vanilla JS) === */
+(() => {
+  const $ = sel => document.querySelector(sel);
+  const cosmo = $('#cosmo');
+  const ctx = cosmo.getContext('2d');
+  const veil = $('#veil');
+  const logText = $('#logText');
+  const modeBtn = $('#modeBtn');
+  const audioBtn = $('#audioBtn');
+  const helpBtn = $('#helpBtn');
+  const helpPanel = $('#help');
+  const helpClose = $('#helpClose');
+  const dock = $('#dock');
+  const sheet = $('#sheet');
+  const moreBtn = $('#more');
+  const closeSheet = $('#closeSheet');
+
+  const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const hasVibrate = 'vibrate' in navigator;
+
+  /* State */
+  const S = {
+    mode:'RITUAL', audio:false, zoom:1, offset:{x:0,y:0},
+    core:{charge:0.8, tone:'cobalt'},
+    loops:{
+      pc:{lambda:1.0, drift:0.010},
+      mm:{phi:0.618, drift:0.008},
+      rc:{omega:432, drift:0.005},
+      cr:{delta:0.33, drift:0.012}
+    },
+    seeds:[],
+    ledger:[],
+    lastSeed:null,
+    overlay:{trace:null, t:0},
+    running:true
+  };
+
+  /* Persistence */
+  const KEYS = {state:'mythos_state_v1', ledger:'mythos_ledger_v1', settings:'mythos_settings_v1'};
+  function save(){ try{ localStorage.setItem(KEYS.state, JSON.stringify({S})); log('State persisted.'); }catch(e){} }
+  function load(){ try{ const v = localStorage.getItem(KEYS.state); if(v){ const o = JSON.parse(v); Object.assign(S, o.S || {}); } }catch(e){} }
+  load();
+
+  /* Audio (off by default) */
+  let AC=null, osc=null, gain=null, lpf=null;
+  function audioOn(){ if(S.audio) return; AC = AC || new (window.AudioContext||window.webkitAudioContext)();
+    osc = AC.createOscillator(); gain = AC.createGain(); lpf = AC.createBiquadFilter();
+    osc.type='sine'; osc.frequency.value=110; lpf.type='lowpass'; lpf.frequency.value=1200; gain.gain.value=0.0001; // start almost silent
+    osc.connect(lpf).connect(gain).connect(AC.destination); osc.start(); S.audio=true; audioBtn.setAttribute('aria-pressed','true'); audioBtn.textContent='AUDIO: ON'; log('Audio unmuted — resonance audible.'); }
+  function audioOff(){ if(!S.audio) return; try{osc.stop();}catch{}; osc=null; gain=null; lpf=null; if(AC && AC.state==='suspended'){}; S.audio=false; audioBtn.setAttribute('aria-pressed','false'); audioBtn.textContent='AUDIO: OFF'; log('Audio muted.'); }
+  function audioTick(){ if(!S.audio||!osc||!gain||!lpf) return; const f = 110 + (S.loops.rc.omega/512)*200 + (S.loops.pc.lambda-1)*90; osc.frequency.exponentialRampToValueAtTime(Math.max(50, f), (AC.currentTime+0.12)); gain.gain.exponentialRampToValueAtTime(0.02 + Math.max(0, (S.loops.mm.phi-0.5))*0.03, (AC.currentTime+0.1)); }
+
+  /* Haptics */
+  function vibr(pattern){ if(!hasVibrate) return; try{ navigator.vibrate(pattern); }catch(e){} }
+
+  /* Logging */
+  function tstamp(){ const d=new Date(); return d.toLocaleTimeString([], {hour12:false}); }
+  function log(msg){ const line = `[${tstamp()}] ${msg}\n`; logText.textContent = (logText.textContent + line).split('\n').slice(-200).join('\n'); }
+
+  /* Commands */
+  const CMD = {
+    INIT(){
+      S.core.charge=0.8; S.loops.pc.lambda=1.0; S.loops.mm.phi=0.618; S.loops.rc.omega=432; S.loops.cr.delta=0.33; S.seeds=[]; S.overlay.trace=null; S.lastSeed=null; vibr([25]); log('Genesis echo acknowledged.'); save();
+    },
+    SEED(theme){ if(!theme){ theme = prompt('Enter theme (e.g., Atlantis_Resurrection)')||'Atlantis_Resurrection'; }
+      const seed = { id:`seed_${Date.now()}`, theme, hue:Math.random()*360, t:0 };
+      S.seeds.push(seed); S.lastSeed=seed.id; S.loops.pc.lambda = clamp(S.loops.pc.lambda + (Math.random()*0.08-0.04), 0.85, 1.25);
+      vibr([35]); log(`Seed accepted; growth begins — ${theme}`);
+    },
+    TRACE(motif){ motif = motif || prompt('Enter motif (e.g., Promethean_Fire)') || 'Promethean_Fire';
+      S.overlay.trace = { motif, nodes: traceNodes(motif) }; S.overlay.t = 0; log(`Lineage map rendered for ${motif}.`);
+    },
+    RITUALIZE(id){ id = id || S.lastSeed; if(!id){ log('No artifact to ritualize.'); return; }
+      const token = S.seeds.find(s=>s.id===id); if(!token){ log('Artifact missing.'); return; }
+      token.cycles = (token.cycles||0)+1; S.loops.rc.omega = clamp(S.loops.rc.omega + 2, 256, 512); vibr([20,20]); log(`Artifact sanctified — ${token.theme} (cycle ${token.cycles}).`);
+    },
+    REBOOT(){
+      flash(); vibr([65,35,65]); S.loops.pc.lambda = clamp(0.9 + Math.random()*0.3, 0.8, 1.3); S.loops.mm.phi = clamp(0.5+Math.random()*0.3, 0.45, 0.8); S.loops.rc.omega = clamp(380+Math.random()*100, 256, 560); S.loops.cr.delta = clamp(0.25+Math.random()*0.2, 0.2, 0.5); log('Shockwave detected. New myths forming.'); save();
+    },
+    CANONIZE(id){ id = id || S.lastSeed; if(!id){ log('Nothing to canonize.'); return; }
+      const seed = S.seeds.find(s=>s.id===id); if(!seed){ log('Artifact missing.'); return; }
+      const entry = { artifact_id:id, title:seed.theme, timestamp:new Date().toISOString(), snapshot_indices:{ lambda:S.loops.pc.lambda, phi:S.loops.mm.phi, omega:S.loops.rc.omega, delta:S.loops.cr.delta } };
+      S.ledger.push(entry); vibr([25,10]); log(`Artifact preserved in the Codex — ${seed.theme}`); save();
+    },
+    RESET_SOFT(){ if(confirm('Soft reset current state?')){ this.INIT(); } },
+    RESET_HARD(){ if(confirm('Erase all memory and return to salt?')){ localStorage.clear(); location.reload(); } }
+  };
+
+  function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
+  function flash(){ veil.style.opacity = 1; setTimeout(()=> veil.style.opacity = 0, 260); }
+  function traceNodes(motif){
+    const base = motif.length%7 + 3; const arr=[]; for(let i=0;i<base;i++){ arr.push({ angle: Math.random()*Math.PI*2, r: 120 + Math.random()*160 }); } return arr;
+  }
+
+  /* Canvas sizing */
+  function fit(){ const r = Math.min(window.devicePixelRatio||1, 2); cosmo.width = Math.floor(cosmo.clientWidth * r); cosmo.height = Math.floor(cosmo.clientHeight * r); ctx.setTransform(r,0,0,r,0,0); }
+  window.addEventListener('resize', fit, {passive:true}); fit();
+
+  /* Animation */
+  let last=0; function tick(ts){ if(!S.running) return; const dt = Math.min(32, ts-last || 16)/1000; last = ts; if(!prefersReduced){ evolve(dt); draw(dt); } else { draw(0); } audioTick(); requestAnimationFrame(tick); }
+  requestAnimationFrame(tick);
+
+  function evolve(dt){
+    // gentle drifts
+    S.loops.mm.phi += (Math.sin(tsHash()*0.001)*0.001); S.loops.mm.phi = clamp(S.loops.mm.phi, 0.5, 0.8);
+    S.seeds.forEach(s=> s.t += dt);
+    if(S.overlay.trace){ S.overlay.t += dt; if(S.overlay.t>10) S.overlay.trace=null; }
+  }
+  function tsHash(){ return Date.now()%100000; }
+
+  /* Drawing */
+  function draw(){
+    const w = cosmo.clientWidth, h = cosmo.clientHeight; ctx.clearRect(0,0,w,h);
+    const cx = w/2 + S.offset.x, cy = h/2 + S.offset.y; const vmin = Math.min(w,h); const scale = S.zoom;
+
+    // helper
+    function ring(R, thick, col, glow){ ctx.save(); ctx.strokeStyle=col; ctx.lineWidth=thick; ctx.globalAlpha=1; ctx.shadowBlur=glow; ctx.shadowColor=col; ctx.beginPath(); ctx.arc(cx, cy, R*scale, 0, Math.PI*2); ctx.stroke(); ctx.restore(); }
+
+    // core
+    const coreR = vmin*0.09; ring(coreR, 6, 'rgba(47,111,255,.9)', 18);
+    // ouroboric pulse
+    ctx.save(); ctx.strokeStyle='rgba(241,196,83,.9)'; ctx.lineWidth=2; ctx.setLineDash([6,8]); ctx.beginPath(); ctx.arc(cx,cy, coreR*0.7*scale, 0, Math.PI*2); ctx.stroke(); ctx.restore();
+
+    // rings (PC, MM, RC, CR)
+    const pcR=vmin*0.16, mmR=vmin*0.23, rcR=vmin*0.30, crR=vmin*0.37, shR=vmin*0.45;
+    ring(pcR, 8, 'rgba(0,199,183,.9)', 16); // teal
+    ring(mmR, 8, 'rgba(241,196,83,.9)', 18); // gold
+    ring(rcR, 8, 'rgba(47,111,255,.9)', 18); // cobalt
+    ring(crR, 8, 'rgba(255,107,90,.9)', 16); // coral
+
+    // outer shell facets
+    drawShell(shR, 24);
+
+    // seed cards as orbiting points
+    S.seeds.forEach((s,i)=>{ const R = mmR + (i%2? 14:-14); const a = (performance.now()/1000 * (0.2 + i*0.05) + i) % (Math.PI*2); const x = cx + Math.cos(a)*R*scale; const y = cy + Math.sin(a)*R*scale; dot(x,y, `hsl(${s.hue} 80% 60%)`); });
+
+    // trace overlay
+    if(S.overlay.trace){ drawTrace(S.overlay.trace, cx, cy); }
+
+    // labels (minimal to reduce clutter)
+    label(cx, cy-coreR*1.35, 'MYTHOS CORE');
+    label(cx, cy-pcR-14, 'PROLIFERATION ↔ CONSTRAINT');
+    label(cx, cy-mmR-14, 'MEMORY ↔ METABOLISM');
+    label(cx, cy-rcR-14, 'RITUAL ↔ CONTINUATION');
+    label(cx, cy-crR-14, 'CANON ↔ RUPTURE');
+  }
+
+  function drawShell(R, facets){ ctx.save(); ctx.strokeStyle='rgba(0,199,183,.55)'; ctx.lineWidth=1.5; ctx.shadowBlur=18; ctx.shadowColor='rgba(0,199,183,.45)'; ctx.beginPath(); for(let i=0;i<facets;i++){ const a = (i/facets)*Math.PI*2; const x = cosmo.clientWidth/2 + Math.cos(a)*R*S.zoom; const y = cosmo.clientHeight/2 + Math.sin(a)*R*S.zoom; if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);} ctx.closePath(); ctx.stroke(); ctx.restore(); }
+  function dot(x,y,color){ ctx.save(); ctx.fillStyle=color; ctx.shadowBlur=16; ctx.shadowColor=color; ctx.beginPath(); ctx.arc(x,y,4,0,Math.PI*2); ctx.fill(); ctx.restore(); }
+  function label(x,y,text){ ctx.save(); ctx.fillStyle='rgba(230,230,230,.85)'; ctx.font='12px system-ui, -apple-system, Segoe UI, Roboto'; ctx.textAlign='center'; ctx.fillText(text, x, y); ctx.restore(); }
+  function drawTrace(tr, cx, cy){ const w=cosmo.clientWidth, h=cosmo.clientHeight; ctx.save(); ctx.strokeStyle='rgba(241,196,83,.7)'; ctx.lineWidth=2; ctx.shadowBlur=12; ctx.shadowColor='rgba(241,196,83,.75)'; ctx.beginPath(); tr.nodes.forEach((n,i)=>{ const x=cx+Math.cos(n.angle)*(n.r*S.zoom); const y=cy+Math.sin(n.angle)*(n.r*S.zoom); if(i===0) ctx.moveTo(x,y); else ctx.quadraticCurveTo(cx,cy,x,y); dot(x,y,'rgba(241,196,83,.9)'); }); ctx.stroke(); ctx.restore(); }
+
+  /* Interactions */
+  // Tap focus, long press core to toggle mode, swipe on PC ring to bias lambda, pinch zoom
+  let touchStart=null, longTimer=null, pinching=false, pinchStartDist=0, startZoom=1, lastPos=null;
+
+  cosmo.addEventListener('pointerdown', e=>{
+    cosmo.setPointerCapture(e.pointerId); touchStart = {x:e.clientX, y:e.clientY, t:performance.now()}; lastPos={x:e.clientX, y:e.clientY};
+    longTimer = setTimeout(()=>{ if(pointInCore(e.clientX,e.clientY)) toggleMode(); }, 650);
+  });
+  cosmo.addEventListener('pointermove', e=>{ if(!touchStart) return; const dx=e.clientX-touchStart.x, dy=e.clientY-touchStart.y; const d = Math.hypot(dx,dy); lastPos={x:e.clientX,y:e.clientY}; if(d>8) clearTimeout(longTimer); });
+  cosmo.addEventListener('pointerup', e=>{
+    clearTimeout(longTimer); if(!touchStart) return;
+    const dx=e.clientX-touchStart.x, dy=e.clientY-touchStart.y; const d = Math.hypot(dx,dy); if(d<8){ // tap
+      // focus? (no-op for now)
+    } else {
+      // swipe: bias PC loop horizontally
+      if(Math.abs(dx) > Math.abs(dy)){
+        S.loops.pc.lambda = clamp(S.loops.pc.lambda + (dx>0? 0.03 : -0.03), 0.8, 1.3);
+        log(dx>0? 'Bias → Constraint' : 'Bias → Proliferation'); vibr([15,40,15]); save();
+      }
+    }
+    touchStart=null;
+  });
+
+  // Pinch zoom via gesture events (experimental fallback to wheel)
+  cosmo.addEventListener('wheel', e=>{ e.preventDefault(); const z = S.zoom * (e.deltaY>0? 0.95:1.05); S.zoom = clamp(z, 0.8, 1.6); }, {passive:false});
+
+  function pointInCore(x,y){ const r = Math.hypot(x - cosmo.clientWidth/2, y - cosmo.clientHeight/2); return r < Math.min(cosmo.clientWidth,cosmo.clientHeight)*0.09; }
+
+  function toggleMode(){ S.mode = S.mode==='RITUAL'? 'ENGINEER':'RITUAL'; modeBtn.textContent = 'MODE: '+S.mode; modeBtn.setAttribute('aria-pressed', String(S.mode==='ENGINEER')); log('Mode → '+S.mode); }
+
+  /* Buttons */
+  dock.addEventListener('click', e=>{ const b = e.target.closest('[data-cmd]'); if(!b) return; exec(b.dataset.cmd); });
+  sheet.addEventListener('click', e=>{ const b = e.target.closest('[data-cmd]'); if(!b) return; exec(b.dataset.cmd); });
+  moreBtn.addEventListener('click', ()=>{ const open = sheet.classList.toggle('open'); sheet.setAttribute('aria-hidden', String(!open)); moreBtn.setAttribute('aria-expanded', String(open)); });
+  closeSheet.addEventListener('click', ()=>{ sheet.classList.remove('open'); sheet.setAttribute('aria-hidden','true'); moreBtn.setAttribute('aria-expanded','false'); });
+
+  modeBtn.addEventListener('click', toggleMode);
+  audioBtn.addEventListener('click', ()=> S.audio? audioOff(): audioOn());
+  helpBtn.addEventListener('click', ()=> helpPanel.classList.add('open'));
+  helpClose.addEventListener('click', ()=> helpPanel.classList.remove('open'));
+
+  function exec(name){
+    switch(name){
+      case 'INIT': CMD.INIT(); break;
+      case 'SEED': CMD.SEED(); break;
+      case 'TRACE': CMD.TRACE(); break;
+      case 'RITUALIZE': CMD.RITUALIZE(); break;
+      case 'REBOOT': CMD.REBOOT(); break;
+      case 'CANONIZE': CMD.CANONIZE(); break;
+      case 'RESET_SOFT': CMD.RESET_SOFT(); break;
+      case 'RESET_HARD': CMD.RESET_HARD(); break;
+      default: log('Unknown command.');
+    }
+  }
+
+  // Boot
+  log('MythOS awake. The ocean is thinking.');
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<title>Recursive Holographic Model — 32 Post‑its</title>
+<style>
+  :root{
+    --bg:#0b0e10; --ink:#ecf2ee; --ghost:#aab7b1; --accent:#21ff86; --accentB:#ff4b9a;
+    --gold:#ffbc3a; --sky:#56d2ff; --card:#151a1c; --edge:#1f272a;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{margin:0;font:14px/1.45 Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;background:var(--bg);color:var(--ink)}
+  /* Header / controls */
+  header{
+    position:sticky; top:0; z-index:50; background:linear-gradient(180deg, rgba(0,0,0,.85), rgba(0,0,0,.55));
+    backdrop-filter: blur(8px); border-bottom:1px solid #19323a; padding:8px 10px;
+  }
+  .row{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+  h1{font-size:14px; letter-spacing:.6px; color:var(--sky); margin:0 6px 0 0}
+  .pill{border:1px solid rgba(255,255,255,.15); background:rgba(255,255,255,.06); color:#dff7ff; border-radius:999px; padding:6px 10px; font-size:12px}
+  .control{display:flex; align-items:center; gap:6px; border:1px solid rgba(255,255,255,.15); background:rgba(255,255,255,.04);
+           padding:6px 8px; border-radius:10px}
+  select, input[type="search"]{
+    background:transparent; color:var(--ink); border:1px solid rgba(255,255,255,.18);
+    padding:6px 8px; border-radius:8px; font-size:12px; min-width:120px;
+  }
+  button{border:1px solid rgba(255,255,255,.2); background:rgba(255,255,255,.08); color:var(--ink); border-radius:10px;
+         padding:8px 10px; font-size:12px; cursor:pointer}
+  button:active{transform:scale(.98)}
+  .axis{display:flex; gap:6px; align-items:center; flex-wrap:wrap}
+  .chip{
+    display:flex; align-items:center; gap:6px; padding:6px 8px; border-radius:999px;
+    border:1px solid rgba(255,255,255,.18); background:rgba(255,255,255,.05); font-size:11px;
+  }
+  .chip .state{display:inline-block; min-width:18px; text-align:center; padding:2px 6px; border-radius:6px; font-weight:700}
+  .chip .state[data-val="A"]{background:rgba(33,255,134,.15); color:#b8ffd8; border:1px solid rgba(33,255,134,.35)}
+  .chip .state[data-val="B"]{background:rgba(255,75,154,.15); color:#ffd0e5; border:1px solid rgba(255,75,154,.35)}
+  .chip .state[data-val="*"]{background:rgba(255,188,58,.12); color:#ffe3b3; border:1px solid rgba(255,188,58,.35)}
+
+  /* Grid */
+  main{padding:10px}
+  #grid{
+    display:grid; grid-template-columns:repeat(auto-fill, minmax(150px,1fr)); gap:10px;
+  }
+  @media (min-width:720px){
+    #grid{grid-template-columns:repeat(auto-fill, minmax(180px,1fr))}
+  }
+  /* Post-it cards */
+  .card{
+    background:conic-gradient(from 180deg at 30% -10%, rgba(255,255,255,.06), rgba(255,255,255,.02) 30%),
+               var(--card);
+    border:1px solid var(--edge); border-radius:14px; padding:10px; position:relative;
+    box-shadow: 0 6px 16px rgba(0,0,0,.35), inset 0 0 0 1px rgba(255,255,255,.04);
+    transition:transform .12s ease, box-shadow .12s ease;
+  }
+  .card:hover{transform:translateY(-2px); box-shadow: 0 10px 22px rgba(0,0,0,.45), inset 0 0 0 1px rgba(255,255,255,.08)}
+  .kline{display:flex; align-items:center; justify-content:space-between; gap:6px; margin-bottom:6px}
+  .k{font-weight:800; font-size:12px; color:#bfe8ff}
+  .vec{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:12px; opacity:.9}
+  .title{font-weight:700; font-size:12px; color:#ffe8a6; margin:6px 0 4px}
+  .desc{font-size:12px; color:#d8e6e1; opacity:.92}
+  .tags{display:flex; gap:6px; flex-wrap:wrap; margin-top:8px}
+  .tag{font-size:10px; padding:3px 6px; border-radius:999px; border:1px solid rgba(255,255,255,.18); color:#d9f7ff}
+  .mix{position:absolute; right:8px; top:-8px; background:#101416; border:1px solid rgba(255,255,255,.15);
+       border-radius:999px; padding:4px 8px; font-size:11px; display:flex; gap:6px; align-items:center}
+  .mix .dot{width:10px; height:10px; border-radius:50%}
+  .fav{position:absolute; left:8px; top:-8px; border-radius:999px; font-size:14px; padding:4px 7px; border:1px solid rgba(255,255,255,.15); background:rgba(255,255,255,.05)}
+
+  /* Footer actions */
+  footer{position:sticky; bottom:0; z-index:40; background:linear-gradient(0deg, rgba(0,0,0,.8), rgba(0,0,0,.5));
+         border-top:1px solid #19323a; padding:8px 10px; display:flex; gap:8px; flex-wrap:wrap; align-items:center}
+  .hint{font-size:11px; color:var(--ghost)}
+  .spacer{flex:1}
+
+  /* Modal (quick compare) */
+  dialog{border:none; border-radius:14px; width:min(720px,94vw); background:#0e1316; color:var(--ink); padding:12px 14px; box-shadow:0 20px 60px rgba(0,0,0,.55)}
+  dialog::backdrop{background:rgba(0,0,0,.6)}
+  .cmp-row{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+  .cmp{border:1px solid var(--edge); border-radius:12px; padding:10px; background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02))}
+  .axis-diff{display:flex; gap:6px; flex-wrap:wrap; margin-top:6px}
+  .axis-diff .hit{border:1px dashed rgba(255,255,255,.25); padding:4px 6px; border-radius:8px; font-size:11px}
+  .close{position:absolute; right:10px; top:10px}
+
+  /* Compact mode */
+  .compact .desc{display:none}
+  .compact .title{white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+</style>
+</head>
+<body>
+<header>
+  <div class="row">
+    <h1>RHM — 32 Media Strata</h1>
+    <span class="pill">0 = Sutton (Agent A), 1 = Patel (Agent B)</span>
+    <div class="control">
+      <label style="font-size:12px;opacity:.8">Sort</label>
+      <select id="sort">
+        <option value="k">Index (1→32)</option>
+        <option value="bin">Binary (00000→11111)</option>
+        <option value="weight">A↔B Mix (Hamming weight)</option>
+        <option value="title">Title</option>
+      </select>
+    </div>
+    <div class="control">
+      <label style="font-size:12px;opacity:.8">Group</label>
+      <select id="group">
+        <option value="none">None</option>
+        <option value="weight">By A/B Mix</option>
+        <option value="k1">By k1</option>
+        <option value="k2">By k2</option>
+        <option value="k3">By k3</option>
+        <option value="k4">By k4</option>
+        <option value="k5">By k5</option>
+      </select>
+    </div>
+    <div class="control"><input type="search" id="q" placeholder="Search text…"/></div>
+    <button id="compactBtn" title="Toggle compact">Compact</button>
+    <button id="exportBtn" title="Export visible as JSON">Export</button>
+    <div class="spacer"></div>
+  </div>
+  <div class="row axis" style="margin-top:8px">
+    <!-- Tri‑state filter chips: cycle * → A → B -->
+    <div class="chip" data-axis="k1"><span class="state" data-val="*">*</span><span>k1 Technical: <b>A</b>=Trial&Error / <b>B</b>=Cultural Data</span></div>
+    <div class="chip" data-axis="k2"><span class="state" data-val="*">*</span><span>k2 Sociological: <b>A</b>=Trap / <b>B</b>=Prior</span></div>
+    <div class="chip" data-axis="k3"><span class="state" data-val="*">*</span><span>k3 Philosophical: <b>A</b>=External / <b>B</b>=Internal</span></div>
+    <div class="chip" data-axis="k4"><span class="state" data-val="*">*</span><span>k4 Epistemic: <b>A</b>=Constructed / <b>B</b>=Transmitted</span></div>
+    <div class="chip" data-axis="k5"><span class="state" data-val="*">*</span><span>k5 Ontological: <b>A</b>=Adaptation / <b>B</b>=Preservation</span></div>
+  </div>
+</header>
+
+<main>
+  <div id="grid" aria-live="polite"></div>
+</main>
+
+<footer>
+  <span class="hint">Tip: tap a card to select; tap a second card to compare differences across axes. Long‑press ⭐ to favorite.</span>
+  <div class="spacer"></div>
+  <button id="clearSel">Clear Selection</button>
+</footer>
+
+<dialog id="cmp">
+  <button class="close" onclick="cmp.close()">✕</button>
+  <h3 style="margin:0 0 8px;color:var(--sky)">Quick Compare</h3>
+  <div class="cmp-row">
+    <div class="cmp" id="left"></div>
+    <div class="cmp" id="right"></div>
+  </div>
+  <div class="axis-diff" id="diff"></div>
+</dialog>
+
+<script>
+// ====== Data (32 strata) ======
+const AXES = [
+  { id:'k1', name:'Technical/Source', A:'TRIAL & ERROR (Experience/Action)', B:'CULTURAL DATA (Corpus/Imitation)' },
+  { id:'k2', name:'Sociological/Trap', A:'TRAP (LLMs are a psychological bias)', B:'PRIOR (LLMs are a survival necessity)' },
+  { id:'k3', name:'Philosophical/Goal', A:'EXTERNAL (Goal is reward/world change)', B:'INTERNAL (Goal is prediction/consistency)' },
+  { id:'k4', name:'Epistemological', A:'CONSTRUCTED (Knowledge is built)', B:'TRANSMITTED (Knowledge is inherited)' },
+  { id:'k5', name:'Ontological/Success', A:'ADAPTATION (survival/evolution)', B:'PRESERVATION (cultural advancement)' },
+];
+
+const STRATA = [
+  {k:1, vec:'00000', title:'The Foundational Bitter Lesson', desc:'Intelligence is defined solely by self-constructed rules from Trial & Error for External Adaptation. Pure, un-critiqued Sutton RL.'},
+  {k:2, vec:'00001', title:'RL for Cultural Succession', desc:'Trial & Error is the method, but its ultimate purpose is cultural Preservation (RL agents develop human-like social structures).'},
+  {k:3, vec:'00010', title:'RL‑Constructed Internalism', desc:'Knowledge is constructed; success is Adaptation driven by internal goals (self-determined), not external reward.'},
+  {k:4, vec:'00011', title:'RL‑Constructed Preservation', desc:'Self-constructed knowledge leads to cultural Preservation (RL agents re-discover and preserve math/science).'},
+  {k:5, vec:'00100', title:'RL’s Externalized Trap', desc:'The Bitter Lesson is a Trap—but for External goals. The trap is focusing on method over real‑world effect.'},
+  {k:6, vec:'00101', title:'RL‑Trap for Preservation', desc:'The LLM‑Trap prevents the Adaptation required to ensure long‑term Preservation of knowledge.'},
+  {k:7, vec:'00110', title:'Trap of Internal Construction', desc:'A psychological Trap: using Trial & Error for purely internal, constructed models—non‑generalizable logic.'},
+  {k:8, vec:'00111', title:'Trap of Internal Preservation', desc:'Trying to preserve culture solo via Trial & Error rather than inheriting from the past.'},
+  {k:9, vec:'01000', title:'RL‑Prior for Adaptation', desc:'Dismiss the LLM‑Prior as Trap; pursue EXTERNAL Adaptation via Trial & Error (AgA’s strongest defense).'},
+  {k:10, vec:'01001', title:'RL‑Prior for Preservation', desc:'LLM‑Prior is a Trap, hindering Adaptation that is necessary for Preservation.'},
+  {k:11, vec:'01010', title:'External Construction vs Prior', desc:'External goal‑seeking requires constructed knowledge, but LLMs (the Trap) derail the process.'},
+  {k:12, vec:'01011', title:'RL’s Epistemological Trap', desc:'The trap is Transmitting constructed knowledge instead of letting each generation Construct its own.'},
+  {k:13, vec:'01100', title:'LLM‑Prior/Internal‑Construct', desc:'LLM‑Prior is necessary for Adaptation, but goals are Internal via Constructed knowledge.'},
+  {k:14, vec:'01101', title:'LLM‑Prior/Internal‑Preservation', desc:'LLM‑Prior required for Preservation, method is Internal Construction (LLMs as final artifact).'},
+  {k:15, vec:'01110', title:'Prior → Internal Consistency', desc:'LLM‑Prior is necessary Transmission; success = Internal goal consistency (next token).'},
+  {k:16, vec:'01111', title:'Prior → Preservation Thesis', desc:'LLM‑Prior is necessary for Preservation; knowledge is Transmitted (web) to achieve this.'},
+  {k:17, vec:'10000', title:'Data/External‑Construct', desc:'Cultural Data is method; External Adaptation achieved through Constructed models (LLMs aiding RL).'},
+  {k:18, vec:'10001', title:'Data/External‑Preservation', desc:'Cultural Data as method; Preservation pursued via externalized archiving of culture.'},
+  {k:19, vec:'10010', title:'Data/Internal‑Construct', desc:'Cultural Data as method; Internal goals via Constructed models (deep semantic LLM).'},
+  {k:20, vec:'10011', title:'Data/Internal‑Preservation', desc:'Cultural Data as method; goal = Internal Preservation (maintaining internal corpus consistency).'},
+  {k:21, vec:'10100', title:'Data Trap / External Adaptation', desc:'Cultural Data is a Trap for external goals yet necessary as Adaptation scaffold.'},
+  {k:22, vec:'10101', title:'Data Trap / External Preservation', desc:'Cultural Data is a Trap for external goals but enables Preservation (messy yet essential).'},
+  {k:23, vec:'10110', title:'Data Trap / Internal Construct', desc:'Cultural Data is a Trap for RL; strength lies in Internal Construction (deep syntax).'},
+  {k:24, vec:'10111', title:'Data Trap / Internal Preservation', desc:'Cultural Data is a Trap; Transmission (corpus) is the Preservation goal itself.'},
+  {k:25, vec:'11000', title:'Prior/External‑Construct', desc:'LLM‑Prior is necessary for External Adaptation; knowledge is Constructive (generalizer for new problems).'},
+  {k:26, vec:'11001', title:'Prior/External‑Preservation', desc:'LLM‑Prior is necessary for External goals ultimately serving Preservation of human culture.'},
+  {k:27, vec:'11010', title:'Prior/Internal‑Construct', desc:'LLM‑Prior as Transmission; success = Internal goal consistency; knowledge is Constructed from inherited corpus.'},
+  {k:28, vec:'11011', title:'Prior/Internal‑Preservation', desc:'LLM‑Prior is necessary Transmission for achieving Internal Preservation.'},
+  {k:29, vec:'11100', title:'The Cultural Imperative', desc:'CULTURAL DATA as PRIOR for INTERNAL goals → ADAPTATION via CONSTRUCTION. LLM builds on prior to generalize.'},
+  {k:30, vec:'11101', title:'The Preservation Imperative', desc:'LLM‑Prior (Transmission) sets Internal goals that drive cultural Preservation.'},
+  {k:31, vec:'11110', title:'The Transmitted Paradigm', desc:'LLM‑Prior as TRANSMISSION for INTERNAL goals → ADAPTATION (by modeling human behavior).'},
+  {k:32, vec:'11111', title:'The Ultimate Cultural Axiom', desc:'Intelligence = CULTURAL DATA (Transmission/Prior) for INTERNAL GOALS toward PRESERVATION. Pure, un‑critiqued Patel LLM.'},
+];
+
+// ====== Helpers ======
+const $ = sel => document.querySelector(sel);
+const grid = $('#grid');
+let compact = false;
+let sel = []; // currently selected for compare
+
+function lerp(a,b,t){return a+(b-a)*t}
+function mix(aHex, bHex, t){
+  const a = [(aHex>>16)&255,(aHex>>8)&255,aHex&255];
+  const b = [(bHex>>16)&255,(bHex>>8)&255,bHex&255];
+  const m = a.map((x,i)=>Math.round(lerp(x,b[i],t)));
+  return `rgb(${m[0]},${m[1]},${m[2]})`;
+}
+const COL_A = 0x21ff86, COL_B = 0xff4b9a;
+
+// Compute weight + tags per stratum
+for(const s of STRATA){
+  s.bits = s.vec.split('').map(x=>+x);
+  s.weight = s.bits.reduce((a,b)=>a+b,0);
+  s.tags = AXES.map((ax,i)=>`${ax.id}:${s.bits[i]?'B':'A'}`);
+}
+
+// ====== Rendering ======
+function cardHTML(s){
+  const t = s.weight/5;
+  const color = mix(COL_A, COL_B, t);
+  return `<div class="card" data-k="${s.k}" data-vec="${s.vec}" data-weight="${s.weight}" role="button" aria-label="Stratum ${s.k}">
+    <button class="fav" title="Favorite">⭐</button>
+    <div class="mix"><span class="dot" style="background:${mix(COL_A, COL_B, 0)}"></span><span>${s.weight} / 5</span><span class="dot" style="background:${mix(COL_A, COL_B, 1)}"></span></div>
+    <div class="kline">
+      <div class="k">k=${s.k}</div>
+      <div class="vec" style="color:${color}">${s.vec}</div>
+    </div>
+    <div class="title">${s.title}</div>
+    <div class="desc">${s.desc}</div>
+    <div class="tags">${s.tags.map(t=>`<span class="tag">${t}</span>`).join('')}</div>
+  </div>`;
+}
+
+function render(){
+  const q = $('#q').value.trim().toLowerCase();
+  const axisState = ['k1','k2','k3','k4','k5'].map(id => $('.chip[data-axis="'+id+'"] .state').dataset.val);
+  // filter
+  let items = STRATA.filter(s => {
+    // text
+    if(q && !(s.title.toLowerCase().includes(q) || s.desc.toLowerCase().includes(q) || s.vec.includes(q))) return false;
+    // axis tri-state
+    for(let i=0;i<5;i++){
+      const st = axisState[i]; if(st==='*') continue;
+      const want = (st==='A'?0:1); if(s.bits[i]!==want) return false;
+    }
+    return true;
+  });
+  // sort
+  const sort = $('#sort').value;
+  items.sort((a,b)=>{
+    if(sort==='k') return a.k-b.k;
+    if(sort==='bin') return a.vec.localeCompare(b.vec);
+    if(sort==='weight') return a.weight-b.weight || a.k-b.k;
+    if(sort==='title') return a.title.localeCompare(b.title);
+    return 0;
+  });
+  // group
+  const group = $('#group').value;
+  let html='';
+  if(group==='none'){
+    html = items.map(cardHTML).join('');
+  }else{
+    const groups = {};
+    for(const s of items){
+      let key = '';
+      if(group==='weight') key = `Mix ${s.weight}/5`;
+      else if(group.startsWith('k')){
+        const idx = parseInt(group.slice(1))-1;
+        key = `${group.toUpperCase()} = ${(s.bits[idx]?'B':'A')}`;
+      }
+      (groups[key] ||= []).push(s);
+    }
+    const keys = Object.keys(groups).sort();
+    html = keys.map(k => `<div class="pill" style="margin:6px 4px">${k}</div>` + groups[k].map(cardHTML).join('')).join('');
+  }
+  grid.classList.toggle('compact', compact);
+  grid.innerHTML = html;
+  wireCards();
+}
+
+function wireCards(){
+  grid.querySelectorAll('.card').forEach(el=>{
+    const k = +el.dataset.k;
+    el.addEventListener('click', e=>{
+      if(e.target.classList.contains('fav')){
+        e.target.classList.toggle('active');
+        return;
+      }
+      if(!sel.includes(k)) sel.push(k);
+      sel = sel.slice(-2);
+      if(sel.length===2) showCompare(sel[0], sel[1]);
+    });
+  });
+}
+
+function showCompare(kL, kR){
+  const L = STRATA.find(x=>x.k===kL), R = STRATA.find(x=>x.k===kR);
+  const left = `
+    <div class="kline"><div class="k">k=${L.k}</div><div class="vec">${L.vec}</div></div>
+    <div class="title">${L.title}</div>
+    <div class="desc">${L.desc}</div>
+  `;
+  const right = `
+    <div class="kline"><div class="k">k=${R.k}</div><div class="vec">${R.vec}</div></div>
+    <div class="title">${R.title}</div>
+    <div class="desc">${R.desc}</div>
+  `;
+  $('#left').innerHTML = left;
+  $('#right').innerHTML = right;
+  const diffs = [];
+  for(let i=0;i<5;i++){
+    if(L.bits[i]!==R.bits[i]){
+      diffs.push(`<span class="hit">${AXES[i].id}: ${L.bits[i]?'B':'A'} → ${R.bits[i]?'B':'A'} <em style="opacity:.7">(${AXES[i].name})</em></span>`);
+    }
+  }
+  $('#diff').innerHTML = diffs.length? diffs.join('') : '<span class="hit">No axis differences</span>';
+  $('#cmp').showModal();
+}
+
+// axis chip cycling
+document.querySelectorAll('.chip').forEach(ch=>{
+  ch.addEventListener('click', ()=>{
+    const s = ch.querySelector('.state');
+    s.dataset.val = s.dataset.val==='*' ? 'A' : (s.dataset.val==='A' ? 'B' : '*');
+    s.textContent = s.dataset.val;
+    render();
+  });
+});
+
+// controls
+$('#sort').addEventListener('change', render);
+$('#group').addEventListener('change', render);
+$('#q').addEventListener('input', render);
+$('#compactBtn').addEventListener('click', ()=>{compact=!compact; render()});
+$('#exportBtn').addEventListener('click', ()=>{
+  // export visible cards as JSON
+  const ks = Array.from(grid.querySelectorAll('.card')).map(el=>+el.dataset.k);
+  const out = STRATA.filter(s=>ks.includes(s.k));
+  const blob = new Blob([JSON.stringify(out,null,2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download='RHM_visible_layers.json'; a.click();
+  URL.revokeObjectURL(url);
+});
+$('#clearSel').addEventListener('click', ()=>{sel=[];});
+
+// initial
+render();
+</script>
+</body>
+</html>

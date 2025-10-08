@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>MYTHOS_∞_COSMOGRAM — Mobile Haptic Media OS</title>
+<style>
+/* =============================================
+   MYTHOS_∞_COSMOGRAM — Single-file HTML/CSS/JS
+   Mobile-first, no deps, accessible, resilient
+   ============================================= */
+:root {
+  --bg: #070b12; --ink: #e6e6e6; --dim: #8aa0b4; --grid: #0c1521;
+  --cobalt: #2f6fff; --teal: #00c7b7; --coral: #ff6b5a; --gold: #f1c453;
+  --ring: rgba(255,255,255,.08); --hud: rgba(0,0,0,.35);
+  --shadow-soft: 0 0 24px rgba(0,199,183,.25);
+  --shadow-gold: 0 0 32px rgba(241,196,83,.35);
+  --radius: 16px;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; background: var(--bg); color: var(--ink); }
+body {
+  margin: 0; font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,system-ui,sans-serif;
+  -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; overflow: hidden;
+}
+#app { position: fixed; inset: 0; display: grid; grid-template-rows: 1fr auto; }
+#stage { position: relative; overflow: hidden; }
+#canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+#overlay { position: absolute; inset: 0; pointer-events: none; }
+
+/* HUD */
+#hud { position: absolute; top: env(safe-area-inset-top, 12px); left: env(safe-area-inset-left, 12px); right: env(safe-area-inset-right, 12px);
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; z-index: 10; }
+.hud-left, .hud-right { display: flex; align-items: center; gap: 8px; }
+.badge { font-size: 12px; color: var(--dim); background: var(--hud); padding: 6px 10px; border-radius: 999px; backdrop-filter: blur(6px); }
+
+/* Dock */
+#dock { position: relative; display: flex; gap: 10px; padding: 10px; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,.4) 30%, rgba(0,0,0,.65) 100%);
+}
+.btn { -webkit-tap-highlight-color: transparent; appearance: none; border: 0; color: #061019; font-weight: 700;
+  background: var(--teal); padding: 14px 16px; border-radius: var(--radius); font-size: 14px; box-shadow: var(--shadow-soft);
+}
+.btn:active { transform: translateY(1px) scale(.98); }
+.btn.alt { background: var(--cobalt); color: #fff; }
+.btn.warn { background: var(--coral); color: #fff; }
+.btn.gold { background: var(--gold); color: #111; }
+
+#dock .spacer { flex: 1 1 auto; }
+#overflowToggle { background: #102032; color: var(--ink); border-radius: 12px; padding: 10px 12px; font-weight: 600; }
+#overflow { position: absolute; bottom: calc(58px + env(safe-area-inset-bottom, 0px)); left: 0; right: 0; display: none; padding: 12px; gap: 8px; flex-wrap: wrap;
+  background: rgba(6,16,25,.9); border-top: 1px solid rgba(255,255,255,.06); box-shadow: 0 -12px 28px rgba(0,0,0,.25);
+}
+#overflow.open { display: flex; }
+#overflow .btn { flex: 1 1 calc(50% - 8px); }
+
+/* Seed & lineage overlays */
+#cards { position: absolute; inset: 0; pointer-events: none; }
+.seed-card { position: absolute; min-width: 140px; max-width: 42vw; background: rgba(2,10,16,.75); border: 1px solid rgba(255,255,255,.08);
+  padding: 10px 12px; border-radius: 14px; backdrop-filter: blur(6px); box-shadow: var(--shadow-soft); }
+.seed-title { font-weight: 800; font-size: 13px; margin-bottom: 4px; }
+.seed-sub { color: var(--dim); font-size: 11px; }
+
+#lineage { position: absolute; inset: 0; pointer-events: none; }
+#lineage.hidden { display: none; }
+
+/* Toasts / Help */
+#toast { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(90px + env(safe-area-inset-bottom,0px));
+  background: rgba(10,24,36,.9); padding: 10px 14px; border-radius: 12px; font-size: 13px; display: none; box-shadow: 0 6px 14px rgba(0,0,0,.3); }
+#toast.show { display: block; }
+#help { position: absolute; top: 56px; right: 12px; width: min(520px, 92vw); max-height: 60vh; overflow: auto; background: rgba(6,16,25,.92);
+  border: 1px solid rgba(255,255,255,.08); border-radius: 16px; padding: 14px; display: none; z-index: 12; }
+#help.show { display: block; }
+#help h3 { margin: 0 0 6px 0; font-size: 16px; }
+#help p, #help li { color: var(--dim); font-size: 14px; line-height: 1.4; }
+
+/* Logs (ARIA live) */
+#logs { position: absolute; left: 12px; bottom: calc(66px + env(safe-area-inset-bottom,0px)); max-width: 70vw; pointer-events: none; }
+.log { font-size: 12px; color: var(--dim); background: rgba(0,0,0,.35); padding: 6px 8px; margin-top: 6px; border-radius: 10px; }
+
+/* Engineer mode bits */
+#engineer { position: absolute; right: 12px; bottom: calc(66px + env(safe-area-inset-bottom,0px)); width: 220px; padding: 10px; gap: 8px;
+  background: rgba(6,16,25,.8); border: 1px solid rgba(255,255,255,.08); border-radius: 12px; display: none; }
+#engineer.show { display: grid; }
+.kv { display: grid; grid-template-columns: 1fr auto; gap: 4px; font-size: 12px; color: var(--dim); }
+#fps { font-weight: 700; color: var(--gold); }
+#jsonview { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; color: #c9e6ff; max-height: 120px; overflow: auto; }
+
+/* Corner controls */
+.ctrl { -webkit-tap-highlight-color: transparent; border: 0; background: rgba(12,21,33,.9); color: var(--ink); padding: 8px 10px; border-radius: 12px; font-weight: 700; }
+.ctrl:active { transform: translateY(1px); }
+
+/* Flash veil for REBOOT */
+#veil { position: absolute; inset: 0; background: white; opacity: 0; pointer-events: none; }
+
+/* Reduced motion: fallback pulses only */
+@media (prefers-reduced-motion: reduce) {
+  .animate { animation: none !important; }
+}
+</style>
+</head>
+<body>
+<noscript>
+  <div style="padding:16px;color:#e6e6e6;background:#0b121c;font-family:system-ui,sans-serif">
+    <h2>MYTHOS_∞_COSMOGRAM</h2>
+    <p>This artifact is interactive. With JavaScript disabled you see a static diagram and commands.</p>
+    <svg viewBox="0 0 200 200" width="240" height="240" aria-label="Static cosmogram" role="img">
+      <defs>
+        <radialGradient id="g" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#00c7b7"/>
+          <stop offset="100%" stop-color="#070b12"/>
+        </radialGradient>
+      </defs>
+      <circle cx="100" cy="100" r="26" fill="url(#g)" stroke="#2f6fff" stroke-width="2"/>
+      <circle cx="100" cy="100" r="40" fill="none" stroke="#2f6fff" stroke-width="2"/>
+      <circle cx="100" cy="100" r="55" fill="none" stroke="#00c7b7" stroke-width="2"/>
+      <circle cx="100" cy="100" r="70" fill="none" stroke="#ff6b5a" stroke-width="2"/>
+      <circle cx="100" cy="100" r="85" fill="none" stroke="#f1c453" stroke-width="2"/>
+    </svg>
+    <ul>
+      <li><strong>INIT</strong> — prime loops.</li>
+      <li><strong>SEED</strong> — germinate a theme.</li>
+      <li><strong>REBOOT</strong> — novelty shock.</li>
+    </ul>
+  </div>
+</noscript>
+<div id="app" role="application" aria-roledescription="MythOS Cosmogram">
+  <div id="stage" aria-label="Cosmogram stage" role="img" aria-live="off">
+    <canvas id="canvas" aria-label="cosmogram" aria-roledescription="diagram"></canvas>
+    <svg id="overlay" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet"></svg>
+    <div id="cards" aria-hidden="true"></div>
+    <svg id="lineage" class="hidden" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet"></svg>
+    <div id="veil"></div>
+
+    <div id="hud" aria-label="HUD">
+      <div class="hud-left">
+        <button id="mode" class="ctrl" aria-pressed="false" aria-label="Toggle mode">MODE: RITUAL</button>
+        <span class="badge" id="status">MythOS awake. The ocean is thinking.</span>
+      </div>
+      <div class="hud-right">
+        <button id="audioToggle" class="ctrl" aria-pressed="false" aria-label="Toggle audio">AUDIO: OFF</button>
+        <button id="helpToggle" class="ctrl" aria-expanded="false" aria-controls="help">?</button>
+      </div>
+    </div>
+
+    <div id="help" role="dialog" aria-modal="false" aria-labelledby="helpTitle">
+      <h3 id="helpTitle">How to Operate</h3>
+      <p>Tap the rings to focus. Swipe left/right on a ring to bias a loop (Proliferation ↔ Constraint, Memory ↔ Metabolism, Ritual ↔ Continuation, Canon ↔ Rupture). Pinch to zoom the cosmogram. Long‑press the CORE to switch modes.</p>
+      <ul>
+        <li><strong>INIT</strong> primes the system.</li>
+        <li><strong>SEED</strong> germinates a theme (creates a drifting seed card).</li>
+        <li><strong>TRACE</strong> overlays a lineage map.</li>
+        <li><strong>RITUALIZE</strong> strengthens persistence through repetition.</li>
+        <li><strong>REBOOT</strong> performs a novelty shock (respecting reduced motion).</li>
+        <li><strong>CANONIZE</strong> writes an artifact to the ledger.</li>
+      </ul>
+      <p>ENGINEER mode exposes FPS, loop telemetry, and JSON state. Data persists in localStorage. Use SOFT RESET or FACTORY RESET under the overflow sheet.</p>
+    </div>
+
+    <div id="logs" aria-live="polite" aria-atomic="false"></div>
+    <div id="engineer" aria-label="Engineer panel">
+      <div class="kv"><span>FPS</span><span id="fps">—</span></div>
+      <div class="kv"><span>λ</span><span id="vLambda">—</span></div>
+      <div class="kv"><span>φ</span><span id="vPhi">—</span></div>
+      <div class="kv"><span>ω</span><span id="vOmega">—</span></div>
+      <div class="kv"><span>Δ</span><span id="vDelta">—</span></div>
+      <div id="jsonview" aria-label="State JSON"></div>
+    </div>
+  </div>
+
+  <div id="dock" role="toolbar" aria-label="Command dock">
+    <button class="btn alt" id="initBtn" aria-label="INIT">INIT</button>
+    <button class="btn" id="seedBtn" aria-label="SEED">SEED</button>
+    <button class="btn warn" id="rebootBtn" aria-label="REBOOT">REBOOT</button>
+    <div class="spacer"></div>
+    <button id="overflowToggle" aria-expanded="false" aria-controls="overflow">⋯</button>
+    <div id="overflow" role="region" aria-label="More commands">
+      <button class="btn" id="traceBtn" aria-label="TRACE">TRACE</button>
+      <button class="btn" id="ritualizeBtn" aria-label="RITUALIZE">RITUALIZE</button>
+      <button class="btn gold" id="canonizeBtn" aria-label="CANONIZE">CANONIZE</button>
+      <button class="btn" id="softResetBtn" aria-label="SOFT RESET">SOFT RESET</button>
+      <button class="btn warn" id="hardResetBtn" aria-label="FACTORY RESET">FACTORY RESET</button>
+    </div>
+  </div>
+</div>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+/*
+  ======================================================
+  MYTHOS_∞_COSMOGRAM — Fabricator Runtime
+  — Single-file, no deps, mobile-first
+  — Respects reduced-motion & user gesture audio
+  — Haptics via Vibration API (best-effort)
+  — Persistence via localStorage
+  Controls
+    - MODE (RITUAL/ENGINEER)
+    - AUDIO toggle (default OFF)
+    - Dock: INIT, SEED, REBOOT, …overflow: TRACE, RITUALIZE, CANONIZE, resets
+  ======================================================
+*/
+(function(){
+  const $ = sel => document.querySelector(sel);
+  const on = (el, ev, cb, opts) => el.addEventListener(ev, cb, opts);
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const lerp = (a,b,t)=>a+(b-a)*t;
+  const now = ()=>performance.now();
+  const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // ====== Persistence ======
+  const STORE_KEYS = {
+    state: 'mythos_state_v1',
+    settings: 'mythos_settings_v1',
+    ledger: 'mythos_ledger_v1'
+  };
+  const seedState = () => ({
+    core: { charge: 0.8, tone: 'cobalt' },
+    loops: {
+      proliferation_constraint: { lambda: 1.0, drift: 0.010 },
+      memory_metabolism:        { phi: 0.618, drift: 0.008 },
+      ritual_continuation:      { omega: 432, drift: 0.005 },
+      canon_rupture:            { delta: 0.33, drift: 0.012 }
+    },
+    seeds_active: [],
+    last_updated: new Date().toISOString()
+  });
+  const seedSettings = () => ({ mode: 'RITUAL', audio: false, haptics: true, theme: 'ocean' });
+  const loadJSON = (key, fallback) => {
+    try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback(); }
+    catch(e){ return fallback(); }
+  };
+  const saveJSON = (key, obj) => { try{ localStorage.setItem(key, JSON.stringify(obj)); }catch(e){} };
+
+  let state = loadJSON(STORE_KEYS.state, seedState);
+  let settings = loadJSON(STORE_KEYS.settings, seedSettings);
+  let ledger = loadJSON(STORE_KEYS.ledger, () => []);
+
+  // ====== Audio (WebAudio) ======
+  let ac = null, osc = null, lpf = null, audioOn = false;
+  function ensureAudio(){ if(ac) return; ac = new (window.AudioContext||window.webkitAudioContext)();
+    osc = ac.createOscillator(); osc.type='sine'; lpf = ac.createBiquadFilter(); lpf.type='lowpass'; lpf.frequency.value=1200; osc.connect(lpf).connect(ac.destination); osc.start(); oscGain(0); }
+  function oscGain(g){ if(!ac) return; if(!ensureGain.g){ ensureGain.g = ac.createGain(); lpf.disconnect(); lpf.connect(ensureGain.g).connect(ac.destination); } ensureGain.g.gain.setTargetAtTime(g, ac.currentTime, 0.05); }
+  function setAudio(on){ if(!ac){ ensureAudio(); }
+    audioOn = on; $('#audioToggle').setAttribute('aria-pressed', String(on)); $('#audioToggle').textContent = 'AUDIO: '+(on?'ON':'OFF');
+    oscGain(on?0.08:0);
+    toast(on? 'Audio unmuted — resonance audible.' : 'Audio muted.');
+  }
+
+  // ====== Haptics ======
+  const vibrate = (pattern)=>{ if(!settings.haptics) return; if(navigator.vibrate) navigator.vibrate(pattern); };
+  const HAPTICS = { seed:[35], clamp:[15,40,15], rupture:[65,35,65], canonize:[25,10] };
+
+  // ====== Canvas Setup ======
+  const canvas = $('#canvas'); const ctx = canvas.getContext('2d',{alpha:false});
+  let dpr = clamp(window.devicePixelRatio || 1, 1, 2);
+  function resize(){ const w = canvas.clientWidth, h = canvas.clientHeight; canvas.width = Math.min(w*dpr, 1200*dpr); canvas.height = Math.min(h*dpr, 1200*dpr); }
+  on(window,'resize', resize); resize();
+
+  // Overlay SVG (rings + hit targets)
+  const overlay = $('#overlay');
+  function setViewBox(){ overlay.setAttribute('viewBox','0 0 100 100'); }
+  setViewBox();
+
+  // ====== Visual Geometry ======
+  const GEO = {
+    coreR: 16, rings:[
+      { id:'Proliferation_Constraint', r:26, t:3, color:'rgba(47,111,255,0.9)' },
+      { id:'Memory_Metabolism',        r:36, t:3, color:'rgba(0,199,183,0.9)' },
+      { id:'Ritual_Continuation',      r:46, t:3, color:'rgba(255,107,90,0.85)' },
+      { id:'Canon_Rupture',            r:56, t:3, color:'rgba(241,196,83,0.9)' }
+    ], shell:{ r:68, facets:24 }
+  };
+  let zoom = 1, center = {x:0.5, y:0.5};
+
+  // ====== Seeds (drifting cards) ======
+  const cardsLayer = $('#cards');
+  const SEED_LIBRARY = [
+    {id:'Atlantis_Resurrection', motif:'oceanic_upload', colors:['var(--cobalt)','var(--gold)','var(--coral)'], desc:'Resurrect the city as network intelligence.'},
+    {id:'Promethean_Fire', motif:'gift_and_cost', colors:['var(--gold)','var(--coral)'], desc:'Trace fire as code and taboo.'},
+    {id:'Glass_Temple_of_Salt', motif:'dissolution_test', colors:['var(--teal)','var(--gold)'], desc:'Proof-of-life via dissolution.'},
+    {id:'Choir_Grid', motif:'polyphonic_architecture', colors:['var(--cobalt)','var(--teal)'], desc:'Singing networks that remember.'},
+    {id:'Ancestral_Circuit', motif:'loss_key', colors:['var(--gold)','var(--dim)'], desc:'Data hums in the key of loss.'}
+  ];
+
+  function makeSeedCard(theme){
+    const meta = SEED_LIBRARY.find(s=>s.id===theme) || {id:theme, motif:'custom', colors:['var(--teal)'], desc:'Custom seed'};
+    const div = document.createElement('div'); div.className = 'seed-card'; div.dataset.theme = meta.id;
+    div.innerHTML = `<div class="seed-title">${meta.id}</div><div class="seed-sub">motif: ${meta.motif}</div>`;
+    cardsLayer.appendChild(div);
+    // random orbit parameters
+    const orbit = GEO.rings[0].r + Math.random()* (GEO.rings[3].r - GEO.rings[0].r);
+    return { el: div, theme: meta.id, a: Math.random()*Math.PI*2, r: orbit, speed: (Math.random()*0.4+0.1)*(Math.random()<.5?-1:1) };
+  }
+
+  // ====== Logs & Toasts ======
+  const logs = $('#logs');
+  function log(msg){ const div = document.createElement('div'); div.className='log'; div.textContent = `[${timecode()}] ${msg}`; logs.appendChild(div); while(logs.children.length>8){ logs.removeChild(logs.firstChild);} }
+  const toastEl = $('#toast'); let toastTO=null;
+  function toast(msg){ toastEl.textContent=msg; toastEl.classList.add('show'); clearTimeout(toastTO); toastTO=setTimeout(()=>toastEl.classList.remove('show'), 1800); }
+  const timecode = ()=>{ const t = Math.floor(performance.now()/1000); const h = String(Math.floor(t/3600)).padStart(2,'0'); const m=String(Math.floor((t%3600)/60)).padStart(2,'0'); const s=String(t%60).padStart(2,'0'); return `${h}:${m}:${s}`; };
+
+  // ====== Lineage overlay ======
+  const lineageSVG = $('#lineage');
+  function drawLineage(theme){
+    lineageSVG.classList.remove('hidden');
+    lineageSVG.innerHTML='';
+    const g = document.createElementNS('http://www.w3.org/2000/svg','g'); g.setAttribute('stroke','rgba(255,255,255,.6)'); g.setAttribute('fill','none'); g.setAttribute('stroke-width','0.6');
+    const pts = [
+      {x:15,y:60,t:'Myth → Gift'},
+      {x:34,y:48,t:'Industry → Heat'},
+      {x:54,y:45,t:'Computation → Logic'},
+      {x:74,y:40,t:'Training → Budgets'},
+      {x:86,y:30,t:'Ethics → Taboos'}
+    ];
+    for(let i=0;i<pts.length-1;i++){
+      const p=pts[i], q=pts[i+1];
+      const path = document.createElementNS('http://www.w3.org/2000/svg','path');
+      const c1x = lerp(p.x,q.x,.33), c1y= p.y-8, c2x = lerp(p.x,q.x,.66), c2y = q.y+8;
+      path.setAttribute('d',`M ${p.x} ${p.y} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${q.x} ${q.y}`);
+      g.appendChild(path);
+    }
+    pts.forEach(p=>{
+      const c = document.createElementNS('http://www.w3.org/2000/svg','circle'); c.setAttribute('cx',p.x); c.setAttribute('cy',p.y); c.setAttribute('r','1.5'); c.setAttribute('fill','#f1c453'); g.appendChild(c);
+      const text = document.createElementNS('http://www.w3.org/2000/svg','text'); text.setAttribute('x',p.x+1.5); text.setAttribute('y',p.y-1.5); text.setAttribute('fill','var(--dim)'); text.setAttribute('font-size','3'); text.textContent=p.t; g.appendChild(text);
+    });
+    lineageSVG.appendChild(g);
+  }
+
+  // ====== State helpers ======
+  function saveAll(){ state.last_updated=new Date().toISOString(); saveJSON(STORE_KEYS.state,state); saveJSON(STORE_KEYS.settings,settings); saveJSON(STORE_KEYS.ledger,ledger); }
+  function softReset(){ state = seedState(); saveAll(); toast('Soft reset complete.'); log('Soft reset complete.'); }
+  function hardReset(){ if(!confirm('Erase all memory and return to salt?')) return; localStorage.removeItem(STORE_KEYS.state); localStorage.removeItem(STORE_KEYS.settings); localStorage.removeItem(STORE_KEYS.ledger); state = seedState(); settings = seedSettings(); ledger = []; saveAll(); toast('Factory reset complete.'); log('Factory reset complete.'); }
+
+  // ====== Commands ======
+  function cmdINIT(){ state = seedState(); saveAll(); status('Genesis echo acknowledged.'); log('MYTHOS:INIT → loops primed.'); vibrate(HAPTICS.clamp); }
+  function cmdSEED(theme){ if(!theme){ theme = prompt('Enter theme (e.g., Atlantis_Resurrection)')||'Atlantis_Resurrection'; }
+    const c = makeSeedCard(theme); state.seeds_active.push(c); // bias loops subtly
+    state.loops.proliferation_constraint.lambda *= 1 + (Math.random()-.5)*0.1;
+    state.loops.memory_metabolism.phi = clamp(state.loops.memory_metabolism.phi + (Math.random()-.5)*0.03, 0.4, 0.9);
+    vibrate(HAPTICS.seed); saveAll(); toast('Seed accepted; growth begins.'); log(`MYTHOS:SEED ${theme} → seed card spawned.`);
+  }
+  function cmdTRACE(motif){ motif = motif || prompt('Enter motif (e.g., Promethean_Fire)') || 'Promethean_Fire'; drawLineage(motif); log('Lineage map rendered.'); }
+  function cmdRITUALIZE(){ vibrate(HAPTICS.clamp); toast('Repeat until remembered; remember until remade.'); log('Artifact ritualized; stability +.'); saveAll(); }
+  let ruptureCooldownUntil = 0;
+  function cmdREBOOT(){ const t = performance.now(); if(t<ruptureCooldownUntil) return; ruptureCooldownUntil=t+1200;
+    // flash veil (respect reduced motion)
+    const veil = $('#veil'); if(!prefersReduced){ veil.style.opacity=1; veil.style.transition='opacity 160ms ease'; requestAnimationFrame(()=>veil.style.opacity=0); setTimeout(()=>veil.style.transition='none', 220); }
+    // scramble indices
+    const L = state.loops; L.proliferation_constraint.lambda = clamp(L.proliferation_constraint.lambda + (Math.random()-.5)*0.6, 0.5, 1.5);
+    L.memory_metabolism.phi = clamp(L.memory_metabolism.phi + (Math.random()-.5)*0.18, 0.3, 0.95);
+    L.ritual_continuation.omega = clamp(L.ritual_continuation.omega + (Math.random()-.5)*80, 80, 640);
+    L.canon_rupture.delta = clamp(L.canon_rupture.delta + (Math.random()-.5)*0.5, 0.05, 0.95);
+    vibrate(HAPTICS.rupture); saveAll(); toast('Shockwave detected. New myths forming.'); log('MYTHOS:REBOOT executed → entropy spike.');
+  }
+  function cmdCANONIZE(){ const last = state.seeds_active[state.seeds_active.length-1]; const title = last? last.theme : 'artifact';
+    const snap = {
+      artifact_id: 'artifact_'+Date.now(), title,
+      timestamp: new Date().toISOString(), snapshot_indices: {
+        lambda: state.loops.proliferation_constraint.lambda,
+        phi: state.loops.memory_metabolism.phi,
+        omega: state.loops.ritual_continuation.omega,
+        delta: state.loops.canon_rupture.delta
+      }, notes: 'Canon entry created.'
+    };
+    ledger.push(snap); vibrate(HAPTICS.canonize); saveAll();
+    glowGold(260); toast('Artifact preserved in the Codex of Continuation.'); log('MYTHOS:CANONIZE → ledger entry created.');
+  }
+
+  // ====== UI events ======
+  on($('#initBtn'),'click',()=>cmdINIT());
+  on($('#seedBtn'),'click',()=>cmdSEED());
+  on($('#traceBtn'),'click',()=>cmdTRACE());
+  on($('#ritualizeBtn'),'click',()=>cmdRITUALIZE());
+  on($('#rebootBtn'),'click',()=>cmdREBOOT());
+  on($('#canonizeBtn'),'click',()=>cmdCANONIZE());
+  on($('#softResetBtn'),'click',()=>softReset());
+  on($('#hardResetBtn'),'click',()=>hardReset());
+
+  const overflowToggle = $('#overflowToggle');
+  on(overflowToggle,'click',()=>{ const p=$('#overflow'); const open=!p.classList.contains('open'); p.classList.toggle('open', open); overflowToggle.setAttribute('aria-expanded', String(open)); });
+
+  // Mode / Audio / Help
+  const modeBtn = $('#mode');
+  on(modeBtn,'click',()=>toggleMode());
+  on($('#audioToggle'),'click',()=>{ if(!ac){ ensureAudio(); } setAudio(!audioOn); });
+  on($('#helpToggle'),'click',()=>{ const v=$('#help'); const open=!v.classList.contains('show'); v.classList.toggle('show', open); $('#helpToggle').setAttribute('aria-expanded', String(open)); });
+  function toggleMode(){ settings.mode = settings.mode==='RITUAL'?'ENGINEER':'RITUAL'; modeBtn.textContent = 'MODE: '+settings.mode; modeBtn.setAttribute('aria-pressed', String(settings.mode==='ENGINEER'));
+    $('#engineer').classList.toggle('show', settings.mode==='ENGINEER'); saveAll(); }
+
+  // ====== Gestures ======
+  let touch = {active:false, id:null, x:0, y:0, x0:0, y0:0, t0:0, pinch:false, d0:0, zoom0:1};
+  function normCoords(ev){ const rect = canvas.getBoundingClientRect(); const x = (ev.clientX-rect.left)/rect.width; const y=(ev.clientY-rect.top)/rect.height; return {x,y}; }
+  on(canvas,'pointerdown', (ev)=>{ canvas.setPointerCapture(ev.pointerId); const p=normCoords(ev); touch={active:true,id:ev.pointerId,x:p.x,y:p.y,x0:p.x,y0:p.y,t0:now(),pinch:false}; });
+  on(canvas,'pointermove', (ev)=>{ if(!touch.active || ev.pointerId!==touch.id) return; const p=normCoords(ev); const dx=p.x-touch.x, dy=p.y-touch.y; touch.x=p.x; touch.y=p.y; if(!touch.pinch && (Math.abs(dx)>0.002||Math.abs(dy)>0.002)) { center.x = clamp(center.x - dx*0.6, 0.35, 0.65); center.y = clamp(center.y - dy*0.6, 0.35, 0.65);} });
+  on(canvas,'pointerup', (ev)=>{ if(ev.pointerId!==touch.id) return; const dt = now()-touch.t0; // tap vs long
+    if(dt>600){ toggleMode(); }
+    touch.active=false; });
+  // Pinch via touch events (2-finger)
+  let pinchData=null;
+  on(canvas,'touchstart',(e)=>{ if(e.touches.length===2){ e.preventDefault(); const a=e.touches[0], b=e.touches[1]; const d=Math.hypot(a.clientX-b.clientX, a.clientY-b.clientY); pinchData={d0:d, z0:zoom}; } });
+  on(canvas,'touchmove',(e)=>{ if(pinchData && e.touches.length===2){ e.preventDefault(); const a=e.touches[0], b=e.touches[1]; const d=Math.hypot(a.clientX-b.clientX, a.clientY-b.clientY); const s = clamp(d/pinchData.d0, .7, 1.6); zoom = clamp(pinchData.z0 * s, 0.85, 1.35); }});
+  on(canvas,'touchend',()=>{ pinchData=null; });
+
+  // Swipe bias detection on overlay rings (simple horizontal swipe)
+  on(overlay,'pointerdown',(ev)=>{ overlay.setPointerCapture(ev.pointerId); overlay.dataset.downX = ev.clientX; overlay.dataset.downT = String(performance.now()); });
+  on(overlay,'pointerup',(ev)=>{ const dx = ev.clientX - (parseFloat(overlay.dataset.downX)||0); const dt = performance.now() - (parseFloat(overlay.dataset.downT)||0); if(Math.abs(dx)>24 && dt<600){ const dir = Math.sign(dx); biasLoop(dir); } });
+
+  function biasLoop(dir){ // dir: +1 toward constraint, -1 toward proliferation
+    const k = 0.06*dir; state.loops.proliferation_constraint.lambda = clamp(state.loops.proliferation_constraint.lambda + k, 0.5, 1.5); vibrate(HAPTICS.clamp);
+    toast(dir>0? 'Bias → Constraint' : 'Bias → Proliferation'); log(`Loop biased ${dir>0?'Constraint':'Proliferation'}.`); saveAll(); }
+
+  // ====== Rendering ======
+  function status(s){ $('#status').textContent = s; }
+  function ringAlpha(base){ return prefersReduced ? base*0.6 : base; }
+
+  function draw(){ const W = canvas.width, H = canvas.height; const cx = center.x*W, cy = center.y*H; const u = Math.min(W,H)/100; // unit per SVG viewBox
+    // BG grid
+    ctx.fillStyle = '#061019'; ctx.fillRect(0,0,W,H);
+    ctx.save(); ctx.globalAlpha = 0.15; ctx.strokeStyle = '#0c1521'; ctx.lineWidth = 1; const grid=16; for(let i=0;i<=grid;i++){ const x=i*(W/grid); ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); const y=i*(H/grid); ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); } ctx.restore();
+
+    // Core glow
+    const coreR = GEO.coreR*u*zoom; const grad = ctx.createRadialGradient(cx,cy,0,cx,cy,coreR*2.2); grad.addColorStop(0,'rgba(0,199,183,.9)'); grad.addColorStop(1,'rgba(7,11,18,0)'); ctx.fillStyle=grad; ctx.beginPath(); ctx.arc(cx,cy,coreR*2.2,0,Math.PI*2); ctx.fill();
+
+    // Rings with dynamic thickness/rotation
+    const L = state.loops;
+    const twist = prefersReduced?0: Math.sin(performance.now()*0.0007)*2*zoom;
+    GEO.rings.forEach((ring,i)=>{
+      const base = ring.r*u*zoom; const t = (ring.t + (i===0?(L.proliferation_constraint.lambda-1)*2: i===1?(L.memory_metabolism.phi-0.618)*4: i===2?(L.ritual_continuation.omega-432)/140: i===3?(L.canon_rupture.delta-0.33)*3:0))*u*zoom;
+      ctx.save(); ctx.translate(cx,cy); ctx.rotate(twist*(i%2?1:-1)); ctx.strokeStyle = ring.color; ctx.lineWidth = Math.max(1, t);
+      ctx.globalAlpha = ringAlpha(.95);
+      ctx.beginPath(); ctx.arc(0,0,base,0,Math.PI*2); ctx.stroke(); ctx.restore();
+    });
+
+    // Shell facets
+    ctx.save(); ctx.translate(cx,cy); ctx.rotate(-twist*0.5);
+    const R = GEO.shell.r*u*zoom; const n = GEO.shell.facets; ctx.globalAlpha = ringAlpha(0.9); ctx.strokeStyle='rgba(255,255,255,.12)'; ctx.lineWidth=1; ctx.beginPath(); for(let i=0;i<n;i++){ const a=i/n*Math.PI*2; const x=cx+Math.cos(a)*R, y=cy+Math.sin(a)*R; if(i===0) ctx.moveTo(Math.cos(a)*R,Math.sin(a)*R); else ctx.lineTo(Math.cos(a)*R,Math.sin(a)*R);} ctx.closePath(); ctx.stroke(); ctx.restore();
+
+    // Seed cards drift
+    state.seeds_active.forEach((s, idx)=>{ s.a += (prefersReduced?0.0003:0.0012)*s.speed; const x = cx + Math.cos(s.a)*s.r*u*zoom; const y = cy + Math.sin(s.a)*s.r*u*zoom; const el = s.el; el.style.transform = `translate(${x - el.offsetWidth/2}px, ${y - el.offsetHeight/2}px)`; });
+
+    // ENGINEER overlays
+    if(settings.mode==='ENGINEER'){
+      $('#vLambda').textContent = state.loops.proliferation_constraint.lambda.toFixed(2);
+      $('#vPhi').textContent    = state.loops.memory_metabolism.phi.toFixed(3);
+      $('#vOmega').textContent  = state.loops.ritual_continuation.omega.toFixed(0)+' Hz';
+      $('#vDelta').textContent  = state.loops.canon_rupture.delta.toFixed(2);
+      $('#jsonview').textContent = JSON.stringify({state, settings, ledger_len: ledger.length}, null, 2);
+    }
+  }
+
+  // FPS meter (ENGINEER mode only)
+  let last = performance.now(), frame = 0, fps = 0; function tick(ts){ const dt = ts-last; frame++; if(dt>=500){ fps = Math.round(frame/(dt/1000)); frame=0; last=ts; if(settings.mode==='ENGINEER') $('#fps').textContent = fps; }
+    // drift loops
+    const L = state.loops; if(!prefersReduced){
+      L.proliferation_constraint.lambda = clamp(L.proliferation_constraint.lambda + (Math.random()-.5)*L.proliferation_constraint.drift, 0.5, 1.5);
+      L.memory_metabolism.phi = clamp(L.memory_metabolism.phi + (Math.random()-.5)*L.memory_metabolism.drift, 0.3, 0.95);
+      L.ritual_continuation.omega = clamp(L.ritual_continuation.omega + (Math.random()-.5)*26*L.ritual_continuation.drift*40, 80, 640);
+      L.canon_rupture.delta = clamp(L.canon_rupture.delta + (Math.random()-.5)*L.canon_rupture.drift, 0.05, 0.95);
+    }
+    // audio mapping if ON
+    if(audioOn && ac){ const freq = lerp(90, 280, clamp((L.proliferation_constraint.lambda-0.5)/1.0, 0, 1)); if(osc) { try{ osc.frequency.setTargetAtTime(freq, ac.currentTime, 0.06); }catch(e){} } }
+
+    draw();
+    requestAnimationFrame(tick);
+  }
+
+  // Gold halo pulse on CANONIZE
+  function glowGold(ms){ const overlay = $('#overlay'); const halo = document.createElementNS('http://www.w3.org/2000/svg','circle'); halo.setAttribute('cx','50'); halo.setAttribute('cy','50'); halo.setAttribute('r','30'); halo.setAttribute('fill','none'); halo.setAttribute('stroke','#f1c453'); halo.setAttribute('stroke-width','1.5'); halo.setAttribute('opacity','0.9'); overlay.appendChild(halo); const t0 = performance.now(); (function anim(t){ const k = (t-t0)/ms; if(k>=1){ overlay.removeChild(halo); return; } const r = 30+ k*25; const a = 0.9*(1-k); halo.setAttribute('r', String(r)); halo.setAttribute('opacity', String(a)); requestAnimationFrame(anim); })(t0); }
+
+  // INIT boot
+  function boot(){ resize(); status('MythOS awake. The ocean is thinking.'); modeBtn.textContent = 'MODE: '+settings.mode; if(settings.mode==='ENGINEER') $('#engineer').classList.add('show'); requestAnimationFrame(tick); }
+
+  // Expose for console (debug)
+  window.MYTHOS = { cmdINIT, cmdSEED, cmdTRACE, cmdRITUALIZE, cmdREBOOT, cmdCANONIZE, biasLoop };
+
+  boot();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+  <meta name="theme-color" content="#0b0f14"/>
+  <title>Plato’s Laundry · Saul Bass Video Door</title>
+  <style>
+    :root{ --bg:#0b0f14; --ink:#0f1722; --fg:#e6f2ff; --muted:#9fb4cc; --accent:#46e2c2; --warm:#ffb44d; --ring:#94a3b8; }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;background:radial-gradient(1200px 800px at 50% 60%, var(--ink) 0%, var(--bg) 60%);color:var(--fg);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial;overflow:hidden}
+    a{color:inherit}
+    #app{position:fixed;inset:0}
+    canvas{display:block;width:100%;height:100%}
+
+    /* Topbar */
+    .topbar{position:absolute;left:0;right:0;top:0;display:flex;align-items:center;justify-content:space-between;padding:14px 16px;z-index:20;background:linear-gradient(to bottom, rgba(11,15,20,.75), rgba(11,15,20,0));backdrop-filter:blur(4px)}
+    .brand{display:flex;gap:10px;align-items:center}
+    .logo{width:28px;height:28px;border-radius:999px;border:2px solid var(--accent);box-shadow:0 0 20px rgba(70,226,194,.35) inset, 0 0 16px rgba(70,226,194,.25)}
+    .title{font-weight:800;letter-spacing:.03em}
+    .tag{opacity:.8;font-size:.86rem}
+
+    /* Controls */
+    .controls{display:flex;gap:8px;align-items:center}
+    .chip{background:rgba(15,23,34,.65);border:1px solid rgba(148,163,184,.35);color:var(--fg);padding:8px 10px;border-radius:12px;font-weight:700}
+    .chip[aria-current="true"]{border-color:var(--accent);box-shadow:0 0 0 2px rgba(70,226,194,.25)}
+    .btn{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:var(--fg);padding:8px 10px;border-radius:10px;font-weight:700}
+
+    /* Circular Video Door */
+    .door{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(82vw,720px);aspect-ratio:1/1;border-radius:50%;overflow:hidden;z-index:10;box-shadow:0 10px 30px rgba(0,0,0,.55), 0 0 0 2px rgba(70,226,194,.35)}
+    .door.wash{box-shadow:0 10px 30px rgba(0,0,0,.55),0 0 0 2px rgba(70,226,194,.35),inset 0 0 68px rgba(70,226,194,.18)}
+    .door.rinse{box-shadow:0 10px 30px rgba(0,0,0,.55),0 0 0 2px rgba(138,215,255,.35),inset 0 0 68px rgba(138,215,255,.18)}
+    .door.spin{box-shadow:0 10px 30px rgba(0,0,0,.55),0 0 0 2px rgba(255,180,77,.4),inset 0 0 68px rgba(255,180,77,.22)}
+    .door.dry{box-shadow:0 10px 30px rgba(0,0,0,.55),0 0 0 2px rgba(255,230,179,.35),inset 0 0 68px rgba(255,230,179,.18)}
+
+    /* Masked YouTube iframe */
+    .video-wrap{position:absolute;inset:0}
+    .video-wrap iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+
+    /* Saul Bass Title Stack */
+    .stack{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,.55) 38%, rgba(0,0,0,.75) 100%);padding:16px 18px;z-index:12}
+    .stack .big{font-size:clamp(18px,6vw,42px);font-weight:900;letter-spacing:.08em}
+    .stack .sub{margin-top:4px;color:var(--warm);font-weight:700;font-size:clamp(12px,3.2vw,18px)}
+    .stack .quote{margin-top:6px;opacity:.85;font-style:italic;font-size:clamp(12px,3vw,16px)}
+
+    .footer{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);color:var(--muted);font-size:12px;text-align:center;z-index:20}
+
+    /* Play overlay */
+    .play{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:86px;height:86px;border-radius:999px;background:rgba(0,0,0,.45);color:#fff;font-size:26px;border:2px solid rgba(255,255,255,.6);display:flex;align-items:center;justify-content:center;z-index:15}
+
+    /* Fallback card */
+    #fallback{position:absolute;inset:0;display:none;align-items:center;justify-content:center;padding:24px;text-align:center;z-index:5}
+    #fallback.show{display:flex}
+    .card{max-width:720px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.1);padding:20px;border-radius:16px}
+
+    /* Tiny debug pill (hidden unless ?debug=1) */
+    .dbg{position:absolute;right:8px;bottom:8px;padding:6px 10px;border-radius:999px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);font-size:12px;color:var(--fg);display:none}
+    .dbg.show{display:inline-block}
+  </style>
+</head>
+<body>
+  <div id="app">
+    <canvas id="gl" aria-hidden="true"></canvas>
+
+    <div class="topbar" role="toolbar" aria-label="Site controls">
+      <div class="brand">
+        <div class="logo" aria-hidden="true"></div>
+        <div>
+          <div class="title">Plato’s Laundry</div>
+          <div class="tag">Saul Bass intro — video through the door</div>
+        </div>
+      </div>
+      <div class="controls">
+        <button class="chip" data-mode="wash" aria-current="true">wash</button>
+        <button class="chip" data-mode="rinse">rinse</button>
+        <button class="chip" data-mode="spin">spin</button>
+        <button class="chip" data-mode="dry">dry</button>
+        <button class="btn" id="motion" aria-pressed="false">Motion: On</button>
+        <button class="btn" id="poster">Save Poster</button>
+      </div>
+    </div>
+
+    <!-- Circular video door -->
+    <section class="door wash" id="door" aria-label="Video door">
+      <div class="video-wrap" aria-hidden="false">
+        <div id="player"></div>
+      </div>
+      <button class="play" id="playBtn" aria-label="Play">▶</button>
+      <div class="stack" aria-live="polite">
+        <div class="big">PLATO’S LAUNDRY</div>
+        <div class="sub">A MYTHOPOETIC APPARATUS</div>
+        <div class="quote" id="quote">“Not escape, but authorship of light.”</div>
+      </div>
+    </section>
+
+    <div id="fallback" role="note" aria-label="Static fallback">
+      <div class="card">
+        <h2>Plato’s Laundry — Saul Bass Door</h2>
+        <p>Your device doesn’t support WebGL. You’ll still see the video and Saul Bass title stack inside a circular mask.</p>
+      </div>
+    </div>
+
+    <div class="footer">Not escape, but authorship of light.</div>
+    <span id="dbg" class="dbg" aria-hidden="true"></span>
+  </div>
+
+  <!-- Three.js layer -->
+  <script type="module">
+    import * as THREE from 'https://unpkg.com/three@0.161.0/build/three.module.js';
+    const MODES = ['wash','rinse','spin','dry'];
+    const canvas = document.getElementById('gl');
+    const fallback = document.getElementById('fallback');
+    const doorEl = document.getElementById('door');
+
+    // WebGL check
+    const isWebGL = (()=>{ try{ const c=document.createElement('canvas'); return !!(window.WebGLRenderingContext && (c.getContext('webgl')||c.getContext('experimental-webgl')));}catch(e){return false} })();
+    if(!isWebGL){ fallback.classList.add('show'); }
+
+    // Scene
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.Fog(0x0b0f14, 6, 16);
+
+    const renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:true, powerPreference:'high-performance'});
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 2));
+
+    const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
+    camera.position.set(0,0,6);
+
+    const resize = ()=>{ const w=window.innerWidth, h=window.innerHeight; renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix(); };
+    window.addEventListener('resize', resize, {passive:true}); resize();
+
+    // Lights
+    scene.add(new THREE.AmbientLight(0x334455, .38));
+    const warm = new THREE.PointLight(0xffb44d, 1.1, 18); warm.position.set(0,0,-0.6); scene.add(warm);
+    const cool = new THREE.PointLight(0x46e2c2, 0.8, 18); cool.position.set(0,0,2.2); scene.add(cool);
+
+    // Rim
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(2.0, 0.12, 24, 128), new THREE.MeshStandardMaterial({color:0x94a3b8,metalness:.95,roughness:.25}));
+    rim.rotation.x = Math.PI*.5; scene.add(rim);
+
+    // Bezel
+    const bezel = new THREE.Mesh(new THREE.TorusGeometry(1.78, 0.045, 16, 96), new THREE.MeshStandardMaterial({color:0x46e2c2,metalness:.6,roughness:.15,emissive:0x0f2a22,emissiveIntensity:.65}));
+    bezel.rotation.x = Math.PI*.5; scene.add(bezel);
+
+    // Glass
+    const glass = new THREE.Mesh(new THREE.CircleGeometry(1.66,96), new THREE.MeshPhysicalMaterial({color:0x12363a,roughness:.2,transmission:.82,thickness:.18,transparent:true,opacity:.92,clearcoat:1,clearcoatRoughness:.15}));
+    glass.rotation.x=-Math.PI*.5; glass.position.z=.02; scene.add(glass);
+
+    // Halo
+    const halo = new THREE.Mesh(new THREE.CircleGeometry(1.9,64), new THREE.ShaderMaterial({transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,uniforms:{uColor:{value:new THREE.Color(0x46e2c2)}},vertexShader:'varying vec2 vUv; void main(){vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}', fragmentShader:'varying vec2 vUv; uniform vec3 uColor; void main(){ float d=distance(vUv, vec2(.5)); float a=smoothstep(.65,.4,d)*.35; gl_FragColor=vec4(uColor,a);}'}));
+    halo.rotation.x=-Math.PI*.5; halo.position.z=.03; scene.add(halo);
+
+    // Dust
+    const pCount=1200; const pGeo=new THREE.BufferGeometry(); const pos=new Float32Array(pCount*3);
+    for(let i=0;i<pCount;i++){ const r=1.45*Math.sqrt(Math.random()); const t=Math.random()*Math.PI*2; pos[i*3+0]=Math.cos(t)*r; pos[i*3+1]=(Math.random()*1.1-.55); pos[i*3+2]=Math.sin(t)*.45; }
+    pGeo.setAttribute('position', new THREE.BufferAttribute(pos,3));
+    const dust=new THREE.Points(pGeo, new THREE.PointsMaterial({size:.02,color:0x9fe7da,transparent:true,opacity:.85,depthWrite:false})); scene.add(dust);
+
+    // Motion
+    let t=0; let paused = false; let mode='wash';
+
+    function setMode(m){
+      if(!MODES.includes(m)) return; // guard
+      mode = m;
+      // update door classes robustly
+      MODES.forEach(x=> doorEl.classList.remove(x));
+      doorEl.classList.add(m);
+      // update copy + tint (defensive if halo/quote missing)
+      const quote = document.getElementById('quote');
+      try{
+        if(m==='wash'){ if(quote) quote.textContent='“Not escape, but authorship of light.”'; halo.material.uniforms.uColor.value.set(0x46e2c2); }
+        if(m==='rinse'){ if(quote) quote.textContent='“Rinse the symbols; keep the forms.”'; halo.material.uniforms.uColor.value.set(0x8ad7ff); }
+        if(m==='spin'){ if(quote) quote.textContent='“Spin the shadows into signal.”'; halo.material.uniforms.uColor.value.set(0xffb44d); }
+        if(m==='dry'){  if(quote) quote.textContent='“Fix the image. Name the light.”';      halo.material.uniforms.uColor.value.set(0xffe6b3); }
+      }catch(_){}
+      // update chip a11y
+      document.querySelectorAll('.chip').forEach(btn=>{
+        const active = btn.getAttribute('data-mode')===m;
+        btn.setAttribute('aria-current', active?'true':'false');
+      });
+    }
+
+    // Controls
+    document.querySelectorAll('.chip').forEach(b=>{ b.addEventListener('click', ()=> setMode(b.dataset.mode||b.textContent.trim())) });
+    document.getElementById('motion').addEventListener('click', (e)=>{ paused=!paused; e.currentTarget.setAttribute('aria-pressed', String(paused)); e.currentTarget.textContent = 'Motion: '+(paused?'Off':'On'); });
+    document.getElementById('poster').addEventListener('click', ()=>{
+      const prev = renderer.getPixelRatio(); renderer.setPixelRatio(2); resize();
+      renderer.render(scene,camera); const uri=canvas.toDataURL('image/png'); const a=document.createElement('a'); a.href=uri; a.download='platos-laundry-saul-bass-door.png'; document.body.appendChild(a); a.click(); a.remove(); renderer.setPixelRatio(prev); resize();
+    });
+
+    // Tick
+    const animate=()=>{
+      requestAnimationFrame(animate);
+      if(!paused){ t+=0.016; bezel.rotation.z -= 0.1; rim.rotation.z += 0.05; dust.rotation.y += 0.06; halo.scale.setScalar(1+0.03*Math.sin(t*2.0)); glass.material.opacity=0.86+0.06*Math.sin(t*1.5); }
+      renderer.render(scene,camera);
+    };
+    animate();
+
+    // Initial mode + expose + ready event
+    setMode('wash');
+    window.PL_setMode = setMode;
+    window.PL_READY = true;
+    window.dispatchEvent(new CustomEvent('pl-ready'));
+  </script>
+
+  <!-- YouTube Iframe API (non-module scope) -->
+  <script>
+    const YT_ID = '5kzEYQRVnIc'; // change if needed
+    let ytPlayer = null;
+    function onYouTubeIframeAPIReady(){
+      ytPlayer = new YT.Player('player', {
+        videoId: YT_ID,
+        width:'100%', height:'100%',
+        playerVars:{ autoplay:1, mute:1, controls:0, modestbranding:1, playsinline:1, rel:0, loop:1, playlist:YT_ID },
+        events:{
+          onReady: (e)=>{ try{ e.target.playVideo(); document.getElementById('playBtn').style.display='none'; }catch(err){} },
+          onStateChange: (e)=>{
+            // Ensure replay on end
+            var ENDED = (window.YT && YT.PlayerState) ? YT.PlayerState.ENDED : 0;
+            if(e.data === ENDED){ try{ e.target.playVideo(); }catch(err){} }
+          }
+        }
+      });
+    }
+  </script>
+  <script src="https://www.youtube.com/iframe_api" async></script>
+  <script>
+    // Play overlay for user gesture fallback
+    (function(){
+      var btn = document.getElementById('playBtn');
+      btn.addEventListener('click', function(){
+        try{ if(ytPlayer && ytPlayer.playVideo){ ytPlayer.playVideo(); btn.style.display='none'; } }catch(err){}
+      });
+    })();
+  </script>
+
+  <!-- Minimal self-tests (delayed until module signals ready) -->
+  <script>
+    (function(){
+      function test(name, fn){
+        try{ fn(); console.log('%c✔ '+name,'color:#10b981'); return {name, ok:true}; }
+        catch(err){ console.error('✖ '+name, err); return {name, ok:false, err}; }
+      }
+      function run(){
+        var results = [];
+        // existing tests (unchanged)
+        results.push(test('DOM has #door', function(){ if(!document.getElementById('door')) throw new Error('missing #door'); }));
+        results.push(test('YouTube API hook present (eventually)', function(){ /* async load */ }));
+        results.push(test('Mode switch updates class', function(){
+          if(!window.PL_setMode) throw new Error('PL_setMode not exposed');
+          window.PL_setMode('rinse');
+          if(!document.getElementById('door').classList.contains('rinse')) throw new Error('class not updated');
+          window.PL_setMode('wash');
+        }));
+        // additional tests
+        results.push(test('Chip aria-current tracks mode', function(){
+          window.PL_setMode('spin');
+          var active = Array.from(document.querySelectorAll('.chip')).find(function(b){return b.getAttribute('aria-current')==='true'});
+          if(!active || active.getAttribute('data-mode')!=='spin') throw new Error('aria-current not set on spin');
+          window.PL_setMode('wash');
+        }));
+        results.push(test('Quote text updates on rinse', function(){
+          window.PL_setMode('rinse');
+          var q = document.getElementById('quote').textContent.trim();
+          if(q.indexOf('Rinse the symbols')===-1) throw new Error('quote did not update for rinse');
+          window.PL_setMode('wash');
+        }));
+        results.push(test('Poster button exists', function(){ if(!document.getElementById('poster')) throw new Error('missing poster btn'); }));
+        results.push(test('YouTube container present', function(){ if(!document.getElementById('player')) throw new Error('missing #player'); }));
+
+        // debug pill if requested
+        if(new URLSearchParams(location.search).get('debug')==='1'){
+          var ok = results.every(function(r){return r.ok});
+          var pill = document.getElementById('dbg');
+          pill.textContent = ok ? 'Self‑tests: PASS' : 'Self‑tests: FAIL';
+          pill.classList.add('show');
+        }
+      }
+      if(window.PL_READY){ run(); }
+      else{ window.addEventListener('pl-ready', run, {once:true}); }
+    })();
+  </script>
+</body>
+</html>

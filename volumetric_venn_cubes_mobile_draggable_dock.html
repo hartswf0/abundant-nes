@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>32‑Layer Volumetric Venn Cubes — Mobile Dock (Robust Loader)</title>
+  <style>
+    :root{
+      --ink:#e7faff;         /* UI ink */
+      --ui:#4fc3f7;          /* cyan accent */
+      --ui2:#00ff88;         /* lime accent */
+      --warn:#ffaa00;        /* overlap accent */
+      --ghost:#9fb6c1;       /* secondary text */
+      --panel:rgba(0,0,0,.86);
+      --panel-2:rgba(255,255,255,.04);
+      --edge:rgba(79,195,247,.35);
+      --bad:#ff4b72;         /* diagnostics */
+      --good:#21ff86;
+    }
+    *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+    html,body{height:100%}
+    body{ margin:0; background:#000; color:var(--ink); font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, "Courier New", monospace; overflow:hidden; }
+    canvas{display:block; width:100vw; height:100vh; touch-action:none}
+
+    /* Badges */
+    .badge{position:fixed; left:12px; background:var(--panel); border:1px solid var(--edge); padding:8px 10px; border-radius:10px; font-size:11px; z-index:7; box-shadow:0 6px 24px rgba(0,0,0,.4)}
+    #infoBadge{top:12px}
+    #viewBadge{bottom:12px; color:var(--warn); border-color:rgba(255,170,0,.55)}
+    #blendBadge{bottom:56px; color:var(--ui2); border-color:rgba(0,255,136,.55)}
+    #fallbackBadge{bottom:100px; display:none; border-color:rgba(255,75,114,.55); color:#ffd5de}
+
+    /* Floating Dock (draggable, collapsible, compact) */
+    #dock{ position:fixed; right:14px; bottom:18px; width:min(88vw,360px); max-width:360px; background:var(--panel); border:1px solid var(--edge); border-radius:14px; z-index:9; box-shadow:0 10px 40px rgba(0,0,0,.55); backdrop-filter: blur(4px); }
+    #dock.min{height:auto}
+    .dock-header{ display:flex; align-items:center; gap:10px; padding:10px 12px; border-bottom:1px solid var(--edge); cursor:grab; touch-action:none; user-select:none; }
+    .dock-header:active{cursor:grabbing}
+    .grip{width:28px; height:6px; border-radius:6px; background:linear-gradient(90deg, var(--edge) 20%, transparent 20% 40%, var(--edge) 40% 60%, transparent 60% 80%, var(--edge) 80%); opacity:.9}
+    .dock-title{font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--ui)}
+    .dock-actions{margin-left:auto; display:flex; gap:8px}
+    .chip{font-size:11px; padding:6px 8px; border-radius:10px; border:1px solid var(--edge); background:var(--panel-2); color:var(--ink); cursor:pointer}
+    .chip.active{background:rgba(79,195,247,.3)}
+
+    .dock-body{padding:10px 12px; max-height:min(60vh, 420px); overflow:auto}
+    .section{border:1px solid var(--edge); background:var(--panel-2); border-radius:10px; margin-bottom:10px}
+    .section summary{ list-style:none; display:flex; align-items:center; gap:8px; padding:8px 10px; font-size:12px; color:var(--ui); cursor:pointer; user-select:none }
+    .section summary::-webkit-details-marker{display:none}
+    .section .content{padding:8px 10px; display:grid; gap:10px}
+
+    .row{display:flex; gap:8px; flex-wrap:wrap}
+    button.btn{flex:1; min-width:72px; font-weight:700; font-size:11px; padding:9px 10px; color:var(--ink); background:rgba(79,195,247,.16); border:1px solid var(--edge); border-radius:8px; cursor:pointer}
+    .btn.active{background:rgba(79,195,247,.45); box-shadow:0 0 16px rgba(79,195,247,.55) inset}
+
+    .slider{display:flex; align-items:center; gap:8px}
+    .slider label{font-size:10px; color:var(--ghost); min-width:86px}
+    .slider input[type=range]{flex:1; appearance:none; height:6px; background:rgba(79,195,247,.25); border-radius:10px; outline:none}
+    .slider input[type=range]::-webkit-slider-thumb{appearance:none; width:18px; height:18px; border-radius:50%; background:var(--ui); box-shadow:0 0 10px rgba(79,195,247,.8)}
+    .val{font-size:11px; min-width:32px; text-align:right; color:var(--ui)}
+
+    /* Mini HUD tap target to reopen dock when minimized */
+    #mini{ position:fixed; right:14px; bottom:18px; z-index:10; display:none; gap:8px; align-items:center; background:var(--panel); border:1px solid var(--edge); border-radius:999px; padding:8px 10px; font-size:12px; color:var(--ink); box-shadow:0 10px 40px rgba(0,0,0,.55) }
+    #mini .dot{width:10px; height:10px; border-radius:50%; background:var(--ui)}
+
+    /* Diagnostics */
+    #diag{font-size:11px; line-height:1.5}
+    #diag .pass{color:var(--good)}
+    #diag .fail{color:var(--bad)}
+
+    /* Mobile first tweaks */
+    @media (max-width:480px){ .row .btn{min-width:64px; padding:8px} .dock-body{max-height:58vh} }
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+
+  <div id="infoBadge" class="badge">
+    <div style="font-weight:700; color:var(--ui)">Venn Cube Layers</div>
+    <div style="font-size:10px; color:var(--ghost)">Real overlap geometry</div>
+  </div>
+  <div id="blendBadge" class="badge">🎨 NORMAL</div>
+  <div id="viewBadge" class="badge">📹 FRONT</div>
+  <div id="fallbackBadge" class="badge">⚠️ 3D unavailable — using 2D fallback</div>
+
+  <!-- Floating, draggable dock -->
+  <div id="dock" class="min">
+    <div id="dockHeader" class="dock-header">
+      <div class="grip"></div>
+      <div class="dock-title">Controls</div>
+      <div class="dock-actions">
+        <button id="collapseAll" class="chip">Collapse</button>
+        <button id="minBtn" class="chip">Min</button>
+      </div>
+    </div>
+    <div class="dock-body">
+      <details class="section" open>
+        <summary>📹 Views</summary>
+        <div class="content">
+          <div class="row">
+            <button class="btn" data-view="front">Front</button>
+            <button class="btn" data-view="top">Top</button>
+            <button class="btn" data-view="side">Side</button>
+          </div>
+          <div class="row">
+            <button class="btn" data-view="iso">Iso</button>
+            <button class="btn" data-view="orbit">Orbit</button>
+          </div>
+        </div>
+      </details>
+
+      <details class="section" open>
+        <summary>🎨 Blend & Highlight</summary>
+        <div class="content">
+          <div class="row">
+            <button class="btn" data-blend="normal">Normal</button>
+            <button class="btn" data-blend="add">Add</button>
+            <button class="btn" data-blend="multiply">Multiply</button>
+            <button class="btn" data-blend="screen">Screen</button>
+          </div>
+          <div class="slider"><label>Overlap Intensity</label><input id="overlapInt" type="range" min="0" max="100" value="80"><span id="overlapIntVal" class="val">80</span></div>
+          <div class="row"><button class="btn" id="hlBtn">Highlight Overlap</button></div>
+        </div>
+      </details>
+
+      <details class="section" open>
+        <summary>📐 Structure</summary>
+        <div class="content">
+          <div class="slider"><label>Layers (4–32)</label><input id="layerRange" type="range" min="4" max="32" value="32"><span id="layerVal" class="val">32</span></div>
+          <div class="slider"><label>Separation</label><input id="sepRange" type="range" min="0" max="100" value="40"><span id="sepVal" class="val">40</span></div>
+          <div class="slider"><label>Spacing</label><input id="spaceRange" type="range" min="10" max="100" value="50"><span id="spaceVal" class="val">50</span></div>
+        </div>
+      </details>
+
+      <details class="section">
+        <summary>👁️ Visibility</summary>
+        <div class="content">
+          <div class="row">
+            <button class="btn" id="toggleA">Cube A</button>
+            <button class="btn" id="toggleB">Cube B</button>
+          </div>
+        </div>
+      </details>
+
+      <details class="section">
+        <summary>⚡ Actions</summary>
+        <div class="content">
+          <div class="row">
+            <button class="btn" id="explodeBtn">Explode</button>
+            <button class="btn" id="mergeBtn">Merge</button>
+            <button class="btn" id="resetBtn">Reset</button>
+          </div>
+        </div>
+      </details>
+
+      <details class="section">
+        <summary>🧪 Diagnostics</summary>
+        <div class="content" id="diag">
+          <div id="envStatus">Env: <em>checking…</em></div>
+          <div id="testResults" style="margin-top:6px"></div>
+          <div class="row"><button class="btn" id="runTestsBtn">Run Tests</button></div>
+        </div>
+      </details>
+    </div>
+  </div>
+
+  <div id="mini"><span class="dot"></span> Controls</div>
+
+  <script>
+  (function(){
+    const COLORS = { A: 0x00ff88, B: 0xff4488, O: 0xffaa00 };
+    const SIZE = 20;                 // cube edge length
+    const MAX_LAYERS = 32;
+
+    const state = {
+      // shared
+      maxLayers:32, spacing:1.0, dist:20, exploded:false,
+      showA:true, showB:true, highlight:false,
+      blend:'normal', overlapIntensity:0.8,
+      view:'front', orbit:false, t:0,
+      dragging:false, touchX:0, touchY:0,
+
+      // three specific
+      scene:null, camera:null, renderer:null,
+      a:[], b:[], o:[],
+
+      // fallback 2D
+      using2D:false,
+    };
+
+    const VIEWS = {
+      front:{pos:[0,0,80], name:'FRONT'},
+      top:{pos:[0,80,0], name:'TOP'},
+      side:{pos:[80,0,0], name:'SIDE'},
+      iso:{pos:[60,50,60], name:'ISOMETRIC'},
+      orbit:{pos:[60,50,60], name:'ORBIT'}
+    };
+
+    const canvas = document.getElementById('c');
+    const blendBadge = document.getElementById('blendBadge');
+    const viewBadge = document.getElementById('viewBadge');
+    const fallbackBadge = document.getElementById('fallbackBadge');
+
+    // --- loader with CDN fallback + timeout ---
+    async function ensureThree(){
+      if(window.THREE) return true;
+      const cdns = [
+        'https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js',
+        'https://unpkg.com/three@0.152.2/build/three.min.js',
+        'https://cdnjs.cloudflare.com/ajax/libs/three.js/r152/three.min.js'
+      ];
+      for(const src of cdns){
+        try{
+          const ok = await loadScript(src, 7000);
+          if(ok && window.THREE) return true;
+        }catch(e){ /* try next */ }
+      }
+      return false;
+    }
+
+    function loadScript(src, timeout=8000){
+      return new Promise((resolve,reject)=>{
+        const s=document.createElement('script'); s.src=src; s.async=true; s.defer=true; s.crossOrigin='anonymous';
+        const to=setTimeout(()=>{ s.remove(); reject(new Error('timeout')); }, timeout);
+        s.onload=()=>{ clearTimeout(to); resolve(true); };
+        s.onerror=()=>{ clearTimeout(to); reject(new Error('load error')); };
+        document.head.appendChild(s);
+      });
+    }
+
+    // --- pure function for tests ---
+    function computeOverlapWidth(dist){
+      const half = SIZE/2;
+      const left = Math.max(-dist - half, dist - half);
+      const right = Math.min(-dist + half, dist + half);
+      return Math.max(0, right - left);
+    }
+
+    // --- Tests ---
+    function runTests(){
+      const cases = [
+        {dist:20, expect:0},   // edges just touch
+        {dist:0,  expect:20},  // full overlap
+        {dist:5,  expect:10},  // partial
+        {dist:9,  expect:2},   // thin overlap
+        {dist:10, expect:0},   // boundary
+        {dist:30, expect:0},   // separated
+      ];
+      const out = [];
+      for(const t of cases){
+        const got = Math.round(computeOverlapWidth(t.dist));
+        const pass = got === t.expect;
+        out.push(`<div>dist=${t.dist} → width=${got} : <b class="${pass?'pass':'fail'}">${pass?'PASS':'FAIL (expected '+t.expect+')'}</b></div>`);
+      }
+      document.getElementById('testResults').innerHTML = out.join('');
+    }
+
+    // --- UI ---
+    function vibr(ms=12){ if(navigator.vibrate) navigator.vibrate(ms); }
+
+    function wireUI(){
+      // View buttons
+      document.querySelectorAll('[data-view]').forEach(btn=>{
+        btn.addEventListener('click', ()=>{
+          document.querySelectorAll('[data-view]').forEach(b=>b.classList.remove('active'));
+          btn.classList.add('active'); setView(btn.dataset.view); vibr(15);
+        });
+      });
+      document.querySelector('[data-view="front"]').classList.add('active');
+
+      // Blend buttons
+      document.querySelectorAll('[data-blend]').forEach(btn=>{
+        btn.addEventListener('click', ()=>{
+          document.querySelectorAll('[data-blend]').forEach(b=>b.classList.remove('active'));
+          btn.classList.add('active'); state.blend = btn.dataset.blend; vibr(12);
+          blendBadge.textContent = '🎨 '+state.blend.toUpperCase();
+          if(!state.using2D) updateLayout3D(); else draw2D();
+        });
+      });
+      document.querySelector('[data-blend="normal"]').classList.add('active');
+
+      // Sliders
+      const overlap = document.getElementById('overlapInt');
+      const overlapVal = document.getElementById('overlapIntVal');
+      overlap.addEventListener('input', e=>{ state.overlapIntensity = e.target.value/100; overlapVal.textContent = e.target.value; if(!state.using2D) updateLayout3D(); else draw2D(); });
+
+      const layer = document.getElementById('layerRange');
+      const layerVal = document.getElementById('layerVal');
+      layer.addEventListener('input', e=>{ state.maxLayers = parseInt(e.target.value); layerVal.textContent = e.target.value; if(!state.using2D) updateLayout3D(); else draw2D(); });
+
+      const sep = document.getElementById('sepRange');
+      const sepVal = document.getElementById('sepVal');
+      sep.addEventListener('input', e=>{ state.dist = 10 + (parseInt(e.target.value)/100)*40; sepVal.textContent = e.target.value; if(!state.using2D) updateLayout3D(); else draw2D(); });
+
+      const space = document.getElementById('spaceRange');
+      const spaceVal = document.getElementById('spaceVal');
+      space.addEventListener('input', e=>{ state.spacing = .5 + (parseInt(e.target.value)/100)*1.5; spaceVal.textContent = e.target.value; if(!state.using2D) updateLayout3D(); else draw2D(); });
+
+      // Visibility toggles
+      const tA = document.getElementById('toggleA');
+      const tB = document.getElementById('toggleB');
+      tA.addEventListener('click', ()=>{ state.showA=!state.showA; tA.classList.toggle('active'); vibr(); if(!state.using2D) updateLayout3D(); else draw2D(); });
+      tB.addEventListener('click', ()=>{ state.showB=!state.showB; tB.classList.toggle('active'); vibr(); if(!state.using2D) updateLayout3D(); else draw2D(); });
+
+      // Highlight overlap
+      document.getElementById('hlBtn').addEventListener('click', ()=>{ state.highlight=!state.highlight; document.getElementById('hlBtn').classList.toggle('active'); vibr(18); if(!state.using2D) updateLayout3D(); else draw2D(); });
+
+      // Actions
+      document.getElementById('explodeBtn').addEventListener('click', ()=>{ state.exploded=true; vibr(30); if(!state.using2D) updateLayout3D(); else draw2D(); });
+      document.getElementById('mergeBtn').addEventListener('click', ()=>{ state.exploded=false; vibr(30); if(!state.using2D) updateLayout3D(); else draw2D(); });
+      document.getElementById('resetBtn').addEventListener('click', ()=>{
+        vibr([20,50,20]); Object.assign(state,{maxLayers:32, spacing:1.0, dist:20, exploded:false, showA:true, showB:true, highlight:false, overlapIntensity:.8, blend:'normal'});
+        document.getElementById('layerRange').value=32; layerVal.textContent='32';
+        document.getElementById('sepRange').value=40; sepVal.textContent='40';
+        document.getElementById('spaceRange').value=50; spaceVal.textContent='50';
+        document.getElementById('overlapInt').value=80; overlapVal.textContent='80';
+        document.querySelectorAll('[data-blend]').forEach(b=>b.classList.remove('active')); document.querySelector('[data-blend="normal"]').classList.add('active');
+        blendBadge.textContent='🎨 NORMAL';
+        document.querySelectorAll('[data-view]').forEach(b=>b.classList.remove('active')); document.querySelector('[data-view="front"]').classList.add('active'); setView('front');
+        document.getElementById('toggleA').classList.remove('active'); document.getElementById('toggleB').classList.remove('active');
+        if(!state.using2D) updateLayout3D(); else draw2D();
+      });
+
+      // Dock extras
+      document.getElementById('collapseAll').addEventListener('click', ()=>{
+        document.querySelectorAll('#dock details').forEach(d=>d.open=false); vibr(8);
+      });
+
+      const dock = document.getElementById('dock');
+      const mini = document.getElementById('mini');
+      document.getElementById('minBtn').addEventListener('click', ()=>{
+        dock.style.display='none'; mini.style.display='flex'; vibr(10);
+        localStorage.setItem('vc-min','1');
+      });
+      mini.addEventListener('click', ()=>{
+        dock.style.display='block'; mini.style.display='none'; vibr(10);
+        localStorage.removeItem('vc-min');
+      });
+
+      // Restore minimized state & dock position
+      if(localStorage.getItem('vc-min')){ dock.style.display='none'; mini.style.display='flex'; }
+      const pos = JSON.parse(localStorage.getItem('vc-pos')||'null');
+      if(pos){ dock.style.right='unset'; dock.style.bottom='unset'; dock.style.left=pos.x+'px'; dock.style.top=pos.y+'px'; }
+
+      // Run tests button
+      document.getElementById('runTestsBtn').addEventListener('click', runTests);
+      runTests();
+    }
+
+    // --- Camera drag (when not in orbit) ---
+    function addDrag3D(){
+      canvas.addEventListener('touchstart', (e)=>{ state.dragging=true; state.touchX=e.touches[0].clientX; state.touchY=e.touches[0].clientY; }, {passive:true});
+      canvas.addEventListener('touchmove', (e)=>{
+        if(!state.dragging || state.orbit) return; const nx=e.touches[0].clientX, ny=e.touches[0].clientY;
+        const dx=nx-state.touchX, dy=ny-state.touchY; const p=state.camera.position; const d=Math.hypot(p.x,p.y,p.z);
+        let th=Math.atan2(p.x,p.z) - dx*0.005; let ph=Math.acos(p.y/d) - dy*0.005; ph=Math.max(0.1, Math.min(Math.PI-0.1, ph));
+        state.camera.position.x = d*Math.sin(ph)*Math.sin(th);
+        state.camera.position.y = d*Math.cos(ph);
+        state.camera.position.z = d*Math.sin(ph)*Math.cos(th);
+        state.camera.lookAt(0,0,0);
+        state.touchX=nx; state.touchY=ny;
+      }, {passive:true});
+      addEventListener('touchend', ()=> state.dragging=false);
+    }
+
+    // --- Draggable Dock ---
+    function addDockDrag(){
+      const dock = document.getElementById('dock');
+      const head = document.getElementById('dockHeader');
+      let sx=0, sy=0, ox=0, oy=0, dragging=false;
+      function start(x,y){ dragging=true; sx=x; sy=y; const r=dock.getBoundingClientRect(); ox=r.left; oy=r.top; }
+      function move(x,y){ if(!dragging) return; const nx=ox+(x-sx); const ny=oy+(y-sy); dock.style.left=nx+'px'; dock.style.top=ny+'px'; dock.style.right='unset'; dock.style.bottom='unset'; }
+      function end(){ if(!dragging) return; dragging=false; const r=dock.getBoundingClientRect(); localStorage.setItem('vc-pos', JSON.stringify({x:Math.max(6, Math.min(innerWidth - r.width - 6, r.left)), y:Math.max(6, Math.min(innerHeight - r.height - 6, r.top))})); }
+      head.addEventListener('pointerdown', (e)=>{ head.setPointerCapture(e.pointerId); start(e.clientX,e.clientY); });
+      head.addEventListener('pointermove', (e)=> move(e.clientX,e.clientY));
+      head.addEventListener('pointerup', end);
+      head.addEventListener('pointercancel', end);
+    }
+
+    // --- 3D Engine ---
+    function setView(v){ state.view = v; state.orbit = (v==='orbit'); const cfg = VIEWS[v]; if(!state.orbit && state.camera){ state.camera.position.set(...cfg.pos); state.camera.lookAt(0,0,0); } viewBadge.textContent = '📹 '+cfg.name; }
+
+    function setBlend3D(mat, T){
+      switch(state.blend){
+        case 'add': mat.blending = T.AdditiveBlending; break;
+        case 'multiply': mat.blending = T.MultiplyBlending; break;
+        case 'screen': mat.blending = T.CustomBlending; mat.blendEquation = T.AddEquation; mat.blendSrc = T.OneFactor; mat.blendDst = T.OneMinusSrcColorFactor; break;
+        default: mat.blending = T.NormalBlending;
+      }
+    }
+
+    function buildLayers3D(T){
+      const layerGroup=(color,base)=>{
+        const g=new T.Group(); const half=SIZE/2;
+        const pts=[new T.Vector3(-half,0,-half),new T.Vector3(half,0,-half),new T.Vector3(half,0,half),new T.Vector3(-half,0,half),new T.Vector3(-half,0,-half)];
+        const line=new T.Line(new T.BufferGeometry().setFromPoints(pts), new T.LineBasicMaterial({color,transparent:true,opacity:base*.9})); g.add(line);
+        const plane=new T.Mesh(new T.PlaneGeometry(SIZE,SIZE), new T.MeshBasicMaterial({color,transparent:true,opacity:base*.3,side:T.DoubleSide,depthWrite:false})); plane.rotation.x=-Math.PI/2; g.add(plane);
+        const dotGeo=new T.SphereGeometry(.38,10,10);
+        for(const [x,z] of [[-half,-half],[half,-half],[half,half],[-half,half]]){ const dot=new T.Mesh(dotGeo,new T.MeshBasicMaterial({color,transparent:true,opacity:base*1.1})); dot.position.set(x,0,z); g.add(dot); }
+        g.userData={plane, baseOpacity:base}; return g;
+      };
+      const overlapGroup=()=>{ const g=new T.Group(); const plane=new T.Mesh(new T.PlaneGeometry(1,SIZE), new T.MeshBasicMaterial({color:COLORS.O,transparent:true,opacity:0,side:T.DoubleSide,depthWrite:false})); plane.rotation.x=-Math.PI/2; g.add(plane); const line=new T.Line(new T.BufferGeometry().setFromPoints([new T.Vector3(-.5,0,-SIZE/2),new T.Vector3(.5,0,-SIZE/2),new T.Vector3(.5,0,SIZE/2),new T.Vector3(-.5,0,SIZE/2),new T.Vector3(-.5,0,-SIZE/2)]), new T.LineBasicMaterial({color:COLORS.O,transparent:true,opacity:.6})); g.add(line); g.userData={plane,line}; return g; };
+      for(let i=0;i<MAX_LAYERS;i++){ const base=.85-(i/MAX_LAYERS)*.6; const A=layerGroup(COLORS.A,base); const B=layerGroup(COLORS.B,base); const O=overlapGroup(); state.a.push(A); state.b.push(B); state.o.push(O); state.scene.add(A,B,O); }
+    }
+
+    function computeOverlap(){ const cxA = -state.dist; const cxB = state.dist; const left=Math.max(cxA - SIZE/2, cxB - SIZE/2); const right=Math.min(cxA + SIZE/2, cxB + SIZE/2); const width=Math.max(0, right-left); const cx=(left+right)/2; return {width, cx}; }
+
+    function updateLayout3D(){ const T=window.THREE; const h=SIZE*state.spacing; const step=h/Math.max(1,state.maxLayers-1); const {width:oW, cx:oX}=computeOverlap(); for(let i=0;i<MAX_LAYERS;i++){ const vis=i<state.maxLayers; const y=-h/2+i*step; const A=state.a[i], B=state.b[i], O=state.o[i]; if(A){ A.visible=vis && state.showA; if(A.visible){ A.position.set(-state.dist + (state.exploded? (state.maxLayers/2 - i)*-2 : 0), y, 0); const mA=A.userData.plane.material; setBlend3D(mA,T); mA.opacity=A.userData.baseOpacity*.3*state.overlapIntensity; } }
+      if(B){ B.visible=vis && state.showB; if(B.visible){ B.position.set( state.dist + (state.exploded? (state.maxLayers/2 - i)* 2 : 0), y, 0); const mB=B.userData.plane.material; setBlend3D(mB,T); mB.opacity=B.userData.baseOpacity*.3*state.overlapIntensity; } }
+      if(O){ const showO=vis && !state.exploded && oW>0 && state.showA && state.showB; O.visible=showO; if(showO){ O.position.set(oX,y,0); O.children[0].scale.set(oW,1,1); O.children[1].scale.set(oW,1,1); const mat=O.userData.plane.material; setBlend3D(mat,T); mat.opacity=state.highlight? Math.max(.22,.35*state.overlapIntensity): .18*state.overlapIntensity; O.children[1].material.opacity=state.highlight? .9:.6; } }
+    } }
+
+    function animate3D(){ requestAnimationFrame(animate3D); state.t+=.01; if(state.orbit && state.camera){ const r=80; state.camera.position.x=Math.sin(state.t*.3)*r; state.camera.position.z=Math.cos(state.t*.3)*r; state.camera.position.y=50+Math.sin(state.t*.2)*10; state.camera.lookAt(0,0,0); } if(state.blend==='add'){ for(let i=0;i<state.maxLayers;i++){ const A=state.a[i], B=state.b[i]; if(A?.visible){ A.userData.plane.material.opacity = A.userData.baseOpacity*.3*state.overlapIntensity*(.85+.15*Math.sin(state.t*2+i*.1)); } if(B?.visible){ B.userData.plane.material.opacity = B.userData.baseOpacity*.3*state.overlapIntensity*(.85+.15*Math.sin(state.t*2+i*.1)); } } } if(state.renderer && state.scene && state.camera) state.renderer.render(state.scene,state.camera); }
+
+    // --- 2D Fallback ---
+    function setup2D(){ state.using2D=true; fallbackBadge.style.display='block'; resize2D(); draw2D(); addEventListener('resize', resize2D); }
+
+    function resize2D(){ const dpr=Math.min(2, window.devicePixelRatio||1); canvas.width=innerWidth*dpr; canvas.height=innerHeight*dpr; canvas.style.width=innerWidth+'px'; canvas.style.height=innerHeight+'px'; const ctx=canvas.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0); }
+
+    function draw2D(){ const ctx=canvas.getContext('2d'); ctx.clearRect(0,0,innerWidth,innerHeight); const w=innerWidth, h=innerHeight; // layout frame
+      const margin=24; const boxW=Math.min(320, w-2*margin); const half=SIZE/2; const centerX=w/2; const centerY=h/2; const cubeH=SIZE*state.spacing; const layerStep=cubeH/Math.max(1,state.maxLayers-1); // faces
+      const cxA=centerX - state.dist; const cxB=centerX + state.dist; const left=Math.max(cxA - boxW/2, cxB - boxW/2); const right=Math.min(cxA + boxW/2, cxB + boxW/2); const ow=Math.max(0, right-left);
+      for(let i=0;i<state.maxLayers;i++){ const y=centerY - cubeH/2 + i*layerStep; // A
+        if(state.showA){ ctx.globalAlpha = (.85-(i/MAX_LAYERS)*.6)*.3*state.overlapIntensity; setBlend2D(ctx, 'source-over'); ctx.fillStyle='#00ff88'; ctx.fillRect(cxA - boxW/2, y, boxW, 2); }
+        if(state.showB){ ctx.globalAlpha = (.85-(i/MAX_LAYERS)*.6)*.3*state.overlapIntensity; setBlend2D(ctx, 'source-over'); ctx.fillStyle='#ff4488'; ctx.fillRect(cxB - boxW/2, y, boxW, 2); }
+        if(!state.exploded && state.showA && state.showB && ow>0){ ctx.globalAlpha = (state.highlight? Math.max(.22,.35*state.overlapIntensity): .18*state.overlapIntensity); setBlend2D(ctx, mapBlendTo2D(state.blend)); ctx.fillStyle='#ffaa00'; ctx.fillRect(left, y, ow, 2); }
+      }
+      ctx.globalAlpha=1; setBlend2D(ctx,'source-over'); // guides
+      ctx.strokeStyle='rgba(79,195,247,.25)'; ctx.strokeRect(centerX-boxW/2, centerY-cubeH/2, boxW, cubeH); }
+
+    function setBlend2D(ctx, mode){ ctx.globalCompositeOperation = mode; }
+    function mapBlendTo2D(mode){ switch(mode){ case 'add': return 'lighter'; case 'multiply': return 'multiply'; case 'screen': return 'screen'; default: return 'source-over'; } }
+
+    // --- boot ---
+    async function boot(){
+      document.getElementById('envStatus').textContent = 'Env: loading three.js…';
+      const ok = await ensureThree();
+      if(ok){
+        const T = window.THREE;
+        document.getElementById('envStatus').innerHTML = 'Env: <b class="pass">three.js loaded</b>';
+        // init 3D
+        state.scene = new T.Scene(); state.scene.background=new T.Color(0x000000); state.scene.fog=new T.FogExp2(0x000000,.003);
+        state.camera = new T.PerspectiveCamera(50, innerWidth/innerHeight, .1, 1000); setView('front');
+        state.renderer = new T.WebGLRenderer({canvas, antialias:true}); state.renderer.setSize(innerWidth,innerHeight); state.renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
+        // lights & layers
+        state.scene.add(new T.AmbientLight(0xffffff,.5)); const la=new T.PointLight(COLORS.A,2,150); la.position.set(-40,20,30); state.scene.add(la); const lb=new T.PointLight(COLORS.B,2,150); lb.position.set(40,20,30); state.scene.add(lb); const top=new T.DirectionalLight(0xffffff,.8); top.position.set(0,80,0); state.scene.add(top);
+        buildLayers3D(T); updateLayout3D(); addEventListener('resize', ()=>{ state.camera.aspect=innerWidth/innerHeight; state.camera.updateProjectionMatrix(); state.renderer.setSize(innerWidth,innerHeight); });
+        addDrag3D();
+        requestAnimationFrame(animate3D);
+      } else {
+        document.getElementById('envStatus').innerHTML = 'Env: <b class="fail">three.js unavailable</b>'; setup2D();
+      }
+      wireUI(); addDockDrag();
+    }
+
+    // start
+    boot();
+  })();
+  </script>
+</body>
+</html>

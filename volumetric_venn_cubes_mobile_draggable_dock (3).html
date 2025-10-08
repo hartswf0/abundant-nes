@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Volumetric Media Nexus — Refined + Sequencer</title>
+<style>
+  * {margin:0;padding:0;box-sizing:border-box;touch-action:none;-webkit-tap-highlight-color:transparent}
+  body {font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:#000; color:#fff; overflow:hidden;}
+  #canvas {width:100vw;height:100vh;display:block;}
+
+  /* Header */
+  #header {position:fixed;top:0;left:0;width:100%;background:rgba(0,0,0,.85);border-bottom:2px solid rgba(79,195,247,.5);display:flex;align-items:center;justify-content:center;padding:10px 15px;z-index:60;backdrop-filter:blur(6px)}
+  #header h1 {font-size:12px;letter-spacing:1px;color:#4fc3f7;margin:0}
+
+  /* Top Dock */
+  #dock {position:fixed;top:45px;left:50%;transform:translateX(-50%);display:flex;gap:10px;z-index:55}
+  .dockBtn {width:54px;height:50px;border:2px solid #4fc3f7;border-radius:10px;background:rgba(0,0,0,.9);color:#cfefff;font-size:10px;letter-spacing:.5px;cursor:pointer}
+  .dockBtn.active {background:rgba(79,195,247,.25);box-shadow:0 0 12px rgba(79,195,247,.6)}
+
+  /* Floating panel */
+  #panel {position:fixed;top:105px;left:50%;transform:translateX(-50%);min-width:330px;max-width:94vw;background:rgba(0,0,0,.92);border:2px solid rgba(79,195,247,.5);border-radius:12px;padding:12px 14px;display:none;z-index:50}
+  #panel.open {display:block}
+  .section {margin-bottom:12px}
+  .label {font-size:10px;color:#4fc3f7;margin-bottom:6px;text-transform:uppercase;letter-spacing:1px}
+  .row {display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  input[type=range] {flex:1;height:6px;background:rgba(79,195,247,.3);border-radius:3px;-webkit-appearance:none}
+  input[type=range]::-webkit-slider-thumb {-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:#4fc3f7;box-shadow:0 0 10px rgba(79,195,247,.8)}
+  .val {min-width:38px;text-align:right;font-weight:700;color:#4fc3f7;font-size:11px}
+  button {border:2px solid #4fc3f7;background:rgba(79,195,247,.15);color:#fff;border-radius:8px;padding:6px 10px;font-size:10px;cursor:pointer}
+  button:active,button.active {background:rgba(79,195,247,.3);transform:scale(.98)}
+
+  /* Camera Pad */
+  #camPad {position:fixed;right:10px;top:50%;transform:translateY(-50%);display:grid;gap:8px;z-index:40}
+  .camBtn {width:40px;height:40px;border-radius:10px;border:2px solid #4fc3f7;background:rgba(0,0,0,.85);color:#fff;font-size:10px;cursor:pointer}
+
+  /* Nexus HUD */
+  #nexusHUD {position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.85);border:2px solid #ffaa00;border-radius:10px;padding:8px 14px;display:flex;align-items:center;gap:10px;z-index:45}
+  #nexusHUD span {font-size:11px;color:#ffaa00;letter-spacing:.5px}
+  .meter{width:80px;height:6px;background:rgba(255,255,255,.08);border:1px solid rgba(79,195,247,.35);border-radius:6px;overflow:hidden}
+  .meter>div{height:100%}
+
+  /* Sequencer */
+  #seqGrid{display:grid;grid-template-columns:repeat(16, minmax(18px, 1fr));gap:6px}
+  .step{height:24px;border-radius:6px;border:1px solid rgba(79,195,247,.35);background:rgba(255,255,255,.06);cursor:pointer}
+  .step.on{background:rgba(79,195,247,.5)}
+  .step.play{outline:2px solid #ffaa00}
+  .trackLabel{font-size:10px;color:#9fd2ff;margin:6px 0 2px}
+  .small{font-size:10px;color:#9fb6c1}
+  .pill{border:1px solid rgba(79,195,247,.35);border-radius:999px;padding:4px 8px;font-size:10px;background:rgba(255,255,255,.06)}
+
+  @media (max-width:480px){ #panel{max-width:96vw} .dockBtn{width:48px;height:46px} }
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+<div id="header"><h1>VOL‑MEDIA NEXUS</h1></div>
+<div id="dock">
+  <button class="dockBtn" data-panel="layers">LYR</button>
+  <button class="dockBtn" data-panel="sep">SEP</button>
+  <button class="dockBtn" data-panel="spc">SPC</button>
+  <button class="dockBtn" data-panel="vis">VIS</button>
+  <button class="dockBtn" data-panel="mix">MIX</button>
+  <button class="dockBtn" data-panel="seq">SEQ</button>
+</div>
+<div id="panel"></div>
+<div id="camPad">
+  <button class="camBtn" data-cam="front">FR</button>
+  <button class="camBtn" data-cam="isoL">IL</button>
+  <button class="camBtn" data-cam="isoR">IR</button>
+  <button class="camBtn" data-cam="top">TOP</button>
+</div>
+<div id="nexusHUD">
+  <span id="nexusText">NEXUS: READY</span>
+  <div class="meter"><div id="mA" style="background:#00ff88;width:40%"></div></div>
+  <div class="meter"><div id="mO" style="background:#ffaa00;width:50%"></div></div>
+  <div class="meter"><div id="mB" style="background:#ff4488;width:40%"></div></div>
+</div>
+
+<script>
+// ---------- THREE bootstrap with fallback ---------
+(async function(){
+  if(!window.THREE){
+    const srcs=[
+      'https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js',
+      'https://unpkg.com/three@0.152.2/build/three.min.js',
+      'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js'
+    ];
+    for(const s of srcs){
+      try{ await new Promise((res,rej)=>{const el=document.createElement('script');el.src=s;el.async=true;el.onload=res;el.onerror=rej;document.head.appendChild(el);}); if(window.THREE) break; }catch(e){}
+    }
+  }
+
+  // ---------- Globals / State ----------
+  const SIZE=10; // layer plane size
+  let scene,camera,renderer; let cubeA=[], cubeB=[], nexus=[];
+  let layers=16, cubeDist=2.5, spacing=1.1; // start with visible overlap
+  let showA=true, showB=true, showN=true;
+  let blend='normal', overlapIntensity=.9; // for overlap material
+  // mix
+  let xf=0; // -1..1 crossfader
+  let forceOverlap=0.5; // 0..1 exact overlap control
+  // audio + sequencer
+  let AC, master, deckA, deckB, overBus; let playing=false; let bpm=110, step=0, steps=16;
+  const seq={ A:new Array(16).fill(0), B:new Array(16).fill(0), O:new Array(16).fill(0) };
+
+  // ---------- Three.js init ----------
+  const canvas=document.getElementById('canvas');
+  scene=new THREE.Scene();
+  scene.background=new THREE.Color(0x000000);
+  camera=new THREE.PerspectiveCamera(50, innerWidth/innerHeight, .1, 1000);
+  camera.position.set(40,40,40); camera.lookAt(0,0,0);
+  renderer=new THREE.WebGLRenderer({canvas, antialias:true});
+  renderer.setSize(innerWidth,innerHeight); renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
+  addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight);});
+
+  addLights();
+  buildLayers();
+  bindUI();
+  animate();
+
+  // ---------- Lights ----------
+  function addLights(){
+    scene.add(new THREE.AmbientLight(0xffffff,.35));
+    const keyL=new THREE.PointLight(0x4fc3f7, 2, 160); keyL.position.set(0,40,40); scene.add(keyL);
+    const rim=new THREE.DirectionalLight(0xffffff,.65); rim.position.set(-40,60,-10); scene.add(rim);
+  }
+
+  // ---------- Geometry ----------
+  function makeLayer(col,op){
+    const geom=new THREE.PlaneGeometry(SIZE,SIZE);
+    const mat=new THREE.MeshStandardMaterial({color:col,transparent:true,opacity:op,side:THREE.DoubleSide,depthWrite:false,roughness:.6,metalness:.1});
+    const m=new THREE.Mesh(geom,mat); m.rotation.x=-Math.PI/2; return m;
+  }
+
+  function buildLayers(){
+    clearLayers();
+    for(let i=0;i<layers;i++){
+      const base=0.85-(i/layers)*0.55;
+      const a=makeLayer(0x00ff88, base*0.35); a.position.set(-cubeDist, i*spacing, 0); scene.add(a); cubeA.push(a);
+      const b=makeLayer(0xff4488, base*0.35); b.position.set( cubeDist, i*spacing, 0); scene.add(b); cubeB.push(b);
+      const n=makeLayer(0xffaa00, Math.max(.25,base*overlapIntensity)); n.position.set(0, i*spacing, 0); scene.add(n); nexus.push(n);
+    }
+    applyVis();
+    updateNexus();
+  }
+
+  function clearLayers(){
+    for(const arr of [cubeA,cubeB,nexus]){ for(const m of arr){ scene.remove(m); m.geometry.dispose?.(); m.material.dispose?.(); } arr.length=0; }
+  }
+
+  function applyVis(){ cubeA.forEach(o=>o.visible=showA); cubeB.forEach(o=>o.visible=showB); nexus.forEach(o=>o.visible=showN); }
+
+  // Overlap math: centers at ±cubeDist, each plane width=SIZE => overlap width = max(0, SIZE - 2*cubeDist)
+  function updateNexus(){
+    // optional: exact control via forceOverlap slider overrides cubeDist
+    const desiredWidth = SIZE * clamp(forceOverlap,0,1);
+    const dist = clamp((SIZE - desiredWidth)/2, 0, SIZE/2);
+    cubeDist = dist; // keep geometry consistent with UI intent
+
+    const ow = Math.max(0, SIZE - 2*cubeDist);
+    const oPct = clamp(ow/SIZE,0,1);
+    document.getElementById('nexusText').textContent = `Overlap: ${Math.round(oPct*100)}%`;
+    document.getElementById('mO').style.width = `${Math.round(oPct*100)}%`;
+
+    // position A/B stacks
+    cubeA.forEach((a,i)=>{ a.position.x = -cubeDist; a.material.opacity = 0.25 + 0.6*gainAAtLayer(i); setBlend(a.material); });
+    cubeB.forEach((b,i)=>{ b.position.x =  cubeDist; b.material.opacity = 0.25 + 0.6*gainBAtLayer(i); setBlend(b.material); });
+
+    // scale overlap band to real width
+    nexus.forEach(n=>{ n.visible = showN && ow>0; n.scale.set(ow||1,1,1); n.position.x = 0; setBlend(n.material,true); n.material.opacity = 0.18 + 0.5*oPct; });
+
+    // meters for A/B from crossfader
+    const g = xfGains(xf);
+    document.getElementById('mA').style.width = `${Math.round(g.a*100)}%`;
+    document.getElementById('mB').style.width = `${Math.round(g.b*100)}%`;
+  }
+
+  function setBlend(mat,isOverlap=false){
+    switch(blend){
+      case 'add': mat.blending=THREE.AdditiveBlending; break;
+      case 'multiply': mat.blending=THREE.MultiplyBlending; break;
+      case 'screen': mat.blending=THREE.CustomBlending; mat.blendEquation=THREE.AddEquation; mat.blendSrc=THREE.OneFactor; mat.blendDst=THREE.OneMinusSrcColorFactor; break;
+      default: mat.blending=THREE.NormalBlending;
+    }
+    if(isOverlap){ mat.emissive = new THREE.Color(0xffaa00); mat.emissiveIntensity = .35; }
+  }
+
+  function clamp(n,a,b){ return Math.max(a, Math.min(b,n)); }
+  function xfGains(x){ return {a:(1-x)/2, b:(1+x)/2}; }
+  function layerWeight(i){ if(layers<=1) return .5; return i/(layers-1); }
+  function bandWeights(t){ const tri=(c,w)=>Math.max(0,1-Math.abs(t-c)/w); return {low:tri(0,.35), mid:tri(.5,.35), high:tri(1,.35)}; }
+  function gainAAtLayer(i){ const t=layerWeight(i); const w=bandWeights(t); const g=xfGains(xf).a; return g*(.5*w.low+.5*w.mid+.5*w.high)/1.5; }
+  function gainBAtLayer(i){ const t=layerWeight(i); const w=bandWeights(t); const g=xfGains(xf).b; return g*(.5*w.low+.5*w.mid+.5*w.high)/1.5; }
+
+  // ---------- Camera ----------
+  function setCam(p){ const r=70; if(p==='front'){camera.position.set(0,30,r);} else if(p==='isoL'){camera.position.set(-r*.8,40,r*.6);} else if(p==='isoR'){camera.position.set(r*.8,40,r*.6);} else if(p==='top'){camera.position.set(0,100,0.01);} camera.lookAt(0,0,0); }
+
+  // ---------- Animation ----------
+  function animate(){ requestAnimationFrame(animate); renderer.render(scene,camera); }
+
+  // ---------- Audio + Sequencer ----------
+  function audioInit(){ if(AC) return; const C=window.AudioContext||window.webkitAudioContext; AC=new C(); master=AC.createGain(); master.gain.value=.18; master.connect(AC.destination);
+    // Deck A
+    deckA={osc:AC.createOscillator(), env:AC.createGain(), filt:AC.createBiquadFilter()};
+    deckA.osc.type='sawtooth'; deckA.osc.frequency.value=110; deckA.filt.type='lowpass'; deckA.filt.frequency.value=1800; deckA.env.gain.value=0; deckA.osc.connect(deckA.filt).connect(deckA.env).connect(master); deckA.osc.start();
+    // Deck B
+    deckB={osc:AC.createOscillator(), env:AC.createGain(), filt:AC.createBiquadFilter()};
+    deckB.osc.type='square'; deckB.osc.frequency.value=220; deckB.filt.type='highpass'; deckB.filt.frequency.value=900; deckB.env.gain.value=0; deckB.osc.connect(deckB.filt).connect(deckB.env).connect(master); deckB.osc.start();
+    // Overlap bus (noise through bandpass)
+    const noiseBuf=AC.createBuffer(1, AC.sampleRate*2, AC.sampleRate); const d=noiseBuf.getChannelData(0); for(let i=0;i<d.length;i++){ d[i]=Math.random()*2-1; }
+    const noise=AC.createBufferSource(); noise.buffer=noiseBuf; noise.loop=true; const bp=AC.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=1200; overBus={env:AC.createGain(), bp, src:noise}; overBus.env.gain.value=0; noise.connect(bp).connect(overBus.env).connect(master); noise.start();
+  }
+
+  function noteFreq(tonic=110, semis=0){ return tonic * Math.pow(2, semis/12); }
+  const scaleA=[0,2,3,7,10]; // minor pentatonic degrees
+  const scaleB=[0,2,4,7,9]; // major pentatonic degrees
+
+  function trigger(env, freqTarget, osc, level=0.7){
+    const now=AC.currentTime; env.gain.cancelScheduledValues(now); env.gain.setValueAtTime(env.gain.value, now); env.gain.linearRampToValueAtTime(level, now+0.005); env.gain.exponentialRampToValueAtTime(0.0001, now+0.25); if(osc && typeof freqTarget==='number') osc.frequency.setTargetAtTime(freqTarget, now, 0.02);
+  }
+
+  function tick(){
+    if(!playing) return; const msPer16 = (60000/bpm)/4; const next = performance.now()+msPer16; const s=step%steps;
+    const g=xfGains(xf);
+    // compute pitch by layer-weight average so visuals drive sound mapping
+    const meanT = (layers>1? (0+(layers-1))/2/(layers-1): .5);
+    const degA=scaleA[(s)%scaleA.length]; const degB=scaleB[(s+2)%scaleB.length];
+    if(seq.A[s]) trigger(deckA.env, noteFreq(110, degA), deckA.osc, .55*g.a+.05);
+    if(seq.B[s]) trigger(deckB.env, noteFreq(220, degB), deckB.osc, .55*g.b+.05);
+    // overlap loudness follows geometry & O track
+    const owPct = Math.max(0, (SIZE - 2*cubeDist))/SIZE; if(seq.O[s]) trigger(overBus.env, null, null, .7*owPct+.05);
+
+    // visual playhead pulse on nexus
+    nexus.forEach((n,i)=>{ const t=i/(layers-1||1); const pulse = (s%4===0 && t>.45 && t<.55)? 0.6: 0.0; n.material.emissive = new THREE.Color(0xffaa00); n.material.emissiveIntensity = .25 + pulse; });
+
+    step=(step+1)%steps; const again=()=>tick(); const wait=next-performance.now(); setTimeout(again, Math.max(0, wait));
+  }
+
+  // ---------- UI ----------
+  function bindUI(){
+    document.querySelectorAll('.camBtn').forEach(b=>b.addEventListener('click',()=>setCam(b.dataset.cam)));
+    document.querySelectorAll('.dockBtn').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.dockBtn').forEach(x=>x.classList.remove('active')); b.classList.add('active'); openPanel(b.dataset.panel);}));
+  }
+
+  function openPanel(id){
+    const p=document.getElementById('panel'); let html='';
+    if(id==='layers'){
+      html = `
+        <div class='section'><div class='label'>Layers</div>
+          <div class='row'><input id='layerSlider' type='range' min='4' max='32' value='${layers}'><span id='layerVal' class='val'>${layers}</span></div>
+        </div>`;
+    } else if(id==='sep'){
+      html = `
+        <div class='section'><div class='label'>Force Overlap %</div>
+          <div class='row'><input id='overSlider' type='range' min='0' max='100' value='${Math.round(forceOverlap*100)}'><span id='overVal' class='val'>${Math.round(forceOverlap*100)}</span></div>
+        </div>
+        <div class='small pill'>Exact geometric overlap control; A/B positions auto-adjust.</div>`;
+    } else if(id==='spc'){
+      html = `
+        <div class='section'><div class='label'>Layer Spacing</div>
+          <div class='row'><input id='spcSlider' type='range' min='0.6' max='2.0' step='0.1' value='${spacing}'><span id='spcVal' class='val'>${spacing}</span></div>
+        </div>`;
+    } else if(id==='vis'){
+      html = `
+        <div class='section'><div class='label'>Visibility</div>
+          <div class='row'><button id='toggleA' class='${showA?"active":""}'>A</button><button id='toggleB' class='${showB?"active":""}'>B</button><button id='toggleN' class='${showN?"active":""}'>NEX</button></div>
+        </div>
+        <div class='section'><div class='label'>Blend Mode</div>
+          <div class='row'><button data-blend='normal'>Normal</button><button data-blend='add'>Add</button><button data-blend='multiply'>Multiply</button><button data-blend='screen'>Screen</button></div>
+        </div>`;
+    } else if(id==='mix'){
+      html = `
+        <div class='section'><div class='label'>Crossfader</div>
+          <div class='row'><span class='small'>A</span><input id='xf' type='range' min='-100' max='100' value='${Math.round(xf*100)}'><span class='small'>B</span></div>
+        </div>
+        <div class='section'><div class='label'>Audio</div>
+          <div class='row'><button id='audioBtn'>${AC && AC.state==='running'?'Audio On':'Audio Off'}</button><span class='small'>Tap to enable sound</span></div>
+        </div>`;
+    } else if(id==='seq'){
+      html = `
+        <div class='section'><div class='label'>Sequencer</div>
+          <div class='row'><button id='playBtn'>${playing?'Stop':'Play'}</button><span class='small'>BPM</span><input id='bpm' type='range' min='60' max='180' value='${bpm}'><span class='val' id='bpmVal'>${bpm}</span></div>
+          <div class='trackLabel'>Deck A</div><div id='gridA' class='row'><div id='A' class='gridWrap'>${stepsHTML('A')}</div></div>
+          <div class='trackLabel'>Overlap</div><div id='gridO' class='row'><div id='O' class='gridWrap'>${stepsHTML('O')}</div></div>
+          <div class='trackLabel'>Deck B</div><div id='gridB' class='row'><div id='B' class='gridWrap'>${stepsHTML('B')}</div></div>
+        </div>`;
+    }
+    p.innerHTML = html; p.classList.add('open'); bindPanel(id);
+  }
+
+  function stepsHTML(track){ return `<div id='seqGrid' class='grid'>${Array.from({length:16},(_,i)=>`<div class='step ${seq[track][i]?"on":""}' data-track='${track}' data-step='${i}'></div>`).join('')}</div>`; }
+
+  function bindPanel(id){
+    const p=document.getElementById('panel');
+    if(id==='layers'){
+      const l=p.querySelector('#layerSlider'); l.oninput=e=>{ layers=parseInt(e.target.value); p.querySelector('#layerVal').textContent=layers; buildLayers(); };
+    }
+    if(id==='sep'){
+      const o=p.querySelector('#overSlider'); o.oninput=e=>{ forceOverlap = parseInt(e.target.value)/100; p.querySelector('#overVal').textContent=Math.round(forceOverlap*100); updateNexus(); };
+    }
+    if(id==='spc'){
+      const sp=p.querySelector('#spcSlider'); sp.oninput=e=>{ spacing=parseFloat(e.target.value); buildLayers(); };
+    }
+    if(id==='vis'){
+      p.querySelector('#toggleA').onclick=()=>{ showA=!showA; p.querySelector('#toggleA').classList.toggle('active'); applyVis(); };
+      p.querySelector('#toggleB').onclick=()=>{ showB=!showB; p.querySelector('#toggleB').classList.toggle('active'); applyVis(); };
+      p.querySelector('#toggleN').onclick=()=>{ showN=!showN; p.querySelector('#toggleN').classList.toggle('active'); applyVis(); };
+      p.querySelectorAll('[data-blend]').forEach(b=> b.onclick=()=>{ blend=b.getAttribute('data-blend'); updateNexus(); });
+    }
+    if(id==='mix'){
+      const x=p.querySelector('#xf'); x.oninput=e=>{ xf = parseInt(e.target.value)/100; updateNexus(); };
+      const a=p.querySelector('#audioBtn'); a.onclick=async ()=>{ audioInit(); if(AC.state==='running'){ await AC.suspend(); a.textContent='Audio Off'; } else { await AC.resume(); a.textContent='Audio On'; tick(); } };
+    }
+    if(id==='seq'){
+      p.querySelector('#bpm').oninput=e=>{ bpm=parseInt(e.target.value); p.querySelector('#bpmVal').textContent=bpm; };
+      p.querySelector('#playBtn').onclick=async ()=>{ if(!AC) audioInit(); if(AC.state!=='running') await AC.resume(); playing=!playing; p.querySelector('#playBtn').textContent=playing?'Stop':'Play'; if(playing) { step=0; tick(); } };
+      p.querySelectorAll('.step').forEach(el=>{
+        el.onclick=()=>{ const tr=el.dataset.track, i=parseInt(el.dataset.step); seq[tr][i]=seq[tr][i]?0:1; el.classList.toggle('on'); };
+      });
+    }
+  }
+
+})();
+</script>
+</body>
+</html>

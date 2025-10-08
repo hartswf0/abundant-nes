@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>VIDEO_STACKER_∞ — YouTube CSS3D Edition</title>
+<style>
+  :root{ --ink:#00ff7b; --bg:#000; --ghost:#0a0a0a; --chip:#0d0d0dd9; }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{ margin:0; background:var(--bg); color:var(--ink);
+    font:14px/1.4 ui-rounded, system-ui, -apple-system, Segoe UI, Roboto, "Courier New", monospace;
+    overflow:hidden; touch-action:none; -webkit-user-select:none; user-select:none; }
+  #gl,#css{position:fixed; inset:0;}
+
+  /* ===== Minimal, mobile-first UI ===== */
+  .ui{transition:opacity .25s ease, transform .25s ease;}
+  .ui.hide{opacity:.15; transform:translateY(4px)}
+
+  #hud{position:fixed; top:env(safe-area-inset-top,10px); left:env(safe-area-inset-left,10px); z-index:20; display:flex; gap:6px; align-items:center; pointer-events:none}
+  .chip{border:1px solid color-mix(in oklab, var(--ink) 60%, #0b0b0b); padding:6px 9px; border-radius:999px; background:var(--chip); backdrop-filter:blur(6px); box-shadow:0 0 10px rgba(0,255,123,.12)}
+  .chip.small{padding:4px 8px; font-size:12px}
+  #stability{position:relative; width:72px; height:5px; border-radius:4px; overflow:hidden; border:1px solid color-mix(in oklab, var(--ink) 50%, #0b0b0b); background:#111}
+  #stability>i{position:absolute; inset:0; width:100%; background:linear-gradient(90deg,#ff5e5e,#ffd95e,#00ff7b); transform-origin:left center; transform:scaleX(1)}
+
+  /* Controls → 2 buttons on mobile: big FAB + mode toggle */
+  #controls{position:fixed; right:env(safe-area-inset-right,10px); bottom:calc(env(safe-area-inset-bottom,16px) + 78px); display:flex; flex-direction:column; gap:8px; z-index:30}
+  .btn{min-width:44px; min-height:44px; width:44px; height:44px; border-radius:999px; border:1px solid color-mix(in oklab, var(--ink) 50%, #0b0b0b); background:#0b0b0bcc; color:var(--ink); display:grid; place-items:center; font-weight:700; box-shadow:0 0 14px rgba(0,255,123,.18); cursor:pointer; touch-action:manipulation}
+  .btn:active{background:var(--ink); color:#000; transform:scale(.98)}
+  .btn.small{opacity:.8}
+
+  /* Bottom-center FAB */
+  #dropWrap{position:fixed; left:50%; bottom:env(safe-area-inset-bottom,16px); transform:translateX(-50%); z-index:30}
+  #btn-drop{width:76px; height:76px; border-radius:999px; border-width:1.5px; font-size:22px; letter-spacing:.5px}
+
+  /* Minimal hint that auto-hides */
+  #hint{position:fixed; left:50%; bottom:calc(env(safe-area-inset-bottom,16px) + 96px); transform:translateX(-50%); opacity:.5; z-index:20; animation:pulse 2s infinite; pointer-events:none}
+  @keyframes pulse{0%,100%{opacity:.5}50%{opacity:.2}}
+
+  /* Game Over */
+  #over{position:fixed; inset:0; display:none; place-items:center; z-index:50}
+  #over .panel{background:#000000dd; border:1px solid var(--ink); padding:18px 16px; width:min(90vw,420px); text-align:center; box-shadow:0 0 26px rgba(0,255,123,.25); border-radius:14px}
+  #over h1{margin:0 0 6px; letter-spacing:2px}
+  #over .meta{opacity:.85; margin:8px 0 14px}
+  #over button{border:1px solid var(--ink); background:transparent; color:var(--ink); padding:10px 18px; font-weight:700; border-radius:999px; cursor:pointer}
+  #over button:active{background:var(--ink); color:#000}
+
+  /* Caption (faint) */
+  #label{position:fixed; right:10px; bottom:10px; font-size:10px; opacity:.4; letter-spacing:.4px; z-index:10; pointer-events:none}
+
+  .yt-surface{pointer-events:none; border-radius:8px; overflow:hidden; border:1px solid #0b0b0b; box-shadow:0 0 8px rgba(0,0,0,.6)}
+
+  /* Desktop-only extras become hidden on mobile to reduce clutter */
+  @media (pointer:coarse), (max-width:640px){
+    #controls .btn.small, #btn-mute, #btn-cull, #btn-view { display:none; }
+  }
+</style>
+</head>
+<body>
+  <div id="gl"></div>
+  <div id="css"></div>
+
+  <div id="hud" class="ui">
+    <div class="chip small" id="mode-chip">mode: game</div>
+    <div class="chip" id="height">0.0m</div>
+    <div class="chip small" id="watched">watched: 0.0m</div>
+    <div id="stability" class="chip" aria-label="stability"><i></i></div>
+    <div class="chip small" id="next">next: —</div>
+    <!-- keep these (hidden) so tests & logic still pass -->
+    <span id="score" style="display:none">0</span>
+    <span id="streak" style="display:none">×0</span>
+  </div>
+
+  <div id="controls" class="ui">
+    <button class="btn" id="btn-mode-switch" title="Toggle mode">⇵</button>
+    <button class="btn small" id="btn-auto" title="Auto">⏸</button>
+    <button class="btn small" id="btn-view" title="View">⟲</button>
+    <button class="btn small" id="btn-mute" title="Mute">🔊</button>
+    <button class="btn small" id="btn-cull" title="Cull">✕</button>
+    <button class="btn small" id="btn-exhibit" title="Exhibit">◇</button>
+  </div>
+
+  <div id="dropWrap" class="ui"><button class="btn" id="btn-drop" title="Drop / Step">⬇</button></div>
+  <div id="hint" class="ui">swipe ↑ to drop · swipe ◀ ▶ to nudge</div>
+
+  <div id="over"><div class="panel">
+    <h1>COLLAPSE</h1>
+    <div class="meta" id="final"></div>
+    <button id="btn-restart">RESTART</button>
+  </div></div>
+
+  <div id="label">VIDEO_STACKER_∞</div>
+
+  <!-- libs -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/renderers/CSS3DRenderer.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
+  <script src="https://www.youtube.com/iframe_api"></script>
+
+<script>
+// ======= HELPERS =======
+function id(x){ return document.getElementById(x); }
+const TMP = { v:new THREE.Vector3(), q:new THREE.Quaternion(), forward:new THREE.Vector3(0,0,1), offset:new THREE.Vector3() };
+
+// ======= CONFIG =======
+const TV = { w:0.64, h:0.42, d:0.46 };
+const SCREEN_RATIO = 16/9;
+const DROP_SPAWN_Y = 5;
+const GAP_Y = 0.05;
+const LIMIT = 0.22; const K = 6, ALPHA = 0.7;
+const AUTODROP_INTERVAL = 2200; // slightly slower, friendlier pace
+const MAX_ACTIVE_PLAYERS = 5;   // fewer videos playing on mobile
+const NUDGE_IMPULSE = 0.7, NUDGE_MAX_VX = 1.0; // gentler on mobile
+const CSS_FRONT_EPS = 0.012;
+
+// ======= STATE =======
+let scene, cssScene, camera, renderer, cssRenderer, world, clock;
+let tvUnits=[]; // {group, body, css, player, settled}
+let score=0, height=0, watchedHeight=0, streak=0, high=parseInt(localStorage.getItem('vs_hi')||'0');
+let stability=1, gameOver=false, muted=false, auto=true, exhibit=false;
+let camPreset=0, falling=null, feedIndex=0, autoTimer=null;
+let audioCtx, sounds={};
+let YT_READY=false, pendingPlayerCbs=[];
+let camFollow=true, camBase={x:0, z:4.2};
+let modeType='game'; // 'game' | 'scroll'
+let unlockIndex=-1; // highest playable index
+let wheelAccum=0; // for scroll-like steps
+let uiTimer=null;
+
+// ======= YT READY =======
+window.onYouTubeIframeAPIReady = () => { YT_READY = true; pendingPlayerCbs.splice(0).forEach(fn=>fn()); };
+
+// ======= AUDIO =======
+function initAudio(){ audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+  const blip=(f1=400,f2=200,t=.15,g=.2)=>{const o=audioCtx.createOscillator(); const g1=audioCtx.createGain(); o.connect(g1); g1.connect(audioCtx.destination); o.frequency.setValueAtTime(f1,audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(f2,audioCtx.currentTime+t); g1.gain.setValueAtTime(g,audioCtx.currentTime); g1.gain.exponentialRampToValueAtTime(0.01,audioCtx.currentTime+t); o.start(); o.stop(audioCtx.currentTime+t);};
+  sounds.drop=()=>blip(320,160,.18,.25); sounds.land=()=>blip(220,120,.12,.18); sounds.nudge=()=>blip(520,480,.06,.12); sounds.collapse=()=>blip(240,40,.6,.35); }
+function play(name){ if(!muted && audioCtx && sounds[name]) try{sounds[name]()}catch{} }
+
+// ======= HAPTICS & UI FADE =======
+const vibe=(p)=> navigator.vibrate && navigator.vibrate(p||10);
+function showUI(){ ['hud','controls','dropWrap','hint'].forEach(k=>id(k).classList.remove('hide')); clearTimeout(uiTimer); uiTimer=setTimeout(()=>{ ['hud','controls','dropWrap','hint'].forEach(k=>id(k).classList.add('hide')); }, 1600); }
+
+// ======= CAMERA =======
+const CAMS=[ {pos:[0,2.2,4.2],look:[0,1,0]}, {pos:[-2.0,2.4,3.6],look:[0,1.1,0]}, {pos:[2.0,2.4,3.6],look:[0,1.1,0]}, {pos:[0,1.0,3.0],look:[0,1.2,0]}, {pos:[0,5.0,0.3],look:[0,0.8,0]} ];
+function setCam(i){ const c=CAMS[i]; camera.position.set(...c.pos); camera.lookAt(new THREE.Vector3(...c.look)); camBase.x=c.pos[0]; camBase.z=c.pos[2]; }
+function updateAutoCamera(dt){ if(!camFollow || exhibit) return; const targetY=Math.max(1.1, Math.min(height*0.85, height+1.4)); const camY=THREE.MathUtils.lerp(camera.position.y, targetY, Math.min(1, dt*1.8)); camera.position.set(camBase.x, camY, camBase.z + Math.min(5.5, height*0.16)); camera.lookAt(0, THREE.MathUtils.lerp(1.0, targetY*0.85, 0.7), 0); }
+
+// ======= INIT =======
+function init(){
+  clock = new THREE.Clock();
+  scene = new THREE.Scene(); scene.background=new THREE.Color(0x050805); scene.fog=new THREE.Fog(0x050805, 6, 22);
+  cssScene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(50, innerWidth/innerHeight, 0.1, 100); setCam(0);
+  renderer = new THREE.WebGLRenderer({antialias:true}); renderer.setPixelRatio(Math.min(devicePixelRatio,1.5)); renderer.setSize(innerWidth,innerHeight); renderer.shadowMap.enabled=true; id('gl').appendChild(renderer.domElement);
+  cssRenderer = new THREE.CSS3DRenderer(); cssRenderer.setSize(innerWidth,innerHeight); cssRenderer.domElement.style.pointerEvents='none'; id('css').appendChild(cssRenderer.domElement);
+  scene.add(new THREE.AmbientLight(0x224422,1.2)); const key=new THREE.DirectionalLight(0xffffff,.9); key.position.set(3,6,4); key.castShadow=true; scene.add(key); const rim=new THREE.DirectionalLight(0x55aaff,.25); rim.position.set(-3,2,-2); scene.add(rim);
+  world = new CANNON.World(); world.gravity.set(0,-9.82,0); world.broadphase=new CANNON.SAPBroadphase(world); world.allowSleep=true; world.defaultContactMaterial.friction=.6; world.defaultContactMaterial.restitution=.05;
+  const floorShape=new CANNON.Plane(); const floorBody=new CANNON.Body({mass:0,shape:floorShape}); floorBody.quaternion.setFromEuler(-Math.PI/2,0,0); world.addBody(floorBody);
+  const floor=new THREE.Mesh(new THREE.PlaneGeometry(20,20), new THREE.MeshStandardMaterial({color:0x0b0b0b,roughness:.95})); floor.rotation.x=-Math.PI/2; floor.receiveShadow=true; scene.add(floor);
+  const grid=new THREE.GridHelper(12,24,0x003300,0x001a00); grid.position.y=0.01; scene.add(grid);
+
+  addEvents();
+  window.addEventListener('pointerdown', ()=>{ if(!audioCtx) initAudio(); showUI(); }, {once:false});
+  updateHUD(); armAuto(true); animate(); showUI();
+}
+
+// ======= EVENTS =======
+let touchStart={x:0,y:0}, swiping=false;
+function addEvents(){
+  window.addEventListener('resize',()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); cssRenderer.setSize(innerWidth,innerHeight); showUI(); });
+  window.addEventListener('pointerdown', (e)=>{ touchStart.x=e.clientX; touchStart.y=e.clientY; swiping=true; showUI(); });
+  window.addEventListener('pointermove', (e)=>{ if(!swiping||gameOver||modeType!=='game') return; const dx=e.clientX-touchStart.x; if(falling && !falling.settled && Math.abs(dx)>22){ nudge(Math.sign(dx)); touchStart.x=e.clientX; } });
+  window.addEventListener('pointerup', (e)=>{ if(!swiping||gameOver) return; swiping=false; const dy=touchStart.y-e.clientY; if(dy>46 && modeType==='game') drop(); showUI(); });
+
+  // Buttons (few, compact)
+  id('btn-drop').onclick=()=>{ if(modeType==='game') drop(); else spawnFeedStep(); showUI(); };
+  id('btn-mode-switch').onclick=()=>{ toggleMode(); showUI(); };
+  id('btn-auto').onclick=()=>{ auto=!auto; armAuto(auto); showUI(); };
+  id('btn-view').onclick=()=>{ camPreset=(camPreset+1)%CAMS.length; setCam(camPreset); showUI(); };
+  id('btn-mute').onclick=()=>{ muted=!muted; id('btn-mute').textContent = muted? '🔇':'🔊'; showUI(); };
+  id('btn-cull').onclick=()=>{ cullBottom(); showUI(); };
+  id('btn-exhibit').onclick=()=>{ exhibit=!exhibit; id('label').style.opacity = (exhibit ? 0.9 : 0.4); showUI(); };
+  id('btn-restart').onclick=()=>{ restart(); showUI(); };
+}
+
+// ======= MODE =======
+function toggleMode(){ modeType = (modeType==='game') ? 'scroll' : 'game'; id('mode-chip').textContent = 'mode: '+modeType; if(modeType==='scroll'){ streak=0; stability=1; gameOver=false; } }
+
+// ======= FEED =======
+function spawnFeedStep(){ const y = tvUnits.length? Math.max(...tvUnits.map(u=>u.group.position.y)) + TV.h + GAP_Y : DROP_SPAWN_Y; const u = makeTV(y+0.2); tvUnits.push(u); u.body.velocity.set(0,0,0); u.body.angularVelocity.set(0,0,0); u.body.sleep(); u.settled = true; unlockIndex = tvUnits.length-1; height = Math.max(height, u.body.position.y); watchedHeight = height; updateHUD(); limitActive(); }
+
+// ======= UTIL =======
+function nextVideo(){ const vid = VIDEO_IDS[feedIndex % VIDEO_IDS.length]; feedIndex++; id('next').textContent = 'next: '+vid; return vid; }
+
+// ======= CREATE TV =======
+function makeTV(y=DROP_SPAWN_Y){
+  const g = new THREE.Group();
+  const shell = new THREE.Mesh(new THREE.BoxGeometry(TV.w, TV.h, TV.d), new THREE.MeshStandardMaterial({color:0x121212, roughness:.8, metalness:.25})); shell.castShadow=true; shell.receiveShadow=true; g.add(shell);
+  const bezel = new THREE.Mesh(new THREE.BoxGeometry(TV.w*0.86, TV.h*0.72, 0.02), new THREE.MeshStandardMaterial({color:0x0a0a0a, roughness:.7})); bezel.position.z = TV.d/2 + 0.01; g.add(bezel);
+  const shape = new CANNON.Box(new CANNON.Vec3(TV.w/2, TV.h/2, TV.d/2));
+  const body = new CANNON.Body({mass:1, shape, sleepSpeedLimit:.1, sleepTimeLimit:.4});
+  body.position.set(0,y,0); body.linearDamping=.34; body.angularDamping=.34; world.addBody(body);
+
+  const pxW=360, pxH=Math.round(pxW/SCREEN_RATIO); // slightly smaller for mobile perf
+  const surface=document.createElement('div'); surface.className='yt-surface'; surface.style.width=pxW+'px'; surface.style.height=pxH+'px'; surface.style.background='#000';
+  const cssObj = new THREE.CSS3DObject(surface); const scale=(TV.w*0.86)/pxW; cssObj.scale.set(scale,scale,1);
+  const unit={group:g, body, css:cssObj, player:null, settled:false};
+
+  const makePlayer=()=>{ try{ const p=new YT.Player(surface,{ width:pxW,height:pxH, videoId: nextVideo(), playerVars:{autoplay:1,controls:0,modestbranding:1,rel:0,playsinline:1,mute:1,loop:1,playlist: VIDEO_IDS[(feedIndex-1)%VIDEO_IDS.length]}, events:{ onReady:(e)=>{ try{e.target.mute(); e.target.playVideo();}catch{} } } }); unit.player=p; }catch{} };
+  if(YT_READY) makePlayer(); else pendingPlayerCbs.push(makePlayer);
+
+  g.position.y = y; scene.add(g); cssScene.add(cssObj);
+  return unit;
+}
+
+// ======= GAME CONTROLS =======
+function spawnY(){ return (tvUnits.length? Math.max(...tvUnits.map(u=>u.group.position.y))+TV.h+GAP_Y : DROP_SPAWN_Y) + (modeType==='game'?1.0:0.6); }
+function drop(){ if(gameOver||falling) return; falling = makeTV(spawnY()); tvUnits.push(falling); play('drop'); vibe(16); limitActive(); }
+function nudge(dir){ if(!falling||falling.settled||modeType!=='game') return; falling.body.applyImpulse(new CANNON.Vec3(dir*NUDGE_IMPULSE,0,0), falling.body.position); const vx=THREE.MathUtils.clamp(falling.body.velocity.x,-NUDGE_MAX_VX,NUDGE_MAX_VX); falling.body.velocity.x=vx; play('nudge'); }
+function cullBottom(){ if(!tvUnits.length) return; const u=tvUnits.shift(); scene.remove(u.group); cssScene.remove(u.css); world.removeBody(u.body); try{u.player&&u.player.destroy()}catch{} streak=0; updateHUD(); }
+
+// ======= STABILITY / COLLAPSE =======
+function calcStability(){ if(modeType==='scroll' || tvUnits.length<2) return 1; const recent=tvUnits.slice(-K).filter(u=>u.settled); if(recent.length<2) return 1; let com=0, over=0; for(let i=1;i<recent.length;i++){ const a=recent[i], b=recent[i-1]; const dx=a.body.position.x-b.body.position.x, dz=a.body.position.z-b.body.position.z; const off=Math.hypot(dx,dz); com += off/LIMIT; const oh=Math.max(0, off - TV.w*0.30); over += oh/(TV.w*0.7); } const avgCom=com/(recent.length-1), avgOver=over/(recent.length-1); return Math.max(0, Math.min(1, 1-(avgCom+ALPHA*avgOver))); }
+function collapse(){ if(modeType==='scroll' || gameOver) return; gameOver=true; world.gravity.y *= 0.3; play('collapse'); vibe([40,80,40]); if(score>high){ high=score; localStorage.setItem('vs_hi', String(high)); } setTimeout(()=>{ id('final').innerHTML = `SCORE: ${score}<br>HEIGHT: ${height.toFixed(2)}m<br>STREAK: ${streak}`; id('over').style.display='grid'; }, 900); }
+
+// ======= AUTO =======
+function armAuto(on){ id('btn-auto').textContent = on? '⏸':'▶︎'; clearInterval(autoTimer); if(on){ autoTimer=setInterval(()=>{ if(modeType==='game'){ if(!falling && !gameOver) drop(); } else { spawnFeedStep(); } }, AUTODROP_INTERVAL); } }
+
+// ======= RESTART =======
+function restart(){ tvUnits.forEach(u=>{ scene.remove(u.group); cssScene.remove(u.css); world.removeBody(u.body); try{u.player&&u.player.destroy()}catch{} }); tvUnits.length=0; falling=null; score=0;height=0;watchedHeight=0;streak=0;stability=1;gameOver=false; feedIndex=0; unlockIndex=-1; world.gravity.y=-9.82; id('over').style.display='none'; updateHUD(); }
+
+// ======= ACTIVE PLAYBACK GATING =======
+function limitActive(){ const playable = tvUnits.slice(0, Math.max(unlockIndex+1, 0)); const tail = playable.slice(-MAX_ACTIVE_PLAYERS); tvUnits.forEach((u)=>{ const shouldPlay = tail.includes(u); try{ if(shouldPlay) u.player && u.player.playVideo && u.player.playVideo(); else u.player && u.player.pauseVideo && u.player.pauseVideo(); }catch{} }); }
+
+// ======= HUD =======
+function updateHUD(){ id('height').textContent = height.toFixed(1)+'m'; id('watched').textContent = 'watched: '+watchedHeight.toFixed(1)+'m'; id('stability').firstElementChild.style.transform = `scaleX(${Math.max(0,stability)})`; }
+
+// ======= ALIGN CSS =======
+function placeCss(u){ TMP.forward.set(0,0,1).applyQuaternion(TMP.q.set(u.body.quaternion.x,u.body.quaternion.y,u.body.quaternion.z,u.body.quaternion.w)); TMP.offset.copy(TMP.forward).multiplyScalar(TV.d/2 + CSS_FRONT_EPS); TMP.v.set(u.body.position.x,u.body.position.y,u.body.position.z).add(TMP.offset); u.css.position.copy(TMP.v); u.css.quaternion.set(u.body.quaternion.x,u.body.quaternion.y,u.body.quaternion.z,u.body.quaternion.w); }
+
+// ======= TESTS =======
+function runTests(){ const ok=(c,m)=>{ (c?console.log:console.error)(`TEST ${c?"PASS":"FAIL"}: ${m}`); };
+  ok(typeof id==='function','helper id() defined');
+  ok(['game','scroll'].includes(modeType),'modeType initialized');
+  let _unlock=1; const arr=[{},{},{}]; const window=arr.slice(0,Math.max(_unlock+1,0)); ok(window.length===2,'unlockIndex gating example');
+}
+
+// ======= ANIMATE =======
+function animate(){ requestAnimationFrame(animate); const dt=Math.min(clock.getDelta(), .1); world.step(1/60, dt, 3);
+  const t=clock.getElapsedTime();
+  if(exhibit){ camera.position.x = Math.sin(t*.2)*2.0; camera.position.z = 3.6 + Math.cos(t*.15)*0.5; camera.lookAt(0,1.0,0); } else { updateAutoCamera(dt); }
+
+  tvUnits.forEach(u=>{
+    u.group.position.set(u.body.position.x, u.body.position.y, u.body.position.z);
+    u.group.quaternion.set(u.body.quaternion.x, u.body.quaternion.y, u.body.quaternion.z, u.body.quaternion.w);
+    placeCss(u);
+    if(!u.settled && u.body.sleepState === CANNON.Body.SLEEPING){
+      u.settled = true; if(modeType==='game' && u===falling){ const bonus = Math.floor(u.body.position.y*10); score += 10 + bonus; streak++; score += streak*2; falling=null; unlockIndex = tvUnits.length-1; play('land'); vibe([10,30,10]); limitActive(); }
+    }
+    if(u.settled) height = Math.max(height, u.body.position.y);
+  });
+
+  if(modeType==='scroll') watchedHeight = height;
+  stability = calcStability(); if(stability<=0 && !gameOver) collapse();
+  updateHUD(); renderer.render(scene,camera); cssRenderer.render(cssScene,camera);
+}
+
+// ======= GO =======
+init(); runTests();
+</script>
+</body>
+</html>
