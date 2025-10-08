@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>VOL‑MEDIA DECKS v11 — Grid, Orbit, Tone Packs</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;touch-action:none;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;background:#000;color:#fff;font-family:'Inter',sans-serif;overflow:hidden}
+  #canvas{width:100vw;height:100vh;display:block}
+  #hud{position:fixed;inset:0;pointer-events:none;z-index:10}
+  #viewHUD{position:absolute;top:12px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.6);padding:6px 12px;border-radius:8px;font-weight:700;font-size:14px;border:1px solid rgba(255,255,255,.2)}
+  #toast{position:fixed;bottom:10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.8);border:1px solid rgba(255,255,255,.2);border-radius:6px;padding:6px 12px;font-size:12px;display:none}
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+<div id="hud"><div id="viewHUD">FRONT</div></div>
+<div id="toast"></div>
+<script>
+(async function(){
+  // === Load THREE.js ===
+  if(!window.THREE){
+    const src='https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js';
+    await new Promise((res,rej)=>{const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=rej;document.head.appendChild(s)});
+  }
+
+  const canvas=document.getElementById('canvas');
+  const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
+  renderer.setSize(innerWidth,innerHeight);
+  renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+  const scene=new THREE.Scene(); scene.background=new THREE.Color(0x000000);
+
+  const camera=new THREE.PerspectiveCamera(60,innerWidth/innerHeight,0.1,2000);
+  camera.position.set(100,60,100);
+  camera.lookAt(0,0,0);
+  window.addEventListener('resize',()=>{
+    camera.aspect=innerWidth/innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth,innerHeight);
+  });
+
+  const light=new THREE.DirectionalLight(0xffffff,1.2);
+  light.position.set(1,1,1);
+  scene.add(light);
+  scene.add(new THREE.AmbientLight(0x404040));
+
+  // === Helpers ===
+  function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.style.display='block';clearTimeout(toast._id);toast._id=setTimeout(()=>t.style.display='none',1200);}
+
+  // === Camera Controls ===
+  let orbit=false,theta=0;
+  function toggleOrbit(){orbit=!orbit;toast('Orbit: '+(orbit?'ON':'OFF'));}
+  window.addEventListener('keydown',e=>{if(e.key==='o')toggleOrbit();});
+
+  // === Base Grid Setup ===
+  const gridGroup=new THREE.Group();scene.add(gridGroup);
+  const mat=new THREE.MeshStandardMaterial({color:0x21ff86,metalness:0.2,roughness:0.7});
+  const geom=new THREE.BoxGeometry(6,1,6);
+  const gridSize=5; // 5x5 grid
+  for(let i=-2;i<=2;i++){
+    for(let j=-2;j<=2;j++){
+      const cube=new THREE.Mesh(geom,mat.clone());
+      cube.position.set(i*8,0,j*8);
+      gridGroup.add(cube);
+    }
+  }
+
+  // === Tone Packs ===
+  const TONE_PACKS=[
+    {name:'TAPE',color:0xffa44d},
+    {name:'FM BELLS',color:0x59e0ff},
+    {name:'GRANULAR',color:0xc47dff},
+    {name:'FORMANT',color:0xff4488},
+    {name:'BITDRUM',color:0x00ff88},
+    {name:'WAVESET',color:0xffffff}
+  ];
+  let packIndex=0;
+  function applyPack(idx){
+    const pack=TONE_PACKS[idx%TONE_PACKS.length];
+    gridGroup.children.forEach((c,i)=>{
+      const phase=(i/gridGroup.children.length)*Math.PI*2;
+      c.material.color.set(pack.color);
+      c.scale.y=1+Math.sin(Date.now()/300+phase)*0.5;
+    });
+    toast('Pack: '+pack.name);
+  }
+
+  window.addEventListener('keydown',e=>{
+    if(e.key==='p'){packIndex=(packIndex+1)%TONE_PACKS.length;applyPack(packIndex);}
+  });
+
+  // === Audio Setup ===
+  let AC=new (window.AudioContext||window.webkitAudioContext)();
+  const gain=AC.createGain();gain.gain.value=0.15;gain.connect(AC.destination);
+  const osc=AC.createOscillator();osc.type='sine';osc.frequency.value=220;osc.connect(gain);osc.start();
+  function modulate(){osc.frequency.value=200+Math.sin(Date.now()/500)*100;requestAnimationFrame(modulate);}modulate();
+
+  // === Animation Loop ===
+  function animate(t){
+    requestAnimationFrame(animate);
+    if(orbit){theta+=0.005;camera.position.x=Math.cos(theta)*120;camera.position.z=Math.sin(theta)*120;camera.lookAt(0,0,0);}
+    renderer.render(scene,camera);
+  }
+  animate();
+})();
+</script>
+</body>
+</html>

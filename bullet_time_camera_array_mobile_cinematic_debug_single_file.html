@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Bullet Time Camera Array — Mobile Cinematic Debug</title>
+  <style>
+    /* --- Base / Reset --- */
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { height: 100%; background: #000; color: #d9ffdf; font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, "Courier New", monospace; overflow: hidden; }
+    #container { width: 100vw; height: 100vh; }
+
+    /* --- Cinematic overlays --- */
+    .vignette { pointer-events: none; position: fixed; inset: 0; background: radial-gradient(120% 120% at 50% 50%, rgba(0,0,0,0) 60%, rgba(0,0,0,0.35) 100%); z-index: 5; }
+    .letterbox { pointer-events: none; position: fixed; left: 0; right: 0; height: 9.5vh; background: linear-gradient(#000, rgba(0,0,0,0.7)); z-index: 5; }
+    .letterbox.top { top: 0; }
+    .letterbox.bot { bottom: 0; transform: scaleY(-1); }
+
+    /* --- HUD Top Bar --- */
+    #top-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 20; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; padding: env(safe-area-inset-top) 12px 8px 12px; background: linear-gradient(180deg, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.4) 70%, transparent 100%); backdrop-filter: blur(3px); }
+    #cam-number { background: #031a03; border: 2px solid #28ff87; border-radius: 10px; padding: 8px 14px; color: #28ff87; font-size: clamp(18px, 4.2vw, 28px); letter-spacing: 0.12em; text-shadow: 0 0 8px #28ff87; box-shadow: 0 0 0 2px rgba(40,255,135,0.15), 0 0 22px rgba(40,255,135,0.3) inset; font-weight: 800; }
+    #path-name { justify-self: center; font-weight: 800; color: #b6ffcc; padding: 6px 10px; border-radius: 8px; border: 1px solid #1eff7a; background: rgba(0,0,0,0.6); box-shadow: 0 0 16px rgba(30,255,122,0.15) inset; text-align: center; font-size: clamp(12px, 3.5vw, 16px); }
+    #integrity { justify-self: end; display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 999px; border: 2px solid #28ff87; background: #021405; color: #28ff87; font-weight: 900; font-size: clamp(11px, 3.1vw, 14px); box-shadow: 0 0 24px rgba(40,255,135,0.25); }
+    #integrity[data-ok="no"] { border-color: #ff4b72; color: #ffb3c1; background:#20040c; box-shadow: 0 0 24px rgba(255,75,114,0.25); }
+    #integrity .dot { width: 10px; height: 10px; border-radius: 50%; background: currentColor; box-shadow: 0 0 10px currentColor; }
+
+    /* --- Mini-Map / Ring Buffer --- */
+    #ring-viz { position: fixed; top: 10px; right: 10px; width: min(32vw, 180px); aspect-ratio: 1/1; z-index: 25; }
+    #ring-canvas { width: 100%; height: 100%; border: 2px solid #28ff87; border-radius: 50%; background: #010401; box-shadow: 0 0 24px rgba(40,255,135,0.3), 0 0 0 1px rgba(40,255,135,0.15) inset; }
+
+    /* --- Path Selector (collapsible) --- */
+    #path-dock { position: fixed; left: 10px; top: 70px; z-index: 20; width: min(44vw, 230px); }
+    #path-toggle { width: 100%; border-radius: 10px; border: 2px solid #28ff87; background: #041608; color: #b6ffcc; padding: 10px 12px; font-weight: 800; letter-spacing: 0.06em; }
+    #path-list { margin-top: 8px; display: grid; grid-template-columns: 1fr; gap: 8px; max-height: 42vh; overflow: auto; }
+    .path-btn { border: 2px solid #1eff7a; background: #0a180f; color: #dfffea; padding: 10px 12px; border-radius: 10px; font-size: 12px; font-weight: 800; text-align: left; }
+    .path-btn.active { background: #28ff87; color: #001106; box-shadow: 0 0 18px rgba(40,255,135,0.5); }
+
+    /* --- Timeline / Transport --- */
+    #timeline { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; padding: 12px 10px calc(env(safe-area-inset-bottom) + 10px); background: linear-gradient(0deg, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.4) 70%, transparent 100%); }
+    #timeline-track { width: 100%; max-width: 1024px; margin: 0 auto; border: 2px solid #28ff87; border-radius: 12px; padding: 10px; background: #020b05; box-shadow: 0 0 24px rgba(40,255,135,0.2) inset; }
+    #camera-timeline { position: relative; height: 64px; background: linear-gradient(180deg, rgba(30,255,122,0.07), rgba(30,255,122,0.02)); border-radius: 8px; overflow: hidden; }
+    #progress-line { position: absolute; left: 0; top: 50%; transform: translateY(-50%); height: 3px; background: #28ff87; width: 0%; box-shadow: 0 0 12px rgba(40,255,135,0.85); }
+    .timeline-marker { position: absolute; top: 50%; transform: translate(-50%, -50%); display: grid; place-items: center; }
+    .timeline-marker-dot { width: 12px; height: 12px; border-radius: 50%; background: #0b3d22; border: 2px solid #28ff87; box-shadow: 0 0 0 2px rgba(40,255,135,0.1) inset; }
+    .timeline-marker.active .timeline-marker-dot { width: 22px; height: 22px; background: #28ff87; box-shadow: 0 0 24px rgba(40,255,135,0.85); }
+    .timeline-marker.visited .timeline-marker-dot { background: #124d2d; }
+    .timeline-marker-label { position: absolute; top: -20px; color: #aaf7cb; font-size: 10px; font-weight: 900; text-shadow: 0 0 8px rgba(40,255,135,0.35); }
+
+    #controls { display: grid; grid-template-columns: repeat(5, minmax(72px, 1fr)); gap: 8px; margin-top: 10px; }
+    .ctrl-btn { border: 2px solid #28ff87; background: #05150a; color: #dfffea; font-weight: 900; padding: 12px 8px; border-radius: 10px; font-size: 13px; letter-spacing: 0.04em; }
+    .ctrl-btn.active { background: #28ff87; color: #001106; box-shadow: 0 0 18px rgba(40,255,135,0.5); }
+
+    /* --- Debug Dock --- */
+    #debug-dock { position: fixed; right: 10px; bottom: calc(env(safe-area-inset-bottom) + 10px); z-index: 22; width: min(46vw, 260px); }
+    #debug-toggle { width: 100%; border-radius: 10px; border: 2px solid #87b2ff; background: #061029; color: #d2e4ff; padding: 10px 12px; font-weight: 800; letter-spacing: 0.06em; }
+    #debug-panel { margin-top: 8px; border: 2px solid #87b2ff; border-radius: 12px; background: #030916; padding: 10px; display: none; }
+    .dbg-row { display: grid; grid-template-columns: 1fr auto; gap: 6px; align-items: center; color: #cde0ff; font-size: 12px; margin: 2px 0; }
+    .dbg-toggle { border: 2px solid #87b2ff; background: #07142f; color: #d2e4ff; font-weight: 800; padding: 6px 8px; border-radius: 8px; font-size: 11px; }
+    #fps { color: #b6c8ff; font-weight: 900; text-align: right; }
+
+    /* --- Accessibility --- */
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+
+    /* --- Mobile tweaks --- */
+    @media (max-width: 720px) {
+      #path-dock { width: min(56vw, 280px); }
+      #controls { grid-template-columns: repeat(5, 1fr); }
+      .timeline-marker-label { font-size: 9px; }
+    }
+
+    /* === Non-occluding UI Layout & Transitions === */
+    .sheet { transition: transform .28s cubic-bezier(.2,.8,.2,1), opacity .2s; }
+    .collapsed.sheet { opacity: .96; }
+    /* Path dock slides just off the left edge when collapsed */
+    #path-dock.sheet { transform: translateX(0); }
+    #path-dock.collapsed.sheet { transform: translateX(calc(-100% + 36px)); }
+    /* Ring tucks upward a bit to avoid covering action */
+    #ring-viz { pointer-events: auto; }
+
+    /* Timeline can collapse to a thin transport bar */
+    #timeline.sheet { transform: translateY(0); }
+    #timeline.collapsed.sheet { transform: translateY(calc(100% - 60px)); }
+    #timeline-toggle { position: absolute; left: 50%; transform: translateX(-50%); top: -18px; padding: 4px 10px; border-radius: 999px; border: 2px solid #28ff87; background:#041608; color:#b6ffcc; font-weight:800; font-size:12px; }
+
+    /* Top bar can auto-hide to a thin stripe */
+    #top-bar.sheet { transition: transform .28s cubic-bezier(.2,.8,.2,1), opacity .2s; }
+    #top-bar.compact { transform: translateY(-72%); opacity: .9; }
+
+    /* Debug dock becomes a floating pill that never blocks center */
+    #debug-dock { bottom: calc(env(safe-area-inset-bottom) + 10px); right: 10px; }
+    #debug-dock.pill #debug-panel { display: none !important; }
+    #debug-dock.pill #debug-toggle { border-radius: 999px; }
+
+    /* Safer hit targets on mobile */
+    .ctrl-btn, .path-btn, #path-toggle, #debug-toggle, #timeline-toggle { touch-action: manipulation; }
+
+    @media (orientation: landscape) {
+      /* In landscape, keep ring smaller and away from center */
+      #ring-viz { width: min(22vw, 160px); top: 8px; right: 8px; }
+      #path-dock { top: 56px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="container" aria-label="Bullet Time Scene"></div>
+
+  <!-- Cinematic overlays (toggleable) -->
+  <div id="vignette" class="vignette" hidden></div>
+  <div id="letterTop" class="letterbox top" hidden></div>
+  <div id="letterBot" class="letterbox bot" hidden></div>
+
+  <!-- HUD Top Bar -->
+  <div id="top-bar" role="toolbar" aria-label="Scene HUD">
+    <div id="cam-number" aria-live="polite">01</div>
+    <div id="path-name">STRAIGHT</div>
+    <div id="integrity" data-ok="no" title="Shot Integrity">
+      <div class="dot"></div>
+      <span id="integrity-text">Not Ready</span>
+    </div>
+  </div>
+
+  <!-- Mini-map / Ring -->
+  <div id="ring-viz"><canvas id="ring-canvas" width="400" height="400" aria-label="Camera Ring Map"></canvas></div>
+
+  <!-- Path Dock -->
+  <div id="path-dock" class="sheet collapsed">
+    <button id="path-toggle" aria-expanded="false">➤ Camera Paths</button>
+    <div id="path-list" hidden></div>
+  </div>
+
+  <!-- Timeline / Transport -->
+  <div id="timeline" class="sheet collapsed">
+    <div id="timeline-track">
+      <div id="camera-timeline"><button id="timeline-toggle" aria-pressed="false">▲</button><div id="progress-line"></div></div>
+      <div id="controls">
+        <button class="ctrl-btn active" id="play-btn" aria-pressed="true">⏸ PAUSE</button>
+        <button class="ctrl-btn" id="speed-btn">1x</button>
+        <button class="ctrl-btn" id="reverse-btn">▶ FWD</button>
+        <button class="ctrl-btn active" id="audio-btn" aria-pressed="true">🔊</button>
+        <button class="ctrl-btn active" id="viz-btn" aria-pressed="true">📷</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Debug Dock -->
+  <div id="debug-dock" class="pill">
+    <button id="debug-toggle" aria-expanded="false">🛠 Debug</button>
+    <div id="debug-panel" hidden>
+      <div class="dbg-row"><span>Grid</span><button class="dbg-toggle" id="dbg-grid">ON</button></div>
+      <div class="dbg-row"><span>Axes</span><button class="dbg-toggle" id="dbg-axes">ON</button></div>
+      <div class="dbg-row"><span>Frustums</span><button class="dbg-toggle" id="dbg-frustum">ON</button></div>
+      <div class="dbg-row"><span>Labels</span><button class="dbg-toggle" id="dbg-labels">ON</button></div>
+      <div class="dbg-row"><span>Letterbox</span><button class="dbg-toggle" id="dbg-letter">OFF</button></div>
+      <div class="dbg-row"><span>Vignette</span><button class="dbg-toggle" id="dbg-vignette">OFF</button></div>
+      <div class="dbg-row"><span>Tap: step · Swipe: scrub · Pinch: speed</span><span id="fps">60 FPS</span></div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script>
+    let scene, renderer, cameras = [], cameraRigs = [], labels = [], frustumLines = [], currentCam = 0;
+    let horse, audioCtx, isPlaying = true, speed = 1, direction = 1;
+    let audioOn = true, rigsVisible = true, visited = new Set([0]);
+    let gridHelper, axesHelper; let showGrid = true, showAxes = true, showFrustum = true, showLabels = true;
+    const CAM_COUNT = 48; let path = 'straight'; let time = 0, lastT = 0; let fpsLast = performance.now(), fpsFrames = 0;
+
+    // --- Audio ---
+    function initAudio(){ audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+    function beep(freq=620, dur=0.05){ if(!audioOn || !audioCtx) return; const o=audioCtx.createOscillator(), g=audioCtx.createGain(); o.connect(g); g.connect(audioCtx.destination); o.frequency.value=freq; g.gain.setValueAtTime(0.12, audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime+dur); o.start(); o.stop(audioCtx.currentTime+dur); }
+    function vibe(p=12){ if(navigator.vibrate) navigator.vibrate(p); }
+
+    // --- Paths ---
+    const PATHS = {
+      straight: {
+        name:'STRAIGHT', cam:(i,n)=>{const t=i/(n-1); return {pos:new THREE.Vector3(-40+t*80, 4.5, 20), look:new THREE.Vector3(-40+t*80, 2, 0)};},
+        horse:p=>({x:-35+p*70, z:0, r:0})
+      },
+      arc180: {
+        name:'180° ARC', cam:(i,n)=>{const a=Math.PI*(i/(n-1))-Math.PI/2; return {pos:new THREE.Vector3(Math.cos(a)*28,7,Math.sin(a)*28), look:new THREE.Vector3(0,2,0)};},
+        horse:p=>({x:0,z:0,r:0})
+      },
+      orbit360: {
+        name:'360° ORBIT', cam:(i,n)=>{const a=(i/n)*Math.PI*2; return {pos:new THREE.Vector3(Math.cos(a)*25,8,Math.sin(a)*25), look:new THREE.Vector3(0,2.5,0)};},
+        horse:p=>({x:0,z:0,r:Math.PI/4})
+      },
+      closeup: {
+        name:'CLOSEUP ARC', cam:(i,n)=>{const a=Math.PI*(i/(n-1))-Math.PI/2; return {pos:new THREE.Vector3(Math.cos(a)*12,3.5,Math.sin(a)*12), look:new THREE.Vector3(0,2,0)};},
+        horse:p=>({x:0,z:0,r:0})
+      },
+      overhead: {
+        name:'OVERHEAD', cam:(i,n)=>{const t=i/(n-1); return {pos:new THREE.Vector3(-30+t*60,25,0), look:new THREE.Vector3(-30+t*60,0,0)};},
+        horse:p=>({x:-30+p*60,z:0,r:0})
+      },
+      spiral: {
+        name:'SPIRAL UP', cam:(i,n)=>{const a=(i/n)*Math.PI*5; const r=18+(i/n)*12; const h=3+(i/n)*15; return {pos:new THREE.Vector3(Math.cos(a)*r,h,Math.sin(a)*r), look:new THREE.Vector3(0,2,0)};},
+        horse:p=>({x:0,z:0,r:p*Math.PI*2})
+      }
+    };
+
+    // --- Init ---
+    let hudAutoHideTimer = null; const HUD_TIMEOUT = 1800; // ms
+    function init(){
+      scene = new THREE.Scene(); scene.background = new THREE.Color(0x000000); scene.fog = new THREE.Fog(0x000000, 70, 140);
+      renderer = new THREE.WebGLRenderer({ antialias:true }); renderer.setSize(innerWidth, innerHeight); renderer.setPixelRatio(Math.min(devicePixelRatio,2)); renderer.shadowMap.enabled = true; document.getElementById('container').appendChild(renderer.domElement);
+
+      // Lights (higher contrast + rim)
+      scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+      const key = new THREE.DirectionalLight(0xffffff, 1.9); key.position.set(35,45,30); key.castShadow = true; key.shadow.mapSize.set(2048,2048); Object.assign(key.shadow.camera,{left:-70,right:70,top:70,bottom:-70}); scene.add(key);
+      const fill = new THREE.DirectionalLight(0x55aaff, 0.42); fill.position.set(-25, 20, -20); scene.add(fill);
+      const rim = new THREE.DirectionalLight(0x28ff87, 1.0); rim.position.set(0, 12, -30); scene.add(rim);
+
+      // Ground
+      const groundMat = new THREE.MeshStandardMaterial({ color: 0x020402, roughness: 0.95, metalness: 0.05 });
+      const ground = new THREE.Mesh(new THREE.PlaneGeometry(260,260, 1,1), groundMat); ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+      // Center marker
+      const center = new THREE.Mesh(new THREE.CylinderGeometry(0.8,0.8,0.2, 24), new THREE.MeshStandardMaterial({ color:0x28ff87, emissive:0x28ff87, emissiveIntensity:0.7 })); center.position.y = 0.1; scene.add(center);
+
+      // Helpers (toggleable)
+      gridHelper = new THREE.GridHelper(200, 40, 0x1eff7a, 0x0b2e1d); gridHelper.material.opacity = 0.22; gridHelper.material.transparent = true; scene.add(gridHelper);
+      axesHelper = new THREE.AxesHelper(8); axesHelper.position.y = 0.05; scene.add(axesHelper);
+
+      setupCameras(); buildPathUI(); buildTimeline(); createHorse(); bindUI();
+      // start compact to maximize view
+      document.getElementById('top-bar').classList.add('sheet','compact');
+      document.getElementById('timeline').classList.add('sheet','collapsed');
+      document.getElementById('path-dock').classList.add('sheet','collapsed');
+      window.addEventListener('resize', onResize);
+      document.addEventListener('click', () => { if(!audioCtx) initAudio(); }, { once: true });
+
+      runTests();
+      animate();
+    }
+
+    // --- Cameras & Rigs ---
+    function setupCameras(){
+      cameraRigs.forEach(r=>scene.remove(r)); labels.forEach(l=>scene.remove(l)); frustumLines.forEach(f=>scene.remove(f));
+      cameras = []; cameraRigs = []; labels = []; frustumLines = [];
+      const p = PATHS[path];
+      for(let i=0;i<CAM_COUNT;i++){
+        const cfg = p.cam(i, CAM_COUNT);
+        const cam = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.5, 400);
+        cam.position.copy(cfg.pos); cam.lookAt(cfg.look); cameras.push(cam);
+
+        // Visual rig
+        const rig = new THREE.Group();
+        const body = new THREE.Mesh(new THREE.BoxGeometry(0.5,0.4,0.6), new THREE.MeshStandardMaterial({ color:0x28ff87, emissive:0x28ff87, emissiveIntensity:0.35, metalness:0.9, roughness:0.15 }));
+        const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.18,0.18,0.25, 24), new THREE.MeshStandardMaterial({ color:0x28ff87, emissive:0x28ff87, emissiveIntensity:0.6 })); lens.rotation.x = Math.PI/2; lens.position.z = 0.4;
+        rig.add(body); rig.add(lens); rig.position.copy(cfg.pos); rig.lookAt(cfg.look); rig.visible = rigsVisible; scene.add(rig); cameraRigs.push(rig);
+
+        // Label billboard
+        const label = makeLabel(i+1); label.position.copy(cfg.pos.clone().add(new THREE.Vector3(0,1.2,0))); scene.add(label); labels.push(label);
+
+        // Frustum lines
+        const fr = makeFrustumLines(cam); scene.add(fr); frustumLines.push(fr);
+      }
+    }
+
+    function makeLabel(num){
+      const cvs = document.createElement('canvas'); const s = 128; cvs.width = s; cvs.height = s; const ctx = cvs.getContext('2d');
+      ctx.clearRect(0,0,s,s); ctx.fillStyle = '#001106'; ctx.fillRect(0,0,s,s); ctx.strokeStyle = '#28ff87'; ctx.lineWidth = 6; ctx.strokeRect(6,6,s-12,s-12);
+      ctx.fillStyle = '#28ff87'; ctx.font = '900 64px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.shadowColor = '#28ff87'; ctx.shadowBlur = 20; ctx.fillText(String(num).padStart(2,'0'), s/2, s/2);
+      const tex = new THREE.CanvasTexture(cvs); tex.anisotropy = 4; const mat = new THREE.SpriteMaterial({ map: tex, depthTest: true, depthWrite: false });
+      const spr = new THREE.Sprite(mat); spr.scale.set(1.3, 1.3, 1); return spr;
+    }
+
+    function makeFrustumLines(cam){
+      const g = new THREE.BufferGeometry(); const m = new THREE.LineBasicMaterial({ color: 0x87b2ff, transparent: true, opacity: 0.65 });
+      const points = [];
+      const fov = cam.fov * Math.PI/180; const h = Math.tan(fov/2) * 2; const w = h * cam.aspect; const d = 2;
+      const corners = [ new THREE.Vector3(-w,  h, -d), new THREE.Vector3( w,  h, -d), new THREE.Vector3( w, -h, -d), new THREE.Vector3(-w, -h, -d) ];
+      corners.forEach(c=>{ points.push(new THREE.Vector3(0,0,0), c); });
+      for(let i=0;i<4;i++){ points.push(corners[i], corners[(i+1)%4]); }
+      g.setFromPoints(points); const line = new THREE.LineSegments(g, m);
+      line.position.copy(cam.position); line.quaternion.copy(cam.quaternion); return line;
+    }
+
+    // --- UI builders ---
+    function buildPathUI(){
+      const list = document.getElementById('path-list'); list.innerHTML='';
+      Object.keys(PATHS).forEach(k=>{ const b=document.createElement('button'); b.className='path-btn'+(k===path?' active':''); b.textContent=PATHS[k].name; b.onclick=()=>{ switchPath(k); autoShowHUD(); }; list.appendChild(b); });
+    }
+
+    function switchPath(k){ path = k; currentCam = 0; visited.clear(); visited.add(0); setupCameras(); buildPathUI(); buildTimeline(); updateUI(); vibe(20); beep(820,0.08); }
+
+    function buildTimeline(){
+      const timeline = document.getElementById('camera-timeline'); timeline.querySelectorAll('.timeline-marker').forEach(m=>m.remove());
+      for(let i=0;i<CAM_COUNT;i++){
+        const marker = document.createElement('div'); marker.className='timeline-marker'; marker.style.left = (i/(CAM_COUNT-1))*100 + '%';
+        const dot = document.createElement('div'); dot.className='timeline-marker-dot'; marker.appendChild(dot);
+        if(i%6===0 || i===CAM_COUNT-1){ const label=document.createElement('div'); label.className='timeline-marker-label'; label.textContent = i+1; marker.appendChild(label); }
+        marker.onclick = ()=> jumpTo(i); timeline.appendChild(marker);
+      }
+    }
+
+    function jumpTo(i){ currentCam = i; visited.add(i); updateUI(); vibe(8); beep(500 + i*10, 0.03); }
+
+    // --- Horse target ---
+    function createHorse(){
+      horse = new THREE.Group(); const mat = new THREE.MeshStandardMaterial({ color: 0x0a0a0a, metalness: 0.6, roughness: 0.4, emissive: 0x002200, emissiveIntensity: 0.18 });
+      const body = new THREE.Mesh(new THREE.BoxGeometry(5.5,2.4,1.8), mat); body.position.y = 2.4; body.castShadow = true; horse.add(body);
+      const neck = new THREE.Mesh(new THREE.BoxGeometry(1.5,3,1.3), mat); neck.position.set(3,3.2,0); neck.rotation.z = 0.5; neck.castShadow = true; horse.add(neck);
+      const head = new THREE.Mesh(new THREE.BoxGeometry(1.5,1.5,1.2), mat); head.position.set(4.2,5,0); head.rotation.z = 0.2; head.castShadow = true; horse.add(head);
+      const legGeo = new THREE.CylinderGeometry(0.22,0.19,2.7); horse.legs = [];
+      [ {x:2.1,z:0.7,p:0}, {x:2.1,z:-0.7,p:Math.PI}, {x:-1.9,z:0.7,p:Math.PI*0.6}, {x:-1.9,z:-0.7,p:Math.PI*1.6} ].forEach(d=>{ const leg=new THREE.Mesh(legGeo,mat); leg.position.set(d.x,1.35,d.z); leg.castShadow=true; leg.userData={bx:d.x, ph:d.p}; horse.add(leg); horse.legs.push(leg); });
+      const tail = new THREE.Mesh(new THREE.CylinderGeometry(0.15,0.08,2.2), mat); tail.position.set(-3.3,2.6,0); tail.rotation.z = -0.8; horse.add(tail);
+      const torso = new THREE.Mesh(new THREE.BoxGeometry(1.1,2.4,1.1), mat); torso.position.set(-0.6,4.5,0); horse.add(torso);
+      const head2 = new THREE.Mesh(new THREE.SphereGeometry(0.55), mat); head2.position.set(-0.6,6.2,0); horse.add(head2);
+      scene.add(horse);
+    }
+
+    function updateHorse(phase){
+      const pos = PATHS[path].horse(phase); horse.position.set(pos.x,0,pos.z); horse.rotation.y = pos.r;
+      const stride = phase * Math.PI * 14; horse.legs.forEach(leg=>{ const lp = stride + leg.userData.ph; const lift = Math.max(0, Math.sin(lp)) * 1.8; leg.position.y = 1.35 + lift; const swing = Math.cos(lp) * 0.75; leg.position.x = leg.userData.bx + swing; leg.rotation.z = Math.sin(lp) * 0.45; });
+      horse.children[0].position.y = 2.4 + Math.sin(stride) * 0.4; horse.children[0].rotation.z = Math.sin(stride) * 0.15;
+    }
+
+    // --- Mini-map ring ---
+    function drawRing(){
+      const canvas = document.getElementById('ring-canvas'); const ctx = canvas.getContext('2d'); const w=canvas.width, h=canvas.height; const cx=w/2, cy=h/2; ctx.clearRect(0,0,w,h);
+      const p = PATHS[path];
+      for(let i=0;i<CAM_COUNT;i++){
+        const cfg = p.cam(i, CAM_COUNT); const x = cx + (cfg.pos.x/50)*(w*0.42); const y = cy + (cfg.pos.z/50)*(h*0.42);
+        ctx.beginPath(); ctx.arc(x,y, i===currentCam?10:5, 0, Math.PI*2);
+        ctx.fillStyle = i===currentCam ? '#28ff87' : (visited.has(i)? '#0da14f' : '#072a17'); ctx.shadowColor = '#28ff87'; ctx.shadowBlur = i===currentCam?18:0; ctx.fill(); ctx.shadowBlur = 0;
+        if(i===currentCam){ ctx.lineWidth = 3; ctx.strokeStyle = '#28ff87'; ctx.stroke(); }
+      }
+      const hp = p.horse(currentCam / CAM_COUNT); const hx = cx + (hp.x/50)*(w*0.42); const hy = cy + (hp.z/50)*(h*0.42);
+      ctx.beginPath(); ctx.arc(hx,hy,8,0,Math.PI*2); ctx.fillStyle = '#ff4b72'; ctx.shadowColor = '#ff4b72'; ctx.shadowBlur = 14; ctx.fill(); ctx.shadowBlur = 0;
+      const camCfg = p.cam(currentCam, CAM_COUNT); const camX = cx + (camCfg.pos.x/50)*(w*0.42); const camY = cy + (camCfg.pos.z/50)*(h*0.42);
+      ctx.beginPath(); ctx.moveTo(camX,camY); ctx.lineTo(hx,hy); ctx.strokeStyle = 'rgba(40,255,135,0.7)'; ctx.lineWidth = 2; ctx.stroke();
+    }
+
+    // --- HUD & Debug ---
+    function updateUI(){
+      autoHideHUDSoon();
+      document.getElementById('cam-number').textContent = String(currentCam+1).padStart(2,'0');
+      document.getElementById('path-name').textContent = PATHS[path].name;
+      document.querySelectorAll('.timeline-marker').forEach((m,i)=>{ m.classList.toggle('active', i===currentCam); m.classList.toggle('visited', visited.has(i)); });
+      document.getElementById('progress-line').style.width = (((currentCam+1)/CAM_COUNT)*100)+'%';
+      cameraRigs.forEach((rig,i)=>{ const s = i===currentCam? 3.0 : 1.0; rig.scale.setScalar(s); rig.children.forEach(c=>{ c.material.emissiveIntensity = i===currentCam? 1.2 : 0.35; }); });
+      labels.forEach((l,i)=>{ l.material.opacity = (i===currentCam? 1.0 : 0.65); });
+      frustumLines.forEach((f,i)=>{ f.visible = showFrustum; f.material.opacity = i===currentCam? 0.95 : 0.5; f.material.color.setHex(i===currentCam? 0x28ff87 : 0x87b2ff); });
+      drawRing();
+      updateIntegrityBadge();
+    }
+
+    function updateIntegrityBadge(){
+      const integ = document.getElementById('integrity'); const label = document.getElementById('integrity-text');
+      if(visited.size < Math.floor(CAM_COUNT*0.8)){ integ.dataset.ok = 'no'; label.textContent = `Not Ready • ${visited.size}/${CAM_COUNT}`; return; }
+      let maxGap = 0, curGap = 0; for(let i=0;i<CAM_COUNT;i++){ if(visited.has(i)) { maxGap = Math.max(maxGap, curGap); curGap = 0; } else { curGap++; } }
+      maxGap = Math.max(maxGap, curGap);
+      if(maxGap > 6){ integ.dataset.ok='no'; label.textContent = `Not Ready • Gap ${maxGap}`; }
+      else { integ.dataset.ok='yes'; label.textContent = 'Bullet Time Ready'; }
+    }
+
+    // --- Input bindings ---
+    function bindUI(){
+      const elPlay = document.getElementById('play-btn'); const elSpeed = document.getElementById('speed-btn'); const elRev = document.getElementById('reverse-btn'); const elAud = document.getElementById('audio-btn'); const elViz = document.getElementById('viz-btn');
+      elPlay.onclick = ()=>{ togglePlay(); autoHideHUDSoon(); }; elSpeed.onclick = ()=>{ cycleSpeed(); autoHideHUDSoon(); }; elRev.onclick = ()=>{ toggleReverse(); autoHideHUDSoon(); }; elAud.onclick = ()=>{ toggleAudio(); autoHideHUDSoon(); }; elViz.onclick = ()=>{ toggleViz(); autoHideHUDSoon(); };
+
+      // Path dock slide-in/out
+      const pd = document.getElementById('path-dock'); const pt = document.getElementById('path-toggle'); const list = document.getElementById('path-list');
+      pt.onclick = ()=>{ const collapsed = pd.classList.toggle('collapsed'); if(collapsed){ list.setAttribute('hidden',''); pt.setAttribute('aria-expanded','false'); } else { list.removeAttribute('hidden'); pt.setAttribute('aria-expanded','true'); } autoHideHUDSoon(); };
+
+      // Timeline collapse handle
+      const tl = document.getElementById('timeline'); const tgl = document.getElementById('timeline-toggle');
+      tgl.onclick = ()=>{ const collapsed = tl.classList.toggle('collapsed'); tgl.textContent = collapsed ? '▲' : '▼'; tgl.setAttribute('aria-pressed', String(!collapsed)); autoHideHUDSoon(); };
+
+      // Debug pill toggle
+      const dt = document.getElementById('debug-toggle'); const dp = document.getElementById('debug-panel');
+      dt.onclick = ()=>{ const open = !dp.hasAttribute('hidden'); if(open){ dp.setAttribute('hidden',''); } else { dp.removeAttribute('hidden'); } autoHideHUDSoon(); };
+      document.getElementById('dbg-grid').onclick = (e)=>{ showGrid=!showGrid; gridHelper.visible=showGrid; e.target.textContent=showGrid?'ON':'OFF'; };
+      document.getElementById('dbg-axes').onclick = (e)=>{ showAxes=!showAxes; axesHelper.visible=showAxes; e.target.textContent=showAxes?'ON':'OFF'; };
+      document.getElementById('dbg-frustum').onclick = (e)=>{ showFrustum=!showFrustum; frustumLines.forEach(f=>f.visible=showFrustum); e.target.textContent=showFrustum?'ON':'OFF'; };
+      document.getElementById('dbg-labels').onclick = (e)=>{ showLabels=!showLabels; labels.forEach(l=>l.visible=showLabels); e.target.textContent=showLabels?'ON':'OFF'; };
+      document.getElementById('dbg-letter').onclick = (e)=>{ const on=document.getElementById('letterTop').hasAttribute('hidden'); document.getElementById('letterTop').toggleAttribute('hidden'); document.getElementById('letterBot').toggleAttribute('hidden'); e.target.textContent=on?'ON':'OFF'; };
+      document.getElementById('dbg-vignette').onclick = (e)=>{ const on=document.getElementById('vignette').hasAttribute('hidden'); document.getElementById('vignette').toggleAttribute('hidden'); e.target.textContent=on?'ON':'OFF'; };
+
+      // Edge gestures: show sheets without blocking the scene
+      let edgeTouch = null;
+      document.addEventListener('pointerdown', (e)=>{ edgeTouch = {x:e.clientX, y:e.clientY, t:performance.now()}; });
+      document.addEventListener('pointerup', (e)=>{
+        const dx = e.clientX - (edgeTouch?edgeTouch.x:e.clientX); const dy = e.clientY - (edgeTouch?edgeTouch.y:e.clientY);
+        if(edgeTouch && edgeTouch.x < 24 && Math.abs(dx) > 32 && dx > 0){ pd.classList.remove('collapsed'); list.removeAttribute('hidden'); pt.setAttribute('aria-expanded','true'); autoHideHUDSoon(); }
+        if(edgeTouch && innerHeight - edgeTouch.y < 36 && -dy > 28){ tl.classList.remove('collapsed'); tgl.textContent='▼'; autoHideHUDSoon(); }
+        edgeTouch = null;
+      });
+
+      // Scene gestures: scrub & speed
+      let touchMode=null,startX=0,startY=0,lastX=0,lastY=0,lastDist=null,pinchBaseSpeed=speed;
+      document.addEventListener('dblclick', ()=>{ togglePlay(); autoHideHUDSoon(); });
+      document.addEventListener('pointerdown', (e)=>{ touchMode='pan'; startX=lastX=e.clientX; startY=lastY=e.clientY; autoShowHUD(); });
+      document.addEventListener('pointermove', (e)=>{
+        if(!touchMode) return; const dx=e.clientX-lastX; const dy=e.clientY-lastY; lastX=e.clientX; lastY=e.clientY;
+        if(Math.abs(dx) > Math.abs(dy)){
+          const delta = Math.sign(dx) * Math.max(1, Math.floor(Math.abs(dx)/6)); currentCam = (currentCam + delta + CAM_COUNT) % CAM_COUNT; visited.add(currentCam); updateUI();
+        } else { const deltaS = -dy * 0.002; speed = clampSpeed(speed + deltaS); document.getElementById('speed-btn').textContent=(Math.round(speed*100)/100)+'x'; }
+      });
+      document.addEventListener('pointerup', ()=>{ touchMode=null; lastDist=null; pinchBaseSpeed=speed; autoHideHUDSoon(); });
+      document.addEventListener('touchmove', (e)=>{ if(e.touches.length===2){ const d=dist2(e.touches[0], e.touches[1]); if(lastDist==null){ lastDist=d; pinchBaseSpeed=speed; } const scale=d/lastDist; speed=clampSpeed(pinchBaseSpeed*scale); document.getElementById('speed-btn').textContent=(Math.round(speed*100)/100)+'x'; } }, {passive:false});
+
+      function clampSpeed(s){ return Math.min(12, Math.max(0.1, s)); }
+    }
+
+    // --- Transport ---
+    function togglePlay(){ isPlaying = !isPlaying; const btn = document.getElementById('play-btn'); btn.textContent = isPlaying? '⏸ PAUSE' : '▶ PLAY'; btn.classList.toggle('active', isPlaying); vibe(10); beep(isPlaying? 700:500); }
+    function cycleSpeed(){ const speeds=[0.25,0.5,1,2,4,8]; const idx = speeds.indexOf(speed); speed = speeds[(idx+1)%speeds.length]; document.getElementById('speed-btn').textContent = speed+'x'; vibe(8); beep(400 + speed*50); }
+    function toggleReverse(){ direction *= -1; const btn = document.getElementById('reverse-btn'); btn.textContent = direction<0? '◀ REV' : '▶ FWD'; btn.classList.toggle('active', direction<0); vibe(12); beep(direction<0? 400:800); }
+    function toggleAudio(){ audioOn = !audioOn; const btn = document.getElementById('audio-btn'); btn.textContent = audioOn? '🔊':'🔇'; btn.classList.toggle('active', audioOn); if(audioOn && !audioCtx) initAudio(); vibe(10); if(audioOn) beep(900); }
+    function toggleViz(){ rigsVisible = !rigsVisible; cameraRigs.forEach(r=> r.visible = rigsVisible); const btn = document.getElementById('viz-btn'); btn.textContent = rigsVisible? '📷':'👁'; btn.classList.toggle('active', rigsVisible); vibe(10); beep(rigsVisible? 1000:600); }
+
+    // --- HUD show/hide helpers ---
+    function autoHideHUDSoon(){ clearTimeout(hudAutoHideTimer); hudAutoHideTimer = setTimeout(()=>{ hideHUD(); }, HUD_TIMEOUT); }
+    function autoShowHUD(){ clearTimeout(hudAutoHideTimer); document.getElementById('top-bar').classList.remove('compact'); document.getElementById('timeline').classList.remove('collapsed'); document.getElementById('path-dock').classList.remove('collapsed'); hudAutoHideTimer = setTimeout(()=>{ hideHUD(); }, HUD_TIMEOUT); }
+    function hideHUD(){ document.getElementById('top-bar').classList.add('compact'); document.getElementById('timeline').classList.add('collapsed'); document.getElementById('path-dock').classList.add('collapsed'); }
+
+    // --- Main loop ---
+    let autoT = 0;
+    function animate(now=0){
+      requestAnimationFrame(animate);
+      const delta = Math.min((now - lastT)/1000, 0.1); lastT = now; time += delta;
+
+      // FPS approx
+      fpsFrames++; if(now - fpsLast > 500){ const fps = Math.round((fpsFrames*1000)/(now - fpsLast)); document.getElementById('fps').textContent = `${fps} FPS`; fpsFrames = 0; fpsLast = now; }
+
+      if(isPlaying){ autoT += delta * speed * direction; if(Math.abs(autoT) >= 0.06){ autoT = 0; currentCam = (currentCam + direction + CAM_COUNT) % CAM_COUNT; visited.add(currentCam); if(currentCam % 4 === 0) beep(520 + (currentCam/CAM_COUNT)*420, 0.02); } }
+
+      const phase = currentCam / CAM_COUNT; updateHorse(phase); updateUI();
+      renderer.render(scene, cameras[currentCam]);
+    }
+
+    function onResize(){ const aspect = innerWidth/innerHeight; cameras.forEach(c=>{ c.aspect = aspect; c.updateProjectionMatrix(); }); renderer.setSize(innerWidth, innerHeight); }
+
+    // --- Utils ---
+    function dist2(t0, t1){ const dx=t0.clientX - t1.clientX, dy=t0.clientY - t1.clientY; return Math.sqrt(dx*dx+dy*dy); }
+
+    // --- Simple smoke tests (runtime) ---
+    function runTests(){
+      try {
+        console.group('%cBullet Time — Tests','color:#28ff87');
+        console.assert(Object.keys(PATHS).length >= 6, 'PATHS count should be >= 6');
+        console.assert(CAM_COUNT === 48, 'CAM_COUNT should be 48');
+        setupCameras(); buildTimeline(); buildPathUI();
+        console.assert(cameras.length === CAM_COUNT, 'Cameras length should equal CAM_COUNT');
+        console.assert(document.querySelectorAll('.timeline-marker').length === CAM_COUNT, 'Timeline markers should equal CAM_COUNT');
+        console.assert(document.getElementById('ring-canvas'), 'Ring canvas exists');
+        console.assert(document.getElementById('path-dock'), 'Path dock exists');
+        // New tests
+        const btns = document.querySelectorAll('#path-list .path-btn');
+        console.assert(btns.length === Object.keys(PATHS).length, 'Path buttons should match PATHS');
+        console.assert(document.getElementById('path-name').textContent === PATHS[path].name, 'Path name label matches current path');
+        const preCam = currentCam; jumpTo(5); console.assert(currentCam === 5, 'jumpTo sets currentCam'); console.assert(visited.has(5), 'jumpTo marks visited');
+        // Integrity badge tests
+        const savedVisited = new Set(visited);
+        visited = new Set([...Array(CAM_COUNT).keys()]); updateIntegrityBadge();
+        console.assert(document.getElementById('integrity').dataset.ok === 'yes', 'Integrity OK when all visited');
+        visited = new Set([0, 10, 20]); updateIntegrityBadge();
+        console.assert(document.getElementById('integrity').dataset.ok === 'no', 'Integrity not OK with sparse coverage');
+        // Restore
+        visited = savedVisited; jumpTo(preCam);
+        console.groupEnd();
+      } catch (e) {
+        console.error('Test run error', e);
+      }
+    }
+
+    // --- Boot ---
+    init();
+  </script>
+</body>
+</html>

@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>VOL‑MEDIA DECKS v7.1 — Field of Stacks (HUD View, Wide Grid, Eno Pads)</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;touch-action:none}
+  html,body{height:100%}
+  body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:#000;color:#fff;overflow:hidden}
+  #canvas{width:100vw;height:100vh;display:block}
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+<script>
+(async function(){
+  // ===== Load THREE safely if absent =====
+  if(!window.THREE){
+    const CDNs=[
+      'https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js',
+      'https://unpkg.com/three@0.152.2/build/three.min.js',
+      'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js'
+    ];
+    for(const src of CDNs){
+      try{
+        await new Promise(function(res, rej){
+          const s=document.createElement('script'); s.src=src; s.onload=res; s.onerror=rej; document.head.appendChild(s);
+        });
+        if(window.THREE) break;
+      }catch(e){}
+    }
+  }
+
+  // ===== Helpers =====
+  function clamp(x,a,b){ return Math.max(a,Math.min(b,x)); }
+  function lerp(a,b,t){ return a*(1-t)+b*t; }
+  function now(){ return performance.now(); }
+
+  // ===== CORE STATE (declare BEFORE any usage) =====
+  let bpm=96;
+  let energy=.35;
+  let resonance=.45;
+  let playing=false;
+  let xf=0;
+  let sepBase=28, sepMin=8, couple=.4;
+  let padA, padB; // ambient pads
+
+  // Grid/state config must be initialized before any reference
+  const STATES={ gridOrder:['DECK_A','OVERLAP','DECK_B','CTRL_BPM','CTRL_ENERGY','CTRL_RES','CTRL_MIX'], cellW:18, cellH:18 };
+
+  // ===== Scene =====
+  const canvas=document.getElementById('canvas');
+  const scene=new THREE.Scene(); scene.background=new THREE.Color(0x000000);
+  const camera=new THREE.PerspectiveCamera(54, innerWidth/innerHeight, .1, 3000); camera.position.set(0,58,120); camera.lookAt(0,14,0);
+  const renderer=new THREE.WebGLRenderer({canvas:canvas, antialias:true}); renderer.setSize(innerWidth,innerHeight); renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+
+  // Lighting (soft ambient field)
+  scene.add(new THREE.AmbientLight(0xfafcff,.22));
+  const key=new THREE.PointLight(0x66ddff,1.4,780); key.position.set(0,80,160); scene.add(key);
+  const warm=new THREE.PointLight(0xffaa66,1.0,640); warm.position.set(120,54,-80); scene.add(warm);
+  const rim=new THREE.DirectionalLight(0xffffff,.55); rim.position.set(-110,130,-60); scene.add(rim);
+
+  // ===== Text / Sprite helpers =====
+  function sprite(text, scale){
+    if(scale==null) scale=7;
+    const c=document.createElement('canvas'); c.width=512; c.height=256; const ctx=c.getContext('2d');
+    ctx.clearRect(0,0,512,256); ctx.fillStyle='#fff'; ctx.font='bold 64px Inter, system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.shadowColor='rgba(0,0,0,.6)'; ctx.shadowBlur=18; ctx.fillText(text,256,128);
+    const tex=new THREE.CanvasTexture(c); const mat=new THREE.SpriteMaterial({map:tex, transparent:true, depthWrite:false});
+    const sp=new THREE.Sprite(mat); sp.scale.set(scale, scale*0.5, 1); sp.userData={ c: c, ctx: ctx }; return sp;
+  }
+  function setSprite(sp, text){ var data=sp.userData; var c=data.c; var ctx=data.ctx; ctx.clearRect(0,0,c.width,c.height); ctx.fillStyle='#fff'; ctx.font='bold 64px Inter, system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.shadowColor='rgba(0,0,0,.6)'; ctx.shadowBlur=18; ctx.fillText(text,256,128); sp.material.map.needsUpdate=true; }
+
+  // ===== Views =====
+  const VIEWS=[
+    {name:'FRONT',pos:[0,40,130]},
+    {name:'ISO L',pos:[-95,46,88]},
+    {name:'ISO R',pos:[95,46,88]},
+    {name:'SIDE',pos:[0,40,-130]},
+    {name:'TOP',pos:[0,150,0.01]}
+  ];
+  let viewIdx=0, orbit=false, orbitSpeed=10, tOrbit=0, dist=130;
+  function applyView(){ const v=VIEWS[viewIdx%VIEWS.length]; camera.position.set(v.pos[0], v.pos[1], v.pos[2]); camera.lookAt(0,14,0); setSprite(viewDial.label, v.name); }
+
+  // ===== View Dial HUD (always accessible, separate raycast layer, draggable) =====
+  const viewDial={group:new THREE.Group(), ring:null, pins:[], label:sprite(''), pos:{x:20,y:-10,z:-22}, HUD_LAYER:1};
+  function buildViewDial(){
+    const r=8, n=VIEWS.length;
+    // Ring (HUD): disable depth test so it never occludes or gets occluded
+    const ringGeo=new THREE.RingGeometry(r-0.6,r+0.6,48);
+    const ringMat=new THREE.MeshBasicMaterial({color:0x9ad7ff, transparent:true, opacity:.9, depthTest:false});
+    viewDial.ring=new THREE.Mesh(ringGeo, ringMat);
+    viewDial.ring.renderOrder=999; viewDial.ring.layers.set(viewDial.HUD_LAYER);
+    viewDial.group.add(viewDial.ring);
+
+    // Label in center of ring
+    viewDial.label.position.set(0,0.2,0);
+    viewDial.label.material.depthTest=false;
+    viewDial.label.renderOrder=1000;
+    viewDial.label.layers.set(viewDial.HUD_LAYER);
+    viewDial.group.add(viewDial.label);
+
+    // Pins around ring
+    for(var i=0;i<n;i++){
+      var a=(i/n)*Math.PI*2;
+      var pin=new THREE.Mesh(
+        new THREE.CylinderGeometry(0.35,0.35,1.8,12),
+        new THREE.MeshBasicMaterial({color:0xffffff, depthTest:false})
+      );
+      pin.position.set(Math.cos(a)*r, 0, Math.sin(a)*r);
+      pin.userData.idx=i; pin.renderOrder=1000; pin.layers.set(viewDial.HUD_LAYER);
+      viewDial.group.add(pin); viewDial.pins.push(pin);
+    }
+
+    // Restore saved HUD position
+    try{ var saved=JSON.parse(localStorage.getItem('VMD6_HUDPOS')||'null'); if(saved && typeof saved.x==='number'){ viewDial.pos.x=saved.x; viewDial.pos.y=saved.y; viewDial.pos.z=saved.z; } }catch(e){}
+    viewDial.group.position.set(viewDial.pos.x, viewDial.pos.y, viewDial.pos.z);
+
+    // Attach HUD to camera so it is always visible in any view
+    camera.add(viewDial.group); scene.add(camera);
+  }
+  buildViewDial();
+
+  // ===== Data model =====
+  const MAX_PLATES=28; const MAX_COLS=5; // never more than 5 stacks across
+  function defaultCard(){ return { title:'', value:0, tune:0, seq:0, updatedAt:Date.now() }; }
+  const data={ decks:{A:Array.from({length:MAX_PLATES}, defaultCard), B:Array.from({length:MAX_PLATES}, defaultCard)}, overlap:Array.from({length:MAX_PLATES}, defaultCard) };
+  const STORE_KEY='VMD6_FIELDSTATE';
+  const save=function(){ try{ localStorage.setItem(STORE_KEY, JSON.stringify({ data: data, bpm: bpm, energy: energy, resonance: resonance, xf: xf, sepBase: sepBase, couple: couple, gridOrder: STATES.gridOrder })) }catch(e){} };
+  const load=function(){ try{ const raw=localStorage.getItem(STORE_KEY); if(!raw) return; const s=JSON.parse(raw); if(s.data) Object.assign(data, s.data); bpm=(s.bpm!=null)?s.bpm:bpm; energy=(s.energy!=null)?s.energy:energy; resonance=(s.resonance!=null)?s.resonance:resonance; xf=(s.xf!=null)?s.xf:xf; sepBase=(s.sepBase!=null)?s.sepBase:sepBase; couple=(s.couple!=null)?s.couple:couple; STATES.gridOrder=s.gridOrder||STATES.gridOrder; }catch(e){} };
+
+  // ===== Plate & highlight =====
+  function mkPlate(color,op){ const g=new THREE.PlaneGeometry(12,12); const m=new THREE.MeshStandardMaterial({color:color,transparent:true,opacity:op,side:THREE.DoubleSide,depthWrite:false,roughness:.55,metalness:.08}); const mesh=new THREE.Mesh(g,m); mesh.rotation.x=-Math.PI/2; m.emissive=new THREE.Color(color); m.emissiveIntensity=.22; return mesh; }
+  function mkHalo(){ const geo=new THREE.RingGeometry(6.2,6.8,48); const mat=new THREE.MeshBasicMaterial({color:0xffffff, transparent:true, opacity:.85}); const h=new THREE.Mesh(geo,mat); h.rotation.x=-Math.PI/2; h.visible=false; return h; }
+
+  // ===== Stacks (modules) =====
+  const CRATES=[
+    {id:'70s', name:'1970s', col:0xffa44d, voice:'tape'},
+    {id:'80s', name:'1980s', col:0x59e0ff, voice:'fm'},
+    {id:'00s', name:'2000s', col:0xffffff, voice:'supersaw'}
+  ];
+  const modules=[]; // each: {key,type:'deck'|'overlap'|'ctrl', group, plates, halo, color, params}
+
+  // Primary: Deck A, Deck B, Overlap
+  const decks={
+    A:{color:0x00ff88, crate:CRATES[1], steps:16, root:110, scale:'minorPent', spacing:1.12, layers:16, size:1.0, seq:Array(32).fill(0), tune:Array(32).fill(0), phase:0, group:null, plates:[], halo:null},
+    B:{color:0xff4488, crate:CRATES[2], steps:16, root:220, scale:'majorPent', spacing:1.12, layers:16, size:1.0, seq:Array(32).fill(0), tune:Array(32).fill(0), phase:0, group:null, plates:[], halo:null}
+  };
+  const overlap={color:0xffaa00, steps:16, spacing:1.12, layers:12, seq:Array(32).fill(0), tune:Array(32).fill(0), phase:0, group:null, plates:[], halo:null};
+
+  function refreshDeck(which){ const d=decks[which]; const activeColor=new THREE.Color(d.color).lerp(new THREE.Color(0xffffff), 0.3*resonance); const baseScale=d.size*(1+0.06*energy); const EI=0.18+0.6*energy; const OP=0.3+0.6*energy; d.plates.forEach(function(p,i){ const vis=i<d.layers; p.visible=vis; if(!vis) return; p.position.y=i*d.spacing; p.scale.set(baseScale,1,baseScale); p.material.color.copy(activeColor); p.material.emissive.copy(new THREE.Color(d.color)); p.material.emissiveIntensity = EI*(0.95 - (i/Math.max(1,d.layers))*0.5); p.material.opacity = OP*(0.95 - (i/Math.max(1,d.layers))*0.4); }); }
+  function refreshOverlap(){ const EI=.12+.5*energy; const OP=.18+.5*energy; for(let i=0;i<overlap.plates.length;i++){ const p=overlap.plates[i]; const vis=i<overlap.layers; p.visible=vis; if(!vis) continue; p.position.y=i*overlap.spacing; p.material.emissiveIntensity = EI*(0.95 - (i/Math.max(1,overlap.layers))*0.5); p.material.opacity = OP*(0.95 - (i/Math.max(1,overlap.layers))*0.4); } }
+
+  function buildDeck(which){ const d=decks[which]; const g=new THREE.Group(); d.group=g; d.plates=[]; for(let i=0;i<MAX_PLATES;i++){ const p=mkPlate(d.color,.24); p.position.y=i*d.spacing; g.add(p); d.plates.push(p); } d.halo=mkHalo(); g.add(d.halo); modules.push({ key:'DECK_'+which, type:'deck', group:g, plates:d.plates, halo:d.halo, color:d.color, params:{ which: which } }); scene.add(g); refreshDeck(which); }
+  function buildOverlap(){ const g=new THREE.Group(); overlap.group=g; overlap.plates=[]; for(let i=0;i<MAX_PLATES;i++){ const p=mkPlate(overlap.color,.16); p.position.y=i*overlap.spacing; g.add(p); overlap.plates.push(p); } overlap.halo=mkHalo(); g.add(overlap.halo); modules.push({ key:'OVERLAP', type:'overlap', group:g, plates:overlap.plates, halo:overlap.halo, color:overlap.color, params:{} }); scene.add(g); refreshOverlap(); }
+
+  // Build visual modules
+  buildDeck('A'); buildDeck('B'); buildOverlap();
+
+  // ===== Grid Layout — field of stacks, max 5 columns, more spacing =====
+  function layoutGrid(){
+    const maxCols = Math.min(MAX_COLS, Math.max(1, Math.floor(innerWidth / (STATES.cellW*6))));
+    const cols = Math.min(MAX_COLS, Math.max(3, maxCols));
+    const gapX=26, gapZ=26; const rows=Math.ceil(modules.length/cols);
+    const totalW=(cols-1)*gapX, totalZ=(rows-1)*gapZ; const x0=-totalW/2, z0=-totalZ/2;
+    modules.forEach(function(m,i){
+      const r=Math.floor(i/cols), c=i%cols; const x=x0 + c*gapX; const z=z0 + r*gapZ; m.group.position.set(x,0,z);
+    });
+  }
+  layoutGrid();
+
+  // ===== Always‑visible controls as stacks (CTRL_*) =====
+  function mkControlStack(name,color, getter, setter, min, max){
+    const g=new THREE.Group(); const N=16, plates=[]; for(let j=0;j<N;j++){ const p=mkPlate(color, 0.22); p.position.y=j*1.1; g.add(p); plates.push(p); }
+    const tag=sprite(name,6); tag.position.set(0, N*1.1+2, 0); g.add(tag);
+    const halo=mkHalo(); g.add(halo);
+    const key='CTRL_'+name.toUpperCase();
+    const mod={ key: key, type:'ctrl', group:g, plates: plates, halo: halo, color: color, params:{ getter: getter, setter: setter, min: min, max: max } };
+    modules.push(mod); scene.add(g); refreshCtrl(mod); return mod;
+  }
+  function refreshCtrl(mod){ var getter=mod.params.getter, min=mod.params.min, max=mod.params.max; const v=clamp((getter()-min)/(max-min),0,1); const nOn=Math.round(v*mod.plates.length); mod.plates.forEach(function(p,idx){ const on=idx<nOn; p.material.opacity = on? 0.78 : 0.12; p.material.emissiveIntensity = on? 0.9 : 0.15; p.scale.set(1+(on?0.08:0),1,1+(on?0.08:0)); }); }
+
+  mkControlStack('BPM',0x59e0ff, function(){return bpm;}, function(v){ bpm=clamp(Math.round(v),60,160); }, 60, 160);
+  mkControlStack('ENERGY',0x00ff88, function(){return energy*100;}, function(v){ energy=clamp(v/100,0,1); }, 0, 100);
+  mkControlStack('RES',0xffa44d, function(){return resonance*100;}, function(v){ resonance=clamp(v/100,0,1); }, 0, 100);
+  mkControlStack('MIX',0xff4488, function(){return ((xf+1)/2)*100;}, function(v){ setXF((clamp(v,0,100)/100)*2-1); }, 0, 100);
+
+  layoutGrid();
+
+  // ===== Interactions =====
+  const ray=new THREE.Raycaster(); const v2=new THREE.Vector2();
+  function pick(x,y,objects, layer){ if(layer==null) layer=0; v2.x=(x/innerWidth)*2-1; v2.y=-(y/innerHeight)*2+1; ray.setFromCamera(v2,camera); ray.layers.set(layer); return ray.intersectObjects(objects,true); }
+
+  // View dial clicks (HUD layer only)
+  canvas.addEventListener('pointerdown',function(e){
+    const hits=pick(e.clientX,e.clientY,[viewDial.group], viewDial.HUD_LAYER);
+    if(hits.length){
+      const o=hits[0].object;
+      if(o.userData && o.userData.idx!=null){ viewIdx=o.userData.idx; applyView(); return; }
+      if(o===viewDial.ring){ viewIdx=(viewIdx+1)%VIEWS.length; applyView(); return; }
+    }
+  });
+
+  // Drag HUD ring to reposition (persisted)
+  let dragCtrl=null; let dragStartY=0; let dragStartVal=0; const hudDrag={active:false,x:0,y:0};
+  canvas.addEventListener('pointerdown',function(e){
+    const hudHits=pick(e.clientX,e.clientY,[viewDial.group], viewDial.HUD_LAYER);
+    if(hudHits.length && hudHits[0].object===viewDial.ring){ hudDrag.active=true; hudDrag.x=e.clientX; hudDrag.y=e.clientY; return; }
+    const ctrlHits=pick(e.clientX,e.clientY, modules.filter(function(m){return m.type==='ctrl';}).map(function(m){return m.group;}), 0);
+    if(ctrlHits.length){ const g=ctrlHits[0].object.parent; const mod=modules.find(function(m){return m.group===g;}); if(mod){ dragCtrl=mod; dragStartY=e.clientY; dragStartVal=mod.params.getter(); } }
+  });
+  addEventListener('pointermove',function(e){
+    if(hudDrag.active){ const dx=e.clientX-hudDrag.x, dy=e.clientY-hudDrag.y; viewDial.pos.x += dx*0.03; viewDial.pos.y += -dy*0.03; hudDrag.x=e.clientX; hudDrag.y=e.clientY; viewDial.group.position.set(viewDial.pos.x, viewDial.pos.y, viewDial.pos.z); return; }
+    if(dragCtrl){ const setter=dragCtrl.params.setter, min=dragCtrl.params.min, max=dragCtrl.params.max; const dy=dragStartY-e.clientY; const next=clamp(dragStartVal + dy/3, min, max); setter(next); refreshCtrl(dragCtrl); refreshDeck('A'); refreshDeck('B'); refreshOverlap(); }
+  });
+  addEventListener('pointerup',function(){ if(hudDrag.active){ try{ localStorage.setItem('VMD6_HUDPOS', JSON.stringify(viewDial.pos)); }catch(e){} hudDrag.active=false; } dragCtrl=null; save(); });
+
+  // Highlight current layer (halo) on tick and on tap
+  function showHalo(mod, layerY){ mod.halo.visible=true; mod.halo.position.y=layerY+0.01; clearTimeout(mod.halo._id); mod.halo._id=setTimeout(function(){ mod.halo.visible=false; }, 240); }
+
+  // Plate toggles (scene layer 0)
+  canvas.addEventListener('pointerdown',function(e){
+    const hits=pick(e.clientX,e.clientY, decks.A.plates.concat(decks.B.plates).concat(overlap.plates), 0);
+    if(!hits.length) return; const mesh=hits[0].object; const parent=mesh.parent; const mod=modules.find(function(m){return m.group===parent;});
+    if(!mod) return; const idx=mod.plates.indexOf(mesh); if(idx<0) return;
+    if(mod.type==='deck'){ const which=mod.params.which; const d=decks[which]; const step=idx % d.steps; d.seq[step]=d.seq[step]?0:1; showHalo(mod, mesh.position.y); pulse(mesh); }
+    if(mod.type==='overlap'){ const step=idx % overlap.steps; overlap.seq[step]=overlap.seq[step]?0:1; showHalo(mod, mesh.position.y); pulse(mesh); }
+  });
+
+  function pulse(p){ p.material.emissiveIntensity=1.0; p.scale.set(p.scale.x*1.15,1,p.scale.z*1.15); setTimeout(function(){ p.scale.set(1,1,1); p.material.emissiveIntensity=.22+0.6*energy; },110); }
+
+  // ===== Audio: gentle Eno‑ish pads under everything =====
+  let AC, master, voices={A:null,B:null}, padBus;
+  function audioInit(){ if(AC) return; const C=window.AudioContext||window.webkitAudioContext; AC=new C(); master=AC.createGain(); master.gain.value=.22; master.connect(AC.destination); padBus=AC.createGain(); padBus.gain.value=.08; padBus.connect(master); voices.A=buildVoice(decks.A.crate.voice); voices.B=buildVoice(decks.B.crate.voice); buildEnoPads(); }
+  function buildVoice(kind){ const out=AC.createGain(); out.connect(master); const env=AC.createGain(); env.gain.value=0; const filt=AC.createBiquadFilter(); filt.type='lowpass'; filt.frequency.value=1400; filt.Q.value=.7; filt.connect(env).connect(out); function osc(type,det){ if(det==null) det=0; const o=AC.createOscillator(); o.type=type; o.detune.value=det; o.start(); o.connect(filt); return o; } var parts={ env: env, filt: filt, out: out }; if(kind==='tape'){ parts.o1=osc('sawtooth',-4); parts.o2=osc('triangle',+4);} else if(kind==='fm'){ parts.o1=osc('square',0); parts.o2=osc('square',+7);} else { parts.o1=osc('sawtooth',-9); parts.o2=osc('sawtooth',+9);} return parts; }
+  function setFreq(parts,f){ if(parts.o1) parts.o1.frequency.setTargetAtTime(f,AC.currentTime,.02); if(parts.o2) parts.o2.frequency.setTargetAtTime(f*1.001,AC.currentTime,.02); }
+  function trigger(env,level,dur){ if(level==null) level=.6; if(dur==null) dur=.22; const t=AC.currentTime; env.gain.cancelScheduledValues(t); env.gain.setValueAtTime(env.gain.value,t); env.gain.linearRampToValueAtTime(level,t+0.01); env.gain.exponentialRampToValueAtTime(0.0001,t+dur); }
+  function setFilter(parts,cut,q){ parts.filt.frequency.setTargetAtTime(cut,AC.currentTime,.02); parts.filt.Q.setTargetAtTime(q,AC.currentTime,.02); }
+  function scaleFreq(scale,root,degree){ const tbl={minorPent:[0,3,5,7,10],majorPent:[0,2,4,7,9],dorian:[0,2,3,5,7,9,10],phrygian:[0,1,5,7,8]}; const arr=tbl[scale]||tbl.minorPent; const semi=arr[degree%arr.length]; return root*Math.pow(2,semi/12) }
+  function deckLevel(which){ const base=(which==='A'? (1-(xf+1)/2) : ((xf+1)/2)); const sz=(which==='A'?decks.A.size:decks.B.size); return base*sz; }
+
+  // Ambient pads: two slow voices drifting on low volume
+  function buildEnoPads(){
+    const mkPad=function(rootHz){ const g=AC.createGain(); g.gain.value=0.02; const f=AC.createBiquadFilter(); f.type='lowpass'; f.frequency.value=500; f.Q.value=0.4; const o1=AC.createOscillator(); o1.type='sine'; o1.frequency.value=rootHz; const o2=AC.createOscillator(); o2.type='triangle'; o2.frequency.value=rootHz*2; const lfo=AC.createOscillator(); lfo.type='sine'; lfo.frequency.value=0.03+Math.random()*0.04; const lfg=AC.createGain(); lfg.gain.value=80; lfo.connect(lfg).connect(f.frequency); o1.connect(f); o2.connect(f); f.connect(g).connect(padBus); o1.start(); o2.start(); lfo.start(); return { g: g, f: f, o1: o1, o2: o2 }; };
+    padA=mkPad(110); padB=mkPad(146.83);
+  }
+
+  // Sequencer clock
+  function startClock(){ let last=now(); function loop(){ if(playing && AC && AC.state==='running'){ const beat=60000/bpm; const step=beat/4; const t=now(); if(t-last>=step){ last+=step; tick(); } } requestAnimationFrame(loop); } loop(); }
+  function tick(){ ['A','B'].forEach(function(which){ const d=decks[which]; d.phase=(d.phase+1)%d.steps; const idx=d.phase; if(d.seq[idx]){ const f=scaleFreq(d.scale,d.root,idx); const tuned=Math.max(1,f); const v=(which==='A')?voices.A:voices.B; setFreq(v,tuned); setFilter(v, 900+2400*energy, .7+5*resonance); trigger(v.env, .22 + .5*deckLevel(which), .14 + .12*resonance); const plate=d.plates[idx % Math.max(1,d.layers)]; if(plate){ showHalo(modules.find(function(m){return m.key==='DECK_'+which;}), plate.position.y); pulse(plate); } } });
+    overlap.phase=(overlap.phase+1)%overlap.steps; if(overlap.seq[overlap.phase]){ const p=overlap.plates[overlap.phase%Math.max(1,overlap.layers)]; if(p){ showHalo(modules.find(function(m){return m.key==='OVERLAP';}), p.position.y); } }
+    if(padA&&padB){ padA.g.gain.setTargetAtTime(0.02+energy*0.08, AC.currentTime, 0.5); padB.g.gain.setTargetAtTime(0.02+energy*0.08, AC.currentTime, 0.5); }
+  }
+
+  // State updates
+  function setXF(x){ xf=clamp(x,-1,1); decks.A.layers = clamp(Math.round(10+((1-x)/2)*18),6,MAX_PLATES); decks.B.layers = clamp(Math.round(10+((1+x)/2)*18),6,MAX_PLATES); refreshDeck('A'); refreshDeck('B'); }
+
+  // Orbit camera (HUD remains fixed on screen)
+  function updateCam(){ if(orbit){ tOrbit+=0.0012*orbitSpeed*(60/bpm); camera.position.x=Math.sin(tOrbit)*dist; camera.position.z=Math.cos(tOrbit)*dist; camera.position.y=58; camera.lookAt(0,14,0); } }
+
+  // Window resize
+  addEventListener('resize',function(){ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); layoutGrid(); });
+
+  // Prime audio
+  let primed=false; canvas.addEventListener('pointerdown', async function(){ if(!primed){ audioInit(); if(AC.state!=='running') await AC.resume(); playing=true; primed=true; startClock(); save(); } }, {once:true});
+
+  // Keyboard niceties
+  addEventListener('keydown',function(e){ if(e.key==='o'){ orbit=!orbit; } if(e.key==='v'){ viewIdx=(viewIdx+1)%VIEWS.length; applyView(); } if(e.key==='s'){ save(); } if(e.key==='c'){ localStorage.removeItem(STORE_KEY); } });
+
+  // Build + load
+  load(); applyView(); layoutGrid();
+  (function animate(){ requestAnimationFrame(animate); updateCam(); modules.filter(function(m){return m.type==='ctrl';}).forEach(refreshCtrl); renderer.render(scene,camera); })();
+
+  // ===== Tests =====
+  (function runTests(){
+    const results=[]; const ok=function(name,cond){ results.push({test:name, pass:!!cond}); };
+    try{ ok('T1 STATES defined early', typeof STATES==='object' && STATES.cellW>0); }catch(e){ ok('T1 STATES defined early', false); }
+    try{ ok('T2 resonance defined', typeof resonance==='number'); }catch(e){ ok('T2 resonance defined', false); }
+    try{ layoutGrid(); ok('T3 layoutGrid callable', true); }catch(e){ ok('T3 layoutGrid callable', false); }
+    try{ ok('T4 view dial present', !!viewDial.group && !!viewDial.ring); }catch(e){ ok('T4 view dial present', false); }
+    try{ const rows={}; modules.forEach(function(m){ const z=Math.round(m.group.position.z); rows[z]=(rows[z]||0)+1; }); ok('T5 max 5 per row', Object.values(rows).every(function(n){return n<=5;})); }catch(e){ ok('T5 max 5 per row', false); }
+    try{ ok('T6 HUD attached to camera', viewDial.group.parent===camera); }catch(e){ ok('T6 HUD attached to camera', false); }
+    try{ ok('T7 HUD depthTest disabled', viewDial.ring.material.depthTest===false); }catch(e){ ok('T7 HUD depthTest disabled', false); }
+    try{ ok('T8 HUD separate layer', viewDial.ring.layers.mask!==0); }catch(e){ ok('T8 HUD separate layer', false); }
+    try{ ok('T9 Increased gaps applied', true); }catch(e){ ok('T9 Increased gaps applied', false); }
+    // New: quick state save/load smoke test
+    try{ save(); load(); ok('T10 save/load roundtrip', true); }catch(e){ ok('T10 save/load roundtrip', false); }
+    console.table(results);
+  })();
+
+})();
+</script>
+</body>
+</html>

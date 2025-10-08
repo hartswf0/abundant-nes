@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Bullet Time Camera Array — Mobile Unthinkable</title>
+<style>
+  :root{
+    --bg:#000; --ink:#d7ffe2; --ui:#00ff88; --muted:#0a2217; --warn:#ff4b72; --shadow:rgba(0,255,136,0.18);
+    --ring:#082b1f; --accent:#00ff88; --panel:rgba(0,0,0,0.85); --panel2:rgba(0,0,0,0.65);
+    --pad:12px; --radius:14px; --touch:44px; --focus:0 0 0 2px rgba(0,255,136,0.65);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:system-ui,Segoe UI,Inter,Roboto,Arial,sans-serif;}
+  #stage{position:fixed;inset:0;overflow:hidden}
+  canvas{display:block}
+
+  /* === Top HUD (compact, high-contrast, non-overlapping) === */
+  .hud{position:fixed;top:8px;left:8px;right:8px;display:flex;gap:8px;align-items:center;z-index:30;pointer-events:none}
+  .chip{min-height:var(--touch);padding:0 14px;border:2px solid var(--ui);border-radius:12px;background:var(--panel);
+        color:var(--ink);display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;box-shadow:0 8px 24px var(--shadow);pointer-events:auto}
+  .chip .big{font-size:18px}
+  .chip .mono{font-family:"Courier New",monospace}
+  .chip button{background:transparent;border:none;color:var(--ink);font-weight:800;font-size:18px}
+  .chip button:active{transform:scale(.95)}
+
+  /* === Right Mini-Map (Ring Buffer) — edge docked */
+  #ring{position:fixed;top:8px;right:8px;width:132px;height:132px;border:2px solid var(--ui);border-radius:50%;
+        background:radial-gradient(100% 100% at 50% 50%, #04130e 0%, #000 70%);box-shadow:0 8px 24px var(--shadow);z-index:20}
+  #ring canvas{width:100%;height:100%;}
+
+  /* === Edge Dock (transport) — stays off center */
+  .dock{position:fixed;left:8px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:8px;z-index:35}
+  .dock .pill{min-height:40px;min-width:40px;display:flex;align-items:center;justify-content:center;border-radius:12px;border:2px solid var(--ui);background:var(--panel);font-weight:800}
+  .dock .pill[aria-pressed="true"], .dock .pill.active{background:var(--ui);color:#00130b}
+
+  /* === Bottom Sheet Controls (collapsible & edge-safe) === */
+  .sheet{position:fixed;left:0;right:0;bottom:0;z-index:40;padding:10px 10px calc(10px + env(safe-area-inset-bottom));
+         background:linear-gradient(0deg, rgba(0,0,0,0.95), rgba(0,0,0,0.6));backdrop-filter:blur(4px);border-top:2px solid var(--ui);
+         transform:translateY(0);transition:transform .25s ease, opacity .25s ease;will-change:transform}
+  .sheet.collapsed{transform:translateY(calc(100% - 42px));}
+  .grab{height:28px;display:flex;align-items:center;justify-content:center;cursor:grab}
+  .grab .bar{width:46px;height:5px;border-radius:5px;background:#0a3}
+  .sheet .row, .sheet .controls{pointer-events:auto}
+  .controls{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px}
+  .btn{height:var(--touch);border-radius:12px;border:2px solid var(--ui);background:var(--panel);color:var(--ink);font-weight:800}
+  .btn[aria-pressed="true"], .btn.active{background:var(--ui);color:#00130b}
+  .btn:active{transform:scale(.98)}
+  .row{display:flex;align-items:center;gap:10px;margin:6px 4px}
+  .row label{font-size:12px;opacity:.9;width:116px}
+  input[type=range], select{flex:1;height:36px;-webkit-appearance:none;background:var(--panel2);border-radius:12px;border:1px solid var(--ui);color:var(--ink)}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:24px;height:24px;border-radius:50%;background:var(--ui);box-shadow:0 0 0 3px #00130b}
+
+  /* === Timeline — pinned to bottom edge only === */
+  #timeline{position:relative;height:42px;margin:4px;border:2px solid var(--ui);border-radius:12px;background:linear-gradient(180deg,#00160e,#000)}
+  #progress{position:absolute;top:50%;left:0;height:3px;background:var(--ui);box-shadow:0 0 10px var(--ui);transform:translateY(-50%);width:0}
+  .tick{position:absolute;top:6px;width:2px;height:14px;background:#0a3}
+  .marker{position:absolute;bottom:6px;width:10px;height:10px;border:2px solid var(--ui);border-radius:50%;background:#063}
+  .marker.active{width:16px;height:16px;background:var(--ui);box-shadow:0 0 16px var(--ui)}
+
+  /* === Debug Drawer (edge anchored) === */
+  details.debug{position:fixed;right:8px;bottom:calc(8px + env(safe-area-inset-bottom));max-width:min(86vw,520px);z-index:50}
+  details.debug>summary{cursor:pointer;list-style:none;min-height:var(--touch);display:flex;align-items:center;gap:10px;padding:0 14px;border:2px solid var(--ui);border-radius:12px;background:var(--panel);box-shadow:0 8px 24px var(--shadow);font-weight:800}
+  .dbg{margin-top:8px;padding:10px;border:2px solid var(--ui);border-radius:12px;background:var(--panel)}
+  .kv{display:grid;grid-template-columns:auto 1fr;gap:6px 10px;font-family:"Courier New",monospace;font-size:12px}
+  .log{max-height:120px;overflow:auto;border-top:1px solid #063;margin-top:8px;padding-top:6px;font-family:"Courier New",monospace;font-size:12px}
+  #wave{width:100%;height:64px;border:1px dashed #063;border-radius:10px;margin-top:6px}
+  .tests{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+  .tests .mini{border:2px solid var(--ui);background:var(--panel2);color:var(--ink);border-radius:10px;padding:8px 10px;font-weight:800}
+
+  /* Path pills (left column) — remains edge-docked */
+  .paths{position:fixed;left:8px;top:64px;display:flex;flex-direction:column;gap:8px;z-index:25;max-height:45vh;overflow:auto}
+  .pill{min-height:36px;display:flex;align-items:center;gap:8px;padding:6px 10px;border:2px solid var(--ui);border-radius:20px;background:var(--panel);font-weight:700}
+  .pill.active{background:var(--ui);color:#00130b}
+
+  @media (max-width:480px){
+    .controls{grid-template-columns:repeat(2,1fr)}
+    .paths{top:auto;bottom:210px;flex-direction:row;max-width:96vw;max-height:none}
+  }
+
+  /* Focus ring */
+  :focus-visible{outline:none;box-shadow:var(--focus)}
+
+  /* === Modal (Clipboard Fallback) === */
+  #modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.65);backdrop-filter:blur(6px);z-index:60}
+  .modal-card{width:min(92vw,720px);max-height:80vh;border:2px solid var(--ui);border-radius:16px;background:var(--panel);box-shadow:0 8px 24px var(--shadow);padding:12px;display:flex;flex-direction:column;gap:8px}
+  .modal-card header{display:flex;align-items:center;justify-content:space-between;font-weight:800}
+  .modal-card textarea{width:100%;height:48vh;border:1px dashed #063;border-radius:10px;background:#000;color:var(--ink);padding:10px;font-family:"Courier New",monospace}
+  .modal-actions{display:flex;gap:8px;flex-wrap:wrap}
+  .toast{position:fixed;left:50%;bottom:96px;transform:translateX(-50%);padding:10px 14px;border:2px solid var(--ui);border-radius:12px;background:var(--panel);color:var(--ink);font-weight:800;z-index:70;display:none}
+</style>
+</head>
+<body>
+  <div id="stage"></div>
+
+  <!-- Top HUD -->
+  <div class="hud" role="toolbar" aria-label="HUD">
+    <div class="chip" aria-live="polite"><span>Cam</span><span id="camNo" class="big mono">01</span></div>
+    <div class="chip" aria-live="polite"><span id="pathName">STRAIGHT</span></div>
+    <button id="helpBtn" class="chip" aria-label="Show template prompt">❓ Help</button>
+  </div>
+
+  <!-- Mini-map Ring -->
+  <div id="ring"><canvas id="ringCanvas" width="300" height="300" aria-label="Mini-map"></canvas></div>
+
+  <!-- Edge Transport Dock -->
+  <div class="dock" aria-label="Edge dock">
+    <button id="dockPlay" class="pill" aria-pressed="true">⏯</button>
+    <button id="dockDir" class="pill">⇄</button>
+    <button id="dockViz" class="pill" aria-pressed="true">📷</button>
+    <button id="dockAudio" class="pill" aria-pressed="true">🔊</button>
+    <button id="dockPanel" class="pill" title="Open controls">☰</button>
+  </div>
+
+  <!-- Path Pills -->
+  <div id="paths" class="paths" aria-label="Path selector"></div>
+
+  <!-- Debug Drawer -->
+  <details class="debug" id="debugDrawer">
+    <summary>🔬 Debug & State</summary>
+    <div class="dbg">
+      <div class="kv" id="kv"></div>
+      <canvas id="wave"></canvas>
+      <div class="tests">
+        <button id="testCopy" class="mini">▶ Clipboard Test</button>
+        <button id="testAudio" class="mini">▶ Audio Test</button>
+        <button id="testVibe" class="mini">▶ Vibrate Test</button>
+        <button id="testPaths" class="mini">▶ Path Tests</button>
+        <button id="savePreset" class="mini">💾 Save Preset</button>
+        <button id="loadPreset" class="mini">📂 Load Preset</button>
+      </div>
+      <div class="log" id="log"></div>
+    </div>
+  </details>
+
+  <!-- Bottom Sheet Controls (collapsible) -->
+  <div id="sheet" class="sheet collapsed" aria-label="Transport and parameters">
+    <div class="grab" id="grab"><div class="bar"></div></div>
+    <div class="controls">
+      <button id="play" class="btn" aria-pressed="true">⏸︎ Pause</button>
+      <button id="dir" class="btn">▶︎ Fwd</button>
+      <button id="viz" class="btn" aria-pressed="true">📷 Rigs</button>
+      <button id="audio" class="btn" aria-pressed="true">🔊 Audio</button>
+    </div>
+    <div class="row"><label for="speed">Cam Speed <span id="speedVal">1.0×</span></label><input id="speed" type="range" min="0.1" max="8" step="0.1" value="1"/></div>
+    <div class="row"><label for="cams">Cameras <span id="camsVal">48</span></label><input id="cams" type="range" min="12" max="96" step="1" value="48"/></div>
+    <div class="row"><label for="radius">Radius <span id="radVal">25</span></label><input id="radius" type="range" min="8" max="80" step="1" value="25"/></div>
+    <div class="row"><label for="centerX">Center X <span id="cxVal">0</span></label><input id="centerX" type="range" min="-60" max="60" step="1" value="0"/></div>
+    <div class="row"><label for="centerZ">Center Z <span id="czVal">0</span></label><input id="centerZ" type="range" min="-60" max="60" step="1" value="0"/></div>
+    <div class="row"><label for="subjectMode">Subject</label>
+      <select id="subjectMode">
+        <option value="linear">Linear</option>
+        <option value="circle" selected>Circle</option>
+        <option value="figure8">Figure‑8</option>
+        <option value="lissajous">Lissajous</option>
+      </select>
+    </div>
+    <div class="row"><label for="subjectSpeed">Subject Speed <span id="ssVal">1.0×</span></label><input id="subjectSpeed" type="range" min="0" max="3" step="0.05" value="1"/></div>
+    <div id="timeline" aria-label="Camera timeline"><div id="progress"></div></div>
+  </div>
+
+  <!-- Modal (Clipboard Fallback) -->
+  <div id="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle" aria-describedby="modalDesc">
+    <div class="modal-card">
+      <header>
+        <div id="modalTitle">Bret Victor Template</div>
+        <button id="modalClose" class="mini" aria-label="Close">✕</button>
+      </header>
+      <div id="modalDesc" class="kv" style="gap:8px 12px">
+        <div>Tip</div><div>If clipboard is blocked (HTTP, sandbox, or permissions policy), select and copy from the text below or use Download.</div>
+      </div>
+      <textarea id="modalText" spellcheck="false"></textarea>
+      <div class="modal-actions">
+        <button id="modalCopy" class="mini">Copy</button>
+        <button id="modalSelect" class="mini">Select All</button>
+        <button id="modalDownload" class="mini">Download .txt</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <!-- Bret Victor Template (hidden) -->
+  <template id="bvTemplate">
+Title: Apply “Media for Thinking the Unthinkable” to Bullet Time Camera Array
+Prompt:
+You are an interface designer tasked with transforming the Bullet Time Camera Array into a medium that:
+1) Surfaces the Invisible → Overlay currentCam, phase, stride waveform, mini-map of camera positions, and link lines to subject. Show FPS, audio state, rig visibility. 
+2) Overcomes Cognitive Limits → Allow time expansion/compression via speed slider (0.1×–8×); visualize out-of-band leg motion as a normalized waveform. 
+3) Supports Multiple Modes → Interactive: scrubbable timeline & swipe-to-step; Visual: mini-map + rig highlights; Symbolic: live key–value state & event log. 
+4) Enables Rapid What-If → Sliders for cameras/radius/speed with instant rebuild; play/pause and direction toggle; long-press to toggle rigs. 
+5) Links Perspectives → Synchronize renderer view, ring mini-map, timeline, and debug drawer; tapping a timeline marker selects that camera and updates all views. 
+6) Abstracts & Generalizes → Save snapshots (path, cam count, radius, speed) to localStorage (not included by default, but stubs provided). 
+Instructions: Propose concrete UI/code changes; prototype; evaluate how each unlocks previously hidden structure.
+  </template>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script>
+  // ======= Core State =======
+  let scene, renderer, rigs = [], cams = [], subject, playing = true, dir = 1, speed = 1.0;
+  let CAM_COUNT = 48, RADIUS = 25, current = 0, lastNow = 0, visited = new Set([0]), fps = 0;
+  let showRigs = true, audioOn = true, audioCtx = null; 
+  let CX = 0, CZ = 0; // center offsets
+  let subjectMode = 'circle', subjectSpeed = 1.0, subjectPhase = 0;
+  const logEl = document.getElementById('log');
+  const kvEl = document.getElementById('kv');
+  const ringCanvas = document.getElementById('ringCanvas');
+  const waveCanvas = document.getElementById('wave');
+  const toast = document.getElementById('toast');
+
+  // Auto-collapse behavior
+  const sheet = document.getElementById('sheet');
+  const grab = document.getElementById('grab');
+  let pinnedOpen = false; let collapseTimer = null;
+  function openSheet(){ sheet.classList.remove('collapsed'); clearTimeout(collapseTimer); if(!pinnedOpen) collapseTimer=setTimeout(()=>sheet.classList.add('collapsed'), 2500); }
+  function closeSheet(){ sheet.classList.add('collapsed'); }
+
+  // ======= Camera Path Library =======
+  const PATHS = {
+    straight:{name:'STRAIGHT', cam:(i,n)=>{const t=i/(n-1);return P(CX-40+ t*80, 5, CZ+20, CX-40+t*80,2,CZ+0)}},
+    arc180:{name:'180° ARC', cam:(i,n)=>{const a=Math.PI*(i/(n-1))-Math.PI/2; return P(CX+Math.cos(a)*RADIUS,7,CZ+Math.sin(a)*RADIUS, CX,2,CZ)}},
+    orbit360:{name:'360° ORBIT', cam:(i,n)=>{const a=(i/n)*Math.PI*2; return P(CX+Math.cos(a)*RADIUS,8,CZ+Math.sin(a)*RADIUS, CX,2.5,CZ)}},
+    closeup:{name:'CLOSEUP ARC', cam:(i,n)=>{const a=Math.PI*(i/(n-1))-Math.PI/2; const r=Math.max(12,RADIUS*0.5); return P(CX+Math.cos(a)*r,3.5,CZ+Math.sin(a)*r, CX,2,CZ)}},
+    overhead:{name:'OVERHEAD', cam:(i,n)=>{const t=i/(n-1); return P(CX-30+t*60, 25, CZ, CX-30+t*60,0,CZ)}},
+    spiral:{name:'SPIRAL UP', cam:(i,n)=>{const a=(i/n)*Math.PI*5; const r=18+(i/n)*12; const h=3+(i/n)*15; return P(CX+Math.cos(a)*r, h, CZ+Math.sin(a)*r, CX,2,CZ)}},
+    ellipse:{name:'ELLIPSE', cam:(i,n)=>{const a=(i/n)*Math.PI*2; return P(CX+Math.cos(a)*RADIUS*1.4,7,CZ+Math.sin(a)*RADIUS*0.7, CX,2,CZ)}},
+    stadium:{name:'STADIUM', cam:(i,n)=>{const t=i/n; const w=RADIUS*1.5,h=RADIUS*0.8; const phase=t*2*Math.PI; const x = (Math.cos(phase)>0?w:-w); const y = Math.sin(phase)*h; return P(CX+x,7,CZ+y, CX,2,CZ)}},
+    rail_dual:{name:'DUAL RAIL', cam:(i,n)=>{const half=Math.floor(n/2); if(i<half){ const t=i/(half-1); return P(CX-40+ t*80,6,CZ+RADIUS, CX-40+t*80,2,CZ); } else { const t=(i-half)/(half-1); return P(CX+40- t*80,6,CZ-RADIUS, CX+40-t*80,2,CZ); }}},
+    random_ring:{name:'RING SCATTER', cam:(i,n)=>{const a=(i/n)*Math.PI*2 + noise(i)*0.3; const r=RADIUS*(0.85+0.3*noise(i+99)); return P(CX+Math.cos(a)*r,6+noise(i+7)*2, CZ+Math.sin(a)*r, CX,2,CZ)}},
+    dome:{name:'DOME HEMI', cam:(i,n)=>{const u=i/(n-1); const a=u*Math.PI; const r=RADIUS; const x=CX + r*Math.cos(a); const z=CZ + r*Math.sin(a); const y=6 + 12*Math.sin(u*Math.PI); return P(x,y,z, CX,2,CZ)}}
+  };
+  function P(x,y,z, lx,ly,lz){ return {pos:new THREE.Vector3(x,y,z), look:new THREE.Vector3(lx,ly,lz)} }
+  function noise(k){ return Math.sin(k*12.9898)*43758.5453 % 1 - 0.5 }
+  let pathKey = 'straight';
+
+  // ======= Subject Motion Library =======
+  const SUBJECTS = {
+    linear:(p)=>({x: CX-35 + p*70, z: CZ, r:0}),
+    circle:(p)=>{const a=p*2*Math.PI; return {x: CX+Math.cos(a)*Math.max(8,RADIUS*0.6), z: CZ+Math.sin(a)*Math.max(8,RADIUS*0.6), r:a} },
+    figure8:(p)=>{const a=p*2*Math.PI; const r=Math.max(8,RADIUS*0.55); return {x: CX + Math.sin(a)*r, z: CZ + Math.sin(a)*Math.cos(a)*r, r:a/2} },
+    lissajous:(p)=>{const a=p*2*Math.PI; const r=Math.max(8,RADIUS*0.6); return {x: CX + Math.sin(2*a)*r, z: CZ + Math.sin(3*a+Math.PI/3)*r*0.8, r:a/3} },
+  };
+
+  // ======= Utilities =======
+  function log(msg){ const t = new Date().toLocaleTimeString(); logEl.innerHTML = `<div>[${t}] ${msg}</div>` + logEl.innerHTML; const max=120; const kids=logEl.children; if(kids.length>max) kids[max-1].remove(); }
+  function setKV(entries){ kvEl.innerHTML = entries.map(([k,v])=>`<div>${k}</div><div>${v}</div>`).join(''); }
+  function beep(freq=700,dur=0.03){ if(!audioOn||!audioCtx) return; const o=audioCtx.createOscillator(); const g=audioCtx.createGain(); o.type='square'; o.frequency.value=freq; g.gain.setValueAtTime(0.08,audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.005,audioCtx.currentTime+dur); o.connect(g).connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime+dur); }
+  function vibe(ms=10){ if(navigator.vibrate) navigator.vibrate(ms); }
+  function showToast(text){ toast.textContent=text; toast.style.display='block'; clearTimeout(showToast.t); showToast.t=setTimeout(()=>toast.style.display='none', 1400); }
+
+  // Clipboard helpers (unchanged)
+  async function safeCopy(text){ try{ if(window.isSecureContext && navigator.clipboard && typeof navigator.clipboard.writeText==='function'){ await navigator.clipboard.writeText(text); return {ok:true, method:'navigator.clipboard'}; } }catch(e){}
+    try{ const ta=document.createElement('textarea'); ta.value=text; ta.setAttribute('readonly',''); ta.style.position='fixed'; ta.style.left='-9999px'; document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, ta.value.length); const success=document.execCommand('copy'); document.body.removeChild(ta); if(success) return {ok:true, method:'execCommand'}; }catch(e){}
+    return {ok:false}; }
+  function openPromptModal(text){ const modal=document.getElementById('modal'); const ta=document.getElementById('modalText'); ta.value=text; modal.style.display='flex'; setTimeout(()=>{ ta.focus(); ta.select(); }, 50); }
+  function downloadText(filename, text){ const blob=new Blob([text], {type:'text/plain'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 0); }
+
+  // ======= Scene Setup =======
+  function init(){
+    scene = new THREE.Scene(); scene.background = new THREE.Color(0x000000); scene.fog = new THREE.Fog(0x000000, 80, 200);
+    renderer = new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 1.6));
+    renderer.setSize(innerWidth, innerHeight);
+    document.getElementById('stage').appendChild(renderer.domElement);
+
+    const amb = new THREE.AmbientLight(0xffffff, 0.55); 
+    const key = new THREE.DirectionalLight(0xffffff, 1.3); key.position.set(35, 40, 28);
+    const rim = new THREE.DirectionalLight(0x00ff88, 0.5); rim.position.set(-10, 14, -28);
+    ;[amb,key,rim].forEach(l=>scene.add(l));
+
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(320,320), new THREE.MeshStandardMaterial({color:0x020202, roughness:0.95, metalness:0.05}));
+    ground.rotation.x = -Math.PI/2; scene.add(ground);
+
+    // Subject (stylized)
+    subject = new THREE.Group();
+    const mat = new THREE.MeshStandardMaterial({color:0x0b0b0b, metalness:0.5, roughness:0.5, emissive:0x002a17, emissiveIntensity:0.15});
+    const body = new THREE.Mesh(new THREE.BoxGeometry(5.4,2.3,1.8),mat); body.position.y=2.4; subject.add(body);
+    const neck = new THREE.Mesh(new THREE.BoxGeometry(1.5,3,1.3),mat); neck.position.set(3,3.2,0); neck.rotation.z = 0.5; subject.add(neck);
+    const head = new THREE.Mesh(new THREE.BoxGeometry(1.5,1.5,1.2),mat); head.position.set(4.2,5,0); head.rotation.z = 0.2; subject.add(head);
+    const legG = new THREE.CylinderGeometry(0.22,0.19,2.7);
+    subject.legs = [];
+    [ {x:2.1,z:0.7,p:0}, {x:2.1,z:-0.7,p:Math.PI}, {x:-1.9,z:0.7,p:Math.PI*0.6}, {x:-1.9,z:-0.7,p:Math.PI*1.6} ].forEach(d=>{ const leg=new THREE.Mesh(legG,mat); leg.position.set(d.x,1.35,d.z); leg.userData={bx:d.x, ph:d.p}; subject.add(leg); subject.legs.push(leg); });
+    scene.add(subject);
+
+    buildPaths();
+    rebuildCameras();
+
+    addHandlers();
+    requestAnimationFrame(tick);
+    log('Initialized');
+  }
+
+  function buildPaths(){
+    const wrap = document.getElementById('paths');
+    wrap.innerHTML = '';
+    Object.keys(PATHS).forEach(k=>{
+      const b=document.createElement('button'); b.className='pill'+(k===pathKey?' active':''); b.textContent=PATHS[k].name; b.onclick=()=>{pathKey=k; current=0; visited=new Set([0]); rebuildCameras(); updateHUD(); beep(900,0.04); vibe(14);}; wrap.appendChild(b);
+    });
+  }
+
+  function rebuildCameras(){
+    rigs.forEach(r=>scene.remove(r)); rigs=[]; cams=[];
+    const Pth = PATHS[pathKey];
+    for(let i=0;i<CAM_COUNT;i++){
+      const cfg = Pth.cam(i, CAM_COUNT);
+      const cam = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.5, 500);
+      cam.position.copy(cfg.pos); cam.lookAt(cfg.look); cams.push(cam);
+      const rig = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.5,0.4,0.6), new THREE.MeshStandardMaterial({color:0x00ff88, emissive:0x00ff88, emissiveIntensity:0.35, metalness:0.7, roughness:0.2}));
+      const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.18,0.18,0.25), new THREE.MeshStandardMaterial({color:0x00ff88, emissive:0x00ff88, emissiveIntensity:0.6})); lens.rotation.x=Math.PI/2; lens.position.z=0.4; rig.add(body); rig.add(lens); rig.position.copy(cfg.pos); rig.lookAt(cfg.look); rig.visible = showRigs; scene.add(rig); rigs.push(rig);
+    }
+    drawRing();
+    buildTimeline();
+    updateHUD();
+  }
+
+  // ======= UI Wiring =======
+  function addHandlers(){
+    // Dock buttons mirror transport
+    const dockPlay = document.getElementById('dockPlay');
+    const dockDir = document.getElementById('dockDir');
+    const dockViz = document.getElementById('dockViz');
+    const dockAudio = document.getElementById('dockAudio');
+    const dockPanel = document.getElementById('dockPanel');
+
+    dockPlay.onclick = ()=>{ playing=!playing; dockPlay.setAttribute('aria-pressed', String(playing)); showToast(playing?'Play':'Pause'); };
+    dockDir.onclick = ()=>{ dir*=-1; dockDir.classList.toggle('active', dir<0); showToast(dir<0?'Reverse':'Forward'); };
+    dockViz.onclick = ()=>{ showRigs=!showRigs; rigs.forEach(r=>r.visible=showRigs); dockViz.setAttribute('aria-pressed', String(showRigs)); };
+    dockAudio.onclick = ()=>{ audioOn=!audioOn; if(audioOn && !audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)(); dockAudio.setAttribute('aria-pressed', String(audioOn)); };
+    dockPanel.onclick = ()=> openSheet();
+
+    // Bottom sheet transport
+    const playBtn = document.getElementById('play');
+    const dirBtn = document.getElementById('dir');
+    const vizBtn = document.getElementById('viz');
+    const audioBtn = document.getElementById('audio');
+
+    playBtn.onclick = ()=>{ playing=!playing; playBtn.textContent = playing? '⏸︎ Pause':'▶︎ Play'; playBtn.setAttribute('aria-pressed', String(playing)); }; 
+    dirBtn.onclick = ()=>{ dir *= -1; dirBtn.textContent = dir<0 ? '◀︎ Rev' : '▶︎ Fwd'; dirBtn.classList.toggle('active', dir<0); };
+    vizBtn.onclick = ()=>{ showRigs=!showRigs; rigs.forEach(r=>r.visible=showRigs); vizBtn.setAttribute('aria-pressed', String(showRigs)); };
+    audioBtn.onclick = ()=>{ audioOn=!audioOn; if(audioOn && !audioCtx){ audioCtx = new (window.AudioContext||window.webkitAudioContext)(); } audioBtn.setAttribute('aria-pressed', String(audioOn)); };
+
+    // Sliders & selects
+    const speedR = document.getElementById('speed');
+    const camsR = document.getElementById('cams');
+    const radiusR = document.getElementById('radius');
+    const cxR = document.getElementById('centerX');
+    const czR = document.getElementById('centerZ');
+    const smSel = document.getElementById('subjectMode');
+    const ssR = document.getElementById('subjectSpeed');
+
+    const speedVal = document.getElementById('speedVal');
+    const camsVal = document.getElementById('camsVal');
+    const radVal = document.getElementById('radVal');
+    const cxVal = document.getElementById('cxVal');
+    const czVal = document.getElementById('czVal');
+    const ssVal = document.getElementById('ssVal');
+
+    const reflectOpen = ()=>{ openSheet(); };
+
+    speedR.oninput = ()=>{ speed = Number(speedR.value); speedVal.textContent = speed.toFixed(1)+'×'; reflectOpen(); };
+    camsR.onchange = ()=>{ CAM_COUNT = Number(camsR.value); camsVal.textContent = CAM_COUNT; current = Math.min(current, CAM_COUNT-1); visited = new Set([current]); rebuildCameras(); reflectOpen(); };
+    radiusR.oninput = ()=>{ RADIUS = Number(radiusR.value); radVal.textContent = RADIUS; rebuildCameras(); reflectOpen(); };
+    cxR.oninput = ()=>{ CX = Number(cxR.value); cxVal.textContent = CX; rebuildCameras(); reflectOpen(); };
+    czR.oninput = ()=>{ CZ = Number(czR.value); czVal.textContent = CZ; rebuildCameras(); reflectOpen(); };
+    smSel.onchange = ()=>{ subjectMode = smSel.value; reflectOpen(); };
+    ssR.oninput = ()=>{ subjectSpeed = Number(ssR.value); ssVal.textContent = subjectSpeed.toFixed(2)+'×'; reflectOpen(); };
+
+    // Timeline scrubbing
+    const tl = document.getElementById('timeline');
+    let scrub=false;
+    const getIdx = (x)=> Math.max(0, Math.min(CAM_COUNT-1, Math.round((x - tl.getBoundingClientRect().left) / tl.clientWidth * (CAM_COUNT-1))));
+    const toIdx = (i)=>{ current=i; visited.add(i); updateHUD(); };
+    tl.addEventListener('pointerdown', e=>{ scrub=true; toIdx(getIdx(e.clientX)); openSheet(); });
+    window.addEventListener('pointermove', e=>{ if(scrub) toIdx(getIdx(e.clientX)); });
+    window.addEventListener('pointerup', ()=>{ scrub=false; });
+
+    // Grab handle open/close
+    let drag=false, y0=0, startCollapsed=true;
+    grab.addEventListener('pointerdown', e=>{ drag=true; y0=e.clientY; startCollapsed = sheet.classList.contains('collapsed'); grab.setPointerCapture(e.pointerId); });
+    grab.addEventListener('pointermove', e=>{ if(!drag) return; const dy = e.clientY - y0; if(startCollapsed && dy < -20) openSheet(); if(!startCollapsed && dy > 20) closeSheet(); });
+    grab.addEventListener('pointerup', ()=>{ drag=false; });
+
+    // Help (clipboard-safe)
+    document.getElementById('helpBtn').onclick = async ()=>{
+      const txt = document.getElementById('bvTemplate').content.textContent.trim();
+      const res = await safeCopy(txt);
+      if(res.ok){ showToast('Template copied ('+res.method+').'); log('Clipboard success via '+res.method); }
+      else { openPromptModal(txt); log('Clipboard blocked; opened modal fallback.'); }
+    };
+
+    // Modal controls
+    document.getElementById('modalClose').onclick = ()=>{ document.getElementById('modal').style.display='none'; };
+    document.getElementById('modalSelect').onclick = ()=>{ const ta=document.getElementById('modalText'); ta.focus(); ta.select(); showToast('Selected — tap Copy'); };
+    document.getElementById('modalCopy').onclick = async ()=>{ const ta=document.getElementById('modalText'); const res=await safeCopy(ta.value); if(res.ok){ showToast('Copied ('+res.method+').'); } else { showToast('Copy still blocked — use Select All'); } };
+    document.getElementById('modalDownload').onclick = ()=>{ const txt=document.getElementById('modalText').value; downloadText('BV_template.txt', txt); };
+
+    // Self-tests & presets are unchanged
+    document.getElementById('testCopy').onclick = async ()=>{ const demo='Clipboard self-test @ '+new Date().toISOString(); const res=await safeCopy(demo); log(res.ok? ('TEST PASS: copied using '+res.method) : 'TEST FAIL: clipboard blocked — modal will be used at runtime'); };
+    document.getElementById('testAudio').onclick = ()=>{ if(!audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)(); };
+    document.getElementById('testVibe').onclick = ()=>{ if(navigator.vibrate) navigator.vibrate(15); };
+    document.getElementById('testPaths').onclick = runPathTests;
+    document.getElementById('savePreset').onclick = ()=>{ const preset = {pathKey,CAM_COUNT,RADIUS,CX,CZ,subjectMode,subjectSpeed}; localStorage.setItem('bt_preset', JSON.stringify(preset)); showToast('Preset saved'); };
+    document.getElementById('loadPreset').onclick = ()=>{ try{ const raw=localStorage.getItem('bt_preset'); if(!raw) return showToast('No preset'); const p=JSON.parse(raw); pathKey=p.pathKey??pathKey; CAM_COUNT=p.CAM_COUNT??CAM_COUNT; RADIUS=p.RADIUS??RADIUS; CX=p.CX??CX; CZ=p.CZ??CZ; subjectMode=p.subjectMode??subjectMode; subjectSpeed=p.subjectSpeed??subjectSpeed; document.getElementById('cams').value=CAM_COUNT; document.getElementById('radius').value=RADIUS; document.getElementById('centerX').value=CX; document.getElementById('centerZ').value=CZ; document.getElementById('subjectMode').value=subjectMode; document.getElementById('subjectSpeed').value=subjectSpeed; document.getElementById('camsVal').textContent=CAM_COUNT; document.getElementById('radVal').textContent=RADIUS; document.getElementById('cxVal').textContent=CX; document.getElementById('czVal').textContent=CZ; document.getElementById('ssVal').textContent=subjectSpeed.toFixed(2)+'×'; buildPaths(); rebuildCameras(); showToast('Preset loaded'); }catch(e){ log('Preset load error: '+e.message); } };
+
+    // Auto-hide controls after any background interaction with stage
+    document.getElementById('stage').addEventListener('pointerdown', ()=>{ if(!pinnedOpen) closeSheet(); });
+
+    window.addEventListener('resize', onResize);
+  }
+
+  function onResize(){
+    cams.forEach(c=>{ c.aspect = innerWidth/innerHeight; c.updateProjectionMatrix(); });
+    renderer.setSize(innerWidth, innerHeight);
+  }
+
+  // ======= Timeline & Ring =======
+  function buildTimeline(){
+    const tl = document.getElementById('timeline');
+    tl.querySelectorAll('.tick,.marker').forEach(n=>n.remove());
+    for(let i=0;i<CAM_COUNT;i++){
+      if(i%6===0 || i===CAM_COUNT-1){ const t=document.createElement('div'); t.className='tick'; t.style.left = (i/(CAM_COUNT-1))*100+'%'; tl.appendChild(t); }
+      const m=document.createElement('div'); m.className='marker'; m.style.left = (i/(CAM_COUNT-1))*100+'%'; m.onclick=()=>{ current=i; visited.add(i); updateHUD(); }; tl.appendChild(m);
+    }
+  }
+
+  function updateTimeline(){
+    const tl = document.getElementById('timeline');
+    const progress = document.getElementById('progress');
+    const ms = tl.querySelectorAll('.marker');
+    ms.forEach((m,i)=>{ m.classList.toggle('active', i===current); });
+    progress.style.width = ((current+1)/CAM_COUNT*100)+'%';
+  }
+
+  function drawRing(){
+    const ctx = ringCanvas.getContext('2d');
+    const w = ringCanvas.width, h = ringCanvas.height; const cx=w/2, cy=h/2; ctx.clearRect(0,0,w,h);
+    const Pth = PATHS[pathKey];
+    // subject (red)
+    const hp = getSubjectPos(subjectPhase);
+    const hx=cx + ((hp.x - CX)/60)*(w*0.42); const hy=cy + ((hp.z - CZ)/60)*(h*0.42);
+    // cameras
+    for(let i=0;i<CAM_COUNT;i++){
+      const cfg = Pth.cam(i, CAM_COUNT); const x=cx + ((cfg.pos.x - CX)/60)*(w*0.42); const y=cy + ((cfg.pos.z - CZ)/60)*(h*0.42);
+      ctx.beginPath(); ctx.arc(x,y, i===current?9:5, 0, Math.PI*2); ctx.fillStyle = i===current? '#00ff88' : (visited.has(i)? '#0a5':'#032'); ctx.fill(); if(i===current){ ctx.lineWidth=3; ctx.strokeStyle='#00ff88'; ctx.stroke(); }
+    }
+    // link
+    const ccfg = Pth.cam(current, CAM_COUNT); const cx2=cx+((ccfg.pos.x - CX)/60)*(w*0.42); const cy2=cy+((ccfg.pos.z - CZ)/60)*(h*0.42);
+    ctx.beginPath(); ctx.moveTo(cx2,cy2); ctx.lineTo(hx,hy); ctx.lineWidth=2; ctx.strokeStyle='rgba(0,255,136,0.7)'; ctx.stroke();
+    ctx.beginPath(); ctx.arc(hx,hy,7,0,Math.PI*2); ctx.fillStyle='#ff3355'; ctx.fill();
+  }
+
+  // ======= Subject Motion & Waveform =======
+  function getSubjectPos(p){
+    const fn = SUBJECTS[subjectMode] || SUBJECTS.circle;
+    return fn((p%1+1)%1);
+  }
+
+  function updateSubject(dt){
+    subjectPhase = (subjectPhase + dt * 0.2 * subjectSpeed) % 1;
+    const pos = getSubjectPos(subjectPhase);
+    subject.position.set(pos.x, 0, pos.z); subject.rotation.y = pos.r || 0;
+    const stride = subjectPhase * Math.PI * 14;
+    subject.legs.forEach(leg=>{ const lp = stride + leg.userData.ph; const lift = Math.max(0, Math.sin(lp))*1.8; leg.position.y = 1.35 + lift; const swing = Math.cos(lp)*0.75; leg.position.x = leg.userData.bx + swing; leg.rotation.z = Math.sin(lp)*0.45; });
+    // Draw waveform of stride
+    const ctx = waveCanvas.getContext('2d'); const w=waveCanvas.width = waveCanvas.clientWidth; const h=waveCanvas.height = waveCanvas.clientHeight;
+    ctx.clearRect(0,0,w,h); ctx.strokeStyle='#0a5'; ctx.lineWidth=2; ctx.beginPath();
+    for(let x=0;x<w;x++){
+      const t = (x/w)*Math.PI*2; const y = Math.sin(t + stride% (Math.PI*2)); const yy = (h/2) + y*(h/2 - 6); if(x===0) ctx.moveTo(0,yy); else ctx.lineTo(x,yy);
+    }
+    ctx.stroke();
+  }
+
+  // ======= HUD Update =======
+  function updateHUD(){
+    document.getElementById('camNo').textContent = String(current+1).padStart(2,'0');
+    document.getElementById('pathName').textContent = PATHS[pathKey].name;
+    drawRing(); updateTimeline();
+    setKV([
+      ['currentCam', current], ['visited', visited.size + '/' + CAM_COUNT], ['camSpeed', speed.toFixed(2)], ['dir', dir<0?'REV':'FWD'], ['fps', fps.toFixed(0)], ['path', pathKey], ['radius', RADIUS], ['center', `${CX}, ${CZ}`], ['subject', subjectMode+' @ '+subjectSpeed.toFixed(2)+'×'], ['audio', String(audioOn)], ['rigs', String(showRigs)]
+    ]);
+  }
+
+  // ======= Main Loop =======
+  function tick(now=0){
+    requestAnimationFrame(tick);
+    const dt = Math.min((now-lastNow)/1000, 0.1); lastNow = now; fps = 1/Math.max(dt, 0.0001);
+    if(playing){
+      const step = speed * dt * dir; 
+      tick.acc = (tick.acc||0) + step; 
+      const stride = 0.06;
+      while(Math.abs(tick.acc) >= stride){ tick.acc -= Math.sign(tick.acc)*stride; current = (current + Math.sign(dir) + CAM_COUNT) % CAM_COUNT; visited.add(current); }
+    }
+    updateSubject(dt);
+    updateHUD();
+    renderer.render(scene, cams[current] || cams[0]);
+  }
+
+  // ======= Path Tests (runtime sanity) =======
+  function runPathTests(){
+    let pass=true; const issues=[];
+    const keys=Object.keys(PATHS);
+    for(const k of keys){
+      const N=CAM_COUNT; const fn=PATHS[k].cam; if(typeof fn!=="function"){ pass=false; issues.push(`Path ${k}: cam is not a function`); continue; }
+      for(let i=0;i<N;i+=Math.max(1,Math.floor(N/7))){
+        try{ const c=fn(i,N); const ok = c && c.pos && isFinite(c.pos.x) && isFinite(c.pos.y) && isFinite(c.pos.z) && c.look && isFinite(c.look.x);
+          if(!ok){ pass=false; issues.push(`Path ${k}: invalid vector at i=${i}`); break; }
+        }catch(e){ pass=false; issues.push(`Path ${k}: threw at i=${i} → ${e.message}`); break; }
+      }
+    }
+    if(pass){ log('TEST PASS: All camera paths produced finite coordinates.'); showToast('Path tests passed'); }
+    else{ log('TEST FAIL: '+issues.join(' | ')); showToast('Path tests failed — see log'); }
+  }
+
+  // ======= Init =======
+  init();
+  </script>
+</body>
+</html>

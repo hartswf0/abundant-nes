@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>VOL‑MEDIA DECKS v13 — Stacks of Stacks + Multi‑Grid (integrated)</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;touch-action:none}
+  html,body{height:100%}
+  body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:#000;color:#fff;overflow:hidden}
+  #canvas{width:100vw;height:100vh;display:block}
+  /* HUD */
+  #hud{position:fixed; inset:0; pointer-events:none; z-index:8}
+  #viewHUD{position:absolute; left:50%; top:14px; transform:translateX(-50%); font-weight:800; font-size:14px; letter-spacing:.4px; background:rgba(0,0,0,.55); border:1px solid rgba(255,255,255,.18); padding:6px 10px; border-radius:999px}
+  #quick{position:absolute; right:10px; top:10px; display:flex; gap:6px; pointer-events:auto; flex-wrap:wrap; justify-content:flex-end}
+  .btn{border:1px solid rgba(255,255,255,.25); background:rgba(0,0,0,.6); color:#fff; padding:6px 10px; border-radius:8px; font-size:12px; font-weight:700; cursor:pointer}
+  .btn:active{transform:translateY(1px)}
+  #toast{position:fixed;bottom:10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.85);border:1px solid rgba(255,255,255,.2);padding:6px 10px;border-radius:10px;font-size:12px;color:#fff;z-index:9;display:none}
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+<div id="hud">
+  <div id="viewHUD">FRONT</div>
+  <div id="quick">
+    <button id="start" class="btn">▶ Start</button>
+    <button id="orbit" class="btn">Orbit OFF</button>
+    <button id="layoutRing" class="btn">Ring</button>
+    <button id="layoutGrid" class="btn">Grid</button>
+    <button id="layoutDrum" class="btn">Drum</button>
+    <button id="layoutTube" class="btn">Tube</button>
+    <button id="toggleMulti" class="btn">MultiGrid ON</button>
+    <button id="packPrev" class="btn">◀ Pack</button>
+    <button id="packNext" class="btn">Pack ▶</button>
+  </div>
+</div>
+<div id="toast"></div>
+<script>
+(async function(){
+  // ===== THREE fallback loader
+  if(!window.THREE){
+    const CDNs=['https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js','https://unpkg.com/three@0.152.2/build/three.min.js'];
+    for(const src of CDNs){ try{ await new Promise((res,rej)=>{const s=document.createElement('script'); s.src=src; s.onload=res; s.onerror=rej; document.head.appendChild(s)}); if(window.THREE) break; }catch(e){} }
+  }
+
+  // ===== Scene
+  const canvas=document.getElementById('canvas');
+  const scene=new THREE.Scene(); scene.background=new THREE.Color(0x000000);
+  const camera=new THREE.PerspectiveCamera(56, innerWidth/innerHeight, .1, 4000); camera.position.set(100,60,120);
+  const renderer=new THREE.WebGLRenderer({canvas,antialias:true}); renderer.setSize(innerWidth,innerHeight); renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
+  addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight)});
+
+  // Lights
+  scene.add(new THREE.AmbientLight(0xffffff,.28));
+  const key=new THREE.PointLight(0x66ddff,1.2,800); key.position.set(0,120,160); scene.add(key);
+  const warm=new THREE.PointLight(0xffaa66,0.7,700); warm.position.set(120,80,-100); scene.add(warm);
+
+  // ===== HUD helpers
+  const toastEl=document.getElementById('toast');
+  function toast(m){ toastEl.textContent=m; toastEl.style.display='block'; clearTimeout(toast._id); toast._id=setTimeout(()=>toastEl.style.display='none',1100); }
+  const viewHUD=document.getElementById('viewHUD');
+
+  // ===== Camera presets EARLY
+  const VIEWS=[
+    {name:'FRONT',pos:[0,40,160]},
+    {name:'ISO L',pos:[-130,70,110]},
+    {name:'ISO R',pos:[130,70,110]},
+    {name:'TOP',pos:[0,220,0.01]},
+    {name:'SIDE',pos:[0,46,-160]},
+    {name:'WIDE',pos:[220,70,0]}
+  ];
+  let viewIdx=0; function applyView(){ const v=VIEWS[viewIdx%VIEWS.length]; camera.position.set(...v.pos); camera.lookAt(0,12,0); viewHUD.textContent=v.name; }
+
+  // ===== Sprite label (subtle)
+  function mkSprite(text){ const cvs=document.createElement('canvas'); const s=256; cvs.width=cvs.height=s; const ctx=cvs.getContext('2d'); ctx.clearRect(0,0,s,s); ctx.fillStyle='rgba(0,0,0,0)'; ctx.fillRect(0,0,s,s); ctx.fillStyle='white'; ctx.font='bold 48px Inter, system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.shadowColor='rgba(0,0,0,0.6)'; ctx.shadowBlur=12; ctx.fillText(text,s/2,s/2); const tex=new THREE.CanvasTexture(cvs); const mat=new THREE.SpriteMaterial({map:tex,transparent:true,depthWrite:false}); const spr=new THREE.Sprite(mat); spr.scale.set(8,8,1); return spr; }
+  function updateSpriteText(sprite,txt){ const t = sprite.material.map.image; const ctx=t.getContext('2d'); const s=t.width; ctx.clearRect(0,0,s,s); ctx.fillStyle='rgba(0,0,0,0)'; ctx.fillRect(0,0,s,s); ctx.fillStyle='#ffffff'; ctx.font='bold 48px Inter, system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.shadowColor='rgba(0,0,0,0.7)'; ctx.shadowBlur=14; ctx.fillText(txt,s/2,s/2); sprite.material.map.needsUpdate=true; }
+  const viewLabel=mkSprite(''); viewLabel.position.set(0, 48, 0); scene.add(viewLabel);
+
+  // ===== State & decks
+  const MAX_PLATES=28, SIZE=12;
+  const CRATES=[
+    {id:'80s', name:'1980s', col:0x59e0ff, voice:'fm'},
+    {id:'00s', name:'2000s', col:0xffffff, voice:'supersaw'}
+  ];
+  const decks={
+    A:{color:0x00ff88, crate:CRATES[0], steps:16, root:110, scale:'minorPent', spacing:1.12, layers:16, size:1.0, seq:Array(32).fill(0), tune:Array(32).fill(0), phase:0, group:null, plates:[], subs:{}, pack:0},
+    B:{color:0xff4488, crate:CRATES[1], steps:16, root:220, scale:'majorPent', spacing:1.12, layers:16, size:1.0, seq:Array(32).fill(0), tune:Array(32).fill(0), phase:0, group:null, plates:[], subs:{}, pack:1}
+  };
+  let bpm=112, energy=.45, resonance=.5, playing=false, xf=0; let AC, master, voices={A:null,B:null}; let voicesReady=false; let sepBase=30, sepMin=8, sepX=sepBase, couple=0.0;
+
+  function mkPlate(color,op){ const g=new THREE.PlaneGeometry(SIZE,SIZE); const m=new THREE.MeshStandardMaterial({color,transparent:true,opacity:op,side:THREE.DoubleSide,depthWrite:false,roughness:.55,metalness:.08}); const mesh=new THREE.Mesh(g,m); mesh.rotation.x=-Math.PI/2; m.emissive=new THREE.Color(color); m.emissiveIntensity=.22; return mesh; }
+
+  function buildDeck(which, x){ const d=decks[which]; if(d.group){ scene.remove(d.group); d.plates.forEach(p=>{p.geometry.dispose?.(); p.material.dispose?.();}); d.plates.length=0; }
+    const g=new THREE.Group(); g.position.set(x,0,0);
+    for(let i=0;i<MAX_PLATES;i++){ const base=.9-(i/MAX_PLATES)*.55; const p=mkPlate(d.color,Math.max(.22,base*.5)); p.position.y=i*d.spacing; g.add(p); d.plates.push(p); }
+    const tag=mkSprite(which); tag.position.set(0,2,0); g.add(tag); d.subs.tag=tag;
+    scene.add(g); d.group=g; refreshDeckVisual(which,true);
+  }
+  function refreshDeckVisual(which){ const d=decks[which]; const activeColor=new THREE.Color(d.color).lerp(new THREE.Color(0xffffff), 0.3*resonance);
+    const baseScale=d.size*(1+0.06*energy); const EI=0.18+0.6*energy; const OP=0.3+0.6*energy; d.plates.forEach((p,i)=>{ const vis=i<d.layers; p.visible=vis; if(!vis) return; p.position.y=i*d.spacing; p.scale.set(baseScale,1,baseScale); p.material.color.copy(activeColor); p.material.emissive.copy(new THREE.Color(d.color)); p.material.emissiveIntensity = EI*(0.95 - (i/Math.max(1,d.layers))*0.5); p.material.opacity = OP*(0.95 - (i/Math.max(1,d.layers))*0.4); }); }
+
+  // Overlap pad
+  const overlap={color:0xffaa00, steps:16, spacing:1.12, layers:12, seq:Array(32).fill(0), tune:Array(32).fill(0), phase:0, group:null, plates:[]};
+  (function buildOverlap(){ const g=new THREE.Group(); g.position.set(0,0,0); overlap.group=g; for(let i=0;i<MAX_PLATES;i++){ const p=mkPlate(overlap.color,.16); p.position.y=i*overlap.spacing; g.add(p); overlap.plates.push(p);} scene.add(g); refreshOverlapVisual(); })();
+  function refreshOverlapVisual(){ const EI=.12+.5*energy; const OP=.18+.5*energy; for(let i=0;i<overlap.plates.length;i++){ const p=overlap.plates[i]; const vis=i<overlap.layers; p.visible=vis; if(!vis) continue; p.position.y=i*overlap.spacing; p.material.emissiveIntensity = EI*(0.95 - (i/Math.max(1,overlap.layers))*0.5); p.material.opacity = OP*(0.95 - (i/Math.max(1,overlap.layers))*0.4); } }
+
+  // Build initial decks
+  function applySeparation(){ decks.A.group.position.x=-sepX; decks.B.group.position.x=sepX; hub.group.position.x=0; overlap.group.position.x=0; }
+  function updateCoupledSeparation(){ const t=Math.abs(xf); const blend = couple*(1 - t); sepX = lerp(sepBase, sepMin, blend); applySeparation(); updateAudioLinks(); }
+  buildDeck('A',-sepX); buildDeck('B',sepX);
+
+  // ===== Multi‑Grid stack (integrated)
+  const multiGrid={group:new THREE.Group(), visible:true, rows:5, cols:5, gap:10, size:6, tonePack:0, cubes:[]};
+  scene.add(multiGrid.group);
+  function buildMultiGrid(){
+    // clear
+    while(multiGrid.group.children.length) multiGrid.group.remove(multiGrid.group.children[0]);
+    multiGrid.cubes.length=0;
+    const {rows,cols,gap,size}=multiGrid; const startX=-(cols-1)*gap/2; const startZ=-(rows-1)*gap/2;
+    for(let r=0;r<rows;r++){
+      for(let c=0;c<cols;c++){
+        const mat=new THREE.MeshStandardMaterial({color:0x21ff86,roughness:0.8,metalness:0.2});
+        const box=new THREE.Mesh(new THREE.BoxGeometry(size,1,size),mat);
+        box.userData.phase=(r*cols+c)/(rows*cols);
+        box.position.set(startX + c*gap, 0, startZ + r*gap);
+        multiGrid.group.add(box); multiGrid.cubes.push(box);
+      }
+    }
+    multiGrid.group.position.set(0,0,0);
+  }
+  buildMultiGrid();
+
+  const TONE_PACKS=[
+    {name:'TAPE', color:0xffa44d, osc:'sawtooth'},
+    {name:'FM BELLS', color:0x59e0ff, osc:'square'},
+    {name:'GRANULAR', color:0xc47dff, osc:'triangle'},
+    {name:'FORMANT', color:0xff4488, osc:'sine'},
+    {name:'BITDRUM', color:0x00ff88, osc:'square'},
+    {name:'WAVESET', color:0xffffff, osc:'sawtooth'}
+  ];
+  function applyPackToGrid(idx){ const p=TONE_PACKS[(idx%TONE_PACKS.length+TONE_PACKS.length)%TONE_PACKS.length]; multiGrid.tonePack=idx; multiGrid.cubes.forEach((cube,i)=>{ cube.material.color.set(p.color); }); toast('MultiGrid Pack: '+p.name); if(voice) try{ voice.type=p.osc; }catch{} }
+
+  // ===== HUB stacks-as-sliders (planar; two rows via grid mode)
+  const hub={group:new THREE.Group(), shown:true, stacks:[], planeY:2, layoutMode:'grid', gridRows:2, gridCols:5, angle:0, inertia:0, regular:true}; scene.add(hub.group);
+  function buildHub(){
+    const defs=[
+      {name:'BPM', color:0x59e0ff, getter:()=>bpm, setter:v=>{ bpm=clamp(Math.round(v),60,180); }, min:60, max:180},
+      {name:'ENERGY', color:0x00ff88, getter:()=>energy*100, setter:v=>{ energy=clamp(v/100,0,1) }, min:0, max:100},
+      {name:'RES', color:0xffa44d, getter:()=>resonance*100, setter:v=>{ resonance=clamp(v/100,0,1) }, min:0, max:100},
+      {name:'MIX', color:0xff4488, getter:()=>((xf+1)/2)*100, setter:v=>{ setXF((clamp(v,0,100)/100)*2-1) }, min:0, max:100},
+      {name:'SIZE', color:0xffffff, getter:()=>Math.round(decks.A.size*100), setter:v=>{ const s=clamp(v,70,160)/100; decks.A.size=decks.B.size=s; }, min:70, max:160},
+      {name:'LAYERS', color:0xc47dff, getter:()=>Math.round((decks.A.layers+decks.B.layers)/2), setter:v=>{ const L=clamp(Math.round(v),6,MAX_PLATES); decks.A.layers=L; decks.B.layers=L; }, min:6, max:MAX_PLATES},
+      {name:'SEP', color:0x7da1ff, getter:()=>sepBase, setter:v=>{ sepBase=clamp(v,8,120); updateCoupledSeparation(); }, min:8, max:120},
+      {name:'COUPLE', color:0x00d4aa, getter:()=>Math.round(couple*100), setter:v=>{ couple=clamp(v,0,100)/100; updateCoupledSeparation(); }, min:0, max:100},
+      {name:'VIEW', color:0x9ad7ff, getter:()=>viewIdx*20, setter:v=>{ viewIdx=Math.round(clamp(v/20,0,VIEWS.length-1)); applyView(); }, min:0, max:(VIEWS.length-1)*20},
+      {name:'GRID', color:0x21ff86, getter:()=>multiGrid.visible?100:0, setter:v=>{ multiGrid.visible = v>50; multiGrid.group.visible = multiGrid.visible; }, min:0, max:100}
+    ];
+    const mkPlate=(color,op)=>{ const g=new THREE.PlaneGeometry(12,12); const m=new THREE.MeshStandardMaterial({color,transparent:true,opacity:op,side:THREE.DoubleSide,depthWrite:false,roughness:.55,metalness:.08}); const mesh=new THREE.Mesh(g,m); mesh.rotation.x=-Math.PI/2; m.emissive=new THREE.Color(color); m.emissiveIntensity=.22; return mesh; };
+    defs.forEach((d)=>{ const g=new THREE.Group(); const plates=[]; const P=16; for(let j=0;j<P;j++){ const p=mkPlate(d.color,0.22); p.position.y=j*1.1; g.add(p); plates.push(p); } const tag=mkSprite(d.name); tag.position.set(0,P*1.1+2,0); g.add(tag); hub.group.add(g); hub.stacks.push({def:d, group:g, plates, tag}); });
+    refreshHubLayout();
+  }
+  function refreshHub(){ hub.stacks.forEach(S=>{ const maxVal=(typeof S.def.max==='function')?S.def.max():S.def.max; const v=clamp((S.def.getter()-S.def.min)/(maxVal-S.def.min),0,1); const nOn=Math.round(v*S.plates.length); S.plates.forEach((p,idx)=>{ const on=idx<nOn; p.material.opacity=on?0.72:0.12; p.material.emissiveIntensity=on?0.9:0.15; p.scale.set(1+(on?0.08:0),1,1+(on?0.08:0)); }); }); hub.group.visible=!!hub.shown; refreshHubLayout(); }
+  function refreshHubLayout(){ const rows=hub.gridRows, cols=hub.gridCols; const gapX=12, gapZ=12; const startX=-(cols-1)*gapX/2; const startZ=-(rows-1)*gapZ/2; hub.stacks.forEach((S,i)=>{ const r=Math.floor(i/cols)%rows; const c=i%cols; const x=startX+c*gapX; const z=startZ+r*gapZ; S.group.position.set(x, hub.planeY, z); S.group.rotation.set(0,0,0); S.group.scale.set(1,1,1); }); }
+  buildHub(); refreshHub();
+
+  // ===== Gestures for decks + hub sliders
+  const ray=new THREE.Raycaster(); const v2=new THREE.Vector2();
+  const pickAt=(x,y,objs)=>{ v2.x=(x/innerWidth)*2-1; v2.y=-(y/innerHeight)*2+1; ray.setFromCamera(v2,camera); return ray.intersectObjects(objs); };
+  let dragging=false, activeDeck=null, mode=null, start={x:0,y:0}, hold=false, tuneIdx=null; let hubDrag=null;
+  canvas.addEventListener('pointerdown',ev=>{
+    const deckHits=pickAt(ev.clientX,ev.clientY,[...decks.A.plates,...decks.B.plates]);
+    if(deckHits.length){ const mesh=deckHits[0].object; const which = decks.A.plates.includes(mesh)?'A':'B'; activeDeck=which; dragging=true; start.x=ev.clientX; start.y=ev.clientY; hold=true; tuneIdx=(which==='A'?decks.A.plates.indexOf(mesh):decks.B.plates.indexOf(mesh)); return; }
+    const hubMeshes = hub.group.children.flatMap(g=>g.children).filter(o=>o.isMesh);
+    const hubHits=pickAt(ev.clientX,ev.clientY, hubMeshes);
+    if(hubHits.length){ const mesh=hubHits[0].object; const S = hub.stacks.find(s=>s.plates.includes(mesh)); if(S){ hubDrag={S, y0:ev.clientY, v0:S.def.getter()}; return; } }
+  });
+  addEventListener('pointermove',ev=>{
+    if(hubDrag){ const {S,y0,v0}=hubDrag; const dy=y0-ev.clientY; const newVal=v0 + (dy/3); const maxVal=(typeof S.def.max==='function')?S.def.max():S.def.max; S.def.setter( clamp(newVal,S.def.min,maxVal) ); refreshHub(); applyAll(); return; }
+    if(dragging&&activeDeck){ const dx=ev.clientX-start.x; const dy=ev.clientY-start.y; const d=decks[activeDeck]; if(Math.abs(dy)>Math.abs(dx)){ d.spacing = clamp(d.spacing + (-dy)*0.002, 0.6, 2.0); start.y=ev.clientY; refreshDeckVisual(activeDeck); updateAudioLinks(); } else { setXF(xf + dx*0.004); start.x=ev.clientX; updateAudioLinks(); } return; }
+  });
+  addEventListener('pointerup',()=>{ dragging=false; activeDeck=null; hold=false; mode=null; tuneIdx=null; hubDrag=null; });
+
+  // ===== Audio Engine (lightweight)
+  function audioInit(){ if(AC) return; const C=window.AudioContext||window.webkitAudioContext; AC=new C(); master=AC.createGain(); master.gain.value=.22; master.connect(AC.destination); voices.A=buildVoice(); voices.B=buildVoice(); voicesReady=true; toast('Audio ready'); }
+  function buildVoice(){ const out=AC.createGain(); out.gain.value=1; const env=AC.createGain(); env.gain.value=0; const filt=AC.createBiquadFilter(); filt.type='lowpass'; filt.frequency.value=1400; filt.Q.value=.7; const pan=AC.createStereoPanner(); pan.pan.value=0; const detLFO=AC.createOscillator(); const detAmt=AC.createGain(); detAmt.gain.value=3; detLFO.type='sine'; detLFO.frequency.value=.25; detLFO.start(); detLFO.connect(detAmt); const o1=AC.createOscillator(); o1.type='sawtooth'; o1.start(); detAmt.connect(o1.detune); o1.connect(filt); filt.connect(env).connect(out).connect(master); return {env,filt,out,pan,o1,detAmt}; }
+  function trigger(env,level=.6,dur=.22){ const t=AC.currentTime; env.gain.cancelScheduledValues(t); env.gain.setValueAtTime(env.gain.value,t); env.gain.linearRampToValueAtTime(level,t+0.01); env.gain.exponentialRampToValueAtTime(0.0001,t+dur); }
+  function setFilter(parts,cut,q){ parts.filt.frequency.setTargetAtTime(cut,AC.currentTime,.02); parts.filt.Q.setTargetAtTime(q,AC.currentTime,.02); }
+  function updateAudioLinks(){ if(!AC||!voicesReady) return; const g=xfG(xf); [voices.A, voices.B].forEach(v=> setFilter(v, 600 + 2600*energy, 0.8 + resonance*6)); master.gain.setTargetAtTime(0.12 + 0.5*energy, AC.currentTime, .05); }
+
+  // Tone pack → also affect grid
+  let voice=null; // optional extra osc for grid flavor
+  function startGridVoice(){ if(!AC) return; if(voice) return; voice=AC.createOscillator(); voice.type=TONE_PACKS[multiGrid.tonePack].osc; const g=AC.createGain(); g.gain.value=0.08; voice.connect(g).connect(master); voice.start(); }
+
+  // ===== Sequencer (minimal)
+  function tick(){ ['A','B'].forEach(which=>{ const d=decks[which]; d.phase=(d.phase+1)%d.steps; const idx=d.phase; if(d.seq[idx]){ if(AC&&voicesReady){ const v=(which==='A')?voices.A:voices.B; setFilter(v, 800+2800*energy, .9+6*resonance); trigger(v.env, .22, .16 + .12*resonance); } const plate=d.plates[idx % Math.max(1,d.layers)]; if(plate){ plate.scale.set(decks[which].size*1.18,1,decks[which].size*1.18); setTimeout(()=>{ plate.scale.set(decks[which].size,1,decks[which].size); }, 90); } } }); overlap.phase=(overlap.phase+1)%overlap.steps; }
+  function startClock(){ let last=performance.now(); (function loop(){ const step=60000/bpm/4; const now=performance.now(); if(playing && AC && AC.state==='running' && now-last>=step){ last+=step; tick(); } requestAnimationFrame(loop); })(); }
+
+  // ===== Helpers
+  function setXF(x){ xf=clamp(x,-1,1); refreshDeckVisual('A'); refreshDeckVisual('B'); updateCoupledSeparation(); }
+  function clamp(x,a,b){ return Math.max(a,Math.min(b,x)); }
+  const lerp=(a,b,t)=>a*(1-t)+b*t; const xfG=x=>({a:(1-x)/2,b:(1+x)/2});
+
+  // ===== Quick controls
+  const btnStart=document.getElementById('start');
+  const btnOrbit=document.getElementById('orbit');
+  const btnRing=document.getElementById('layoutRing');
+  const btnGrid=document.getElementById('layoutGrid');
+  const btnDrum=document.getElementById('layoutDrum');
+  const btnTube=document.getElementById('layoutTube');
+  const btnMulti=document.getElementById('toggleMulti');
+  const packPrev=document.getElementById('packPrev');
+  const packNext=document.getElementById('packNext');
+
+  let orbit=false, theta=0, dist=180; const center=new THREE.Vector3(0,12,0);
+  function setOrbit(on){ orbit=!!on; btnOrbit.textContent = orbit? 'Orbit ON':'Orbit OFF'; }
+
+  btnStart.addEventListener('click', async ()=>{ audioInit(); if(AC.state==='suspended'){ await AC.resume(); } playing=true; startClock(); startGridVoice(); toast('Audio started'); });
+  btnOrbit.addEventListener('click', ()=>{ setOrbit(!orbit); });
+  btnRing.addEventListener('click', ()=>{ hub.layoutMode='grid'; hub.gridRows=2; hub.gridCols=5; refreshHubLayout(); toast('Hub: 2×5 grid (two rows)'); });
+  btnGrid.addEventListener('click', ()=>{ hub.layoutMode='grid'; hub.gridRows=3; hub.gridCols=4; refreshHubLayout(); toast('Hub: 3×4 grid'); });
+  btnDrum.addEventListener('click', ()=>{ hub.layoutMode='grid'; hub.gridRows=2; hub.gridCols=4; refreshHubLayout(); toast('Hub: compact'); });
+  btnTube.addEventListener('click', ()=>{ hub.layoutMode='grid'; hub.gridRows=2; hub.gridCols=6; refreshHubLayout(); toast('Hub: wide'); });
+  btnMulti.addEventListener('click', ()=>{ multiGrid.visible=!multiGrid.visible; multiGrid.group.visible=multiGrid.visible; btnMulti.textContent = multiGrid.visible? 'MultiGrid ON':'MultiGrid OFF'; });
+  packPrev.addEventListener('click', ()=>{ multiGrid.tonePack=(multiGrid.tonePack-1+TONE_PACKS.length)%TONE_PACKS.length; applyPackToGrid(multiGrid.tonePack); });
+  packNext.addEventListener('click', ()=>{ multiGrid.tonePack=(multiGrid.tonePack+1)%TONE_PACKS.length; applyPackToGrid(multiGrid.tonePack); });
+
+  // ===== Deck gestural crossfade / spacing
+  let camDrag=null; canvas.addEventListener('pointerdown',e=>{ camDrag={x:e.clientX,y:e.clientY}; });
+  addEventListener('pointermove',e=>{ if(!camDrag) return; const dx=e.clientX-camDrag.x; const dy=e.clientY-camDrag.y; // horizontal = crossfade, vertical = deck spacing
+    if(Math.abs(dx)>Math.abs(dy)){ setXF(xf + dx*0.004); } else { const avg=(decks.A.spacing+decks.B.spacing)/2; const ns=clamp(avg + (-dy)*0.002, 0.6, 2.0); decks.A.spacing=decks.B.spacing=ns; refreshDeckVisual('A'); refreshDeckVisual('B'); } camDrag.x=e.clientX; camDrag.y=e.clientY; });
+  addEventListener('pointerup',()=>{ camDrag=null; });
+
+  // ===== Build & init
+  function applyAll(){ refreshDeckVisual('A'); refreshDeckVisual('B'); refreshOverlapVisual(); applySeparation(); updateAudioLinks(); }
+  applyAll(); applyView(); applyPackToGrid(multiGrid.tonePack);
+
+  // ===== Animation
+  function animate(){ requestAnimationFrame(animate);
+    if(orbit){ theta+=0.004; camera.position.x=Math.cos(theta)*dist; camera.position.z=Math.sin(theta)*dist; camera.position.y=56+Math.sin(theta*0.6)*18; camera.lookAt(center); }
+    // MultiGrid pulse
+    const t=performance.now()/1000; const mod=0.5 + 0.5*Math.sin(t*0.7); multiGrid.cubes.forEach(c=>{ const ph=c.userData.phase; c.scale.y = 1 + Math.sin((t+ph)*2.2)*0.45*(0.6+mod*0.8); });
+    renderer.render(scene,camera);
+  }
+  animate();
+
+  // ===== Tests (non‑blocking)
+  ;(function tests(){ try{
+    const results=[]; const ok=(n,p)=>results.push({test:n,pass:!!p});
+    ok('THREE loaded', !!window.THREE);
+    ok('VIEWS early', Array.isArray(VIEWS) && VIEWS.length>=5);
+    ok('Hub stacks count', hub.stacks.length===10);
+    ok('MultiGrid built', multiGrid.cubes.length===multiGrid.rows*multiGrid.cols);
+    console.table(results);
+  }catch(e){} })();
+})();
+</script>
+</body>
+</html>

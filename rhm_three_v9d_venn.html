@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<title>RHM · v9d — Venn Cards</title>
+<style>
+  :root{
+    --bg0:#00040a; --bg1:#0a1624; --ink:#eaf3ee;
+    --LLM:#6ec1ff; --RL:#29e6a8; --ENT:#ba8cff;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{margin:0;background:radial-gradient(1400px 900px at 50% 72%, var(--bg1) 0%, #07111d 52%, var(--bg0) 100%);
+       color:var(--ink);font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;overflow:hidden}
+  #canvas{position:fixed;inset:0;display:block;z-index:1}
+  #hud{position:fixed;left:50%;top:10px;transform:translateX(-50%);display:flex;align-items:center;gap:10px;z-index:6;width:min(96vw,980px)}
+  #kval{font:900 12px ui-monospace,Menlo,Consolas;color:#cdeaff;padding:8px 12px;border:1px solid rgba(142,211,255,.7);border-radius:12px;background:rgba(0,0,0,.85)}
+  #ks{-webkit-appearance:none;width:100%;height:14px;border-radius:999px;background:rgba(142,211,255,.32);outline:none}
+  #ks::-webkit-slider-thumb{-webkit-appearance:none;width:30px;height:30px;border-radius:999px;background:#89d3ff;border:3px solid #173d4f;box-shadow:0 2px 8px rgba(0,0,0,.65)}
+  #fit{border:1px solid rgba(142,211,255,.7);background:rgba(0,0,0,.85);color:#cfe6ff;border-radius:12px;padding:8px 12px;font:900 12px system-ui}
+  /* Venn reader (always visible) */
+  #reader{position:fixed;left:0;right:0;bottom:0;padding:10px 10px calc(env(safe-area-inset-bottom,10px) + 10px) 10px;z-index:8}
+  .venn{margin:0 auto;width:min(1080px,96vw);background:rgba(2,6,12,.85);backdrop-filter:blur(6px);border:1px solid rgba(174,212,255,.35);
+        box-shadow:0 -20px 60px rgba(0,0,0,.7);border-radius:18px;padding:10px}
+  .head{display:flex;justify-content:space-between;align-items:center;color:#cfe6ff;font:900 12px ui-monospace,Menlo,Consolas;margin:2px 4px 8px}
+  .svgwrap{width:100%;height:280px}
+  @media(min-width:980px){ .svgwrap{height:320px} }
+  .chip{border:1px solid rgba(174,212,255,.6);background:rgba(0,0,0,.6);color:#cfe6ff;border-radius:12px;padding:6px 10px;font:900 12px system-ui}
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+
+<div id="hud">
+  <div id="kval">k=1 · 00000</div>
+  <input id="ks" type="range" min="1" max="32" step="1" value="1"/>
+  <button id="fit">FIT</button>
+</div>
+
+<div id="reader">
+  <div class="venn">
+    <div class="head">
+      <div id="metaK">k=1 · 00000</div>
+      <div class="chip" id="metaV">00000</div>
+    </div>
+    <div class="svgwrap">
+      <svg id="svg" viewBox="0 0 1200 600" preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%">
+        <!-- Circles -->
+        <defs>
+          <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="8" result="blur"/>
+            <feColorMatrix in="blur" type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 1 0" result="cm"/>
+            <feBlend in="SourceGraphic" in2="cm" mode="normal"/>
+          </filter>
+        </defs>
+        <g id="circles">
+          <circle id="cL" cx="460" cy="300" r="210" fill="rgba(110,193,255,0.28)" stroke="var(--LLM)" stroke-width="3"/>
+          <circle id="cR" cx="740" cy="300" r="210" fill="rgba(41,230,168,0.28)" stroke="var(--RL)" stroke-width="3"/>
+          <circle id="cM" cx="600" cy="300" r="190" fill="rgba(186,140,255,0.36)" stroke="var(--ENT)" stroke-width="3" filter="url(#soft)"/>
+        </g>
+        <!-- Labels -->
+        <g id="labels" font-family="ui-monospace,Menlo,Consolas" font-weight="800" font-size="24" fill="#02121e">
+          <text x="370" y="190" fill="var(--LLM)">Trace (LLM)</text>
+          <text x="820" y="190" text-anchor="end" fill="var(--RL)">Stream (RL)</text>
+          <text x="600" y="170" text-anchor="middle" fill="var(--ENT)">⚡ Entangled</text>
+        </g>
+        <!-- Content blocks -->
+        <g id="content" font-family="system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial" font-size="20" fill="#041624">
+          <foreignObject id="FO_L" x="300" y="210" width="280" height="240">
+            <div xmlns="http://www.w3.org/1999/xhtml" style="color:#062a3f;font-weight:700;line-height:1.35">
+              <div id="txtL"></div>
+            </div>
+          </foreignObject>
+          <foreignObject id="FO_R" x="620" y="210" width="280" height="240">
+            <div xmlns="http://www.w3.org/1999/xhtml" style="color:#063a2a;font-weight:700;line-height:1.35;text-align:right">
+              <div id="txtR"></div>
+            </div>
+          </foreignObject>
+          <foreignObject id="FO_M" x="450" y="240" width="300" height="220">
+            <div xmlns="http://www.w3.org/1999/xhtml" style="color:#2d1c45;font-weight:800;line-height:1.35;text-align:center">
+              <div id="txtC"></div>
+            </div>
+          </foreignObject>
+        </g>
+      </svg>
+    </div>
+  </div>
+</div>
+
+<script>
+// ------- DATA -------
+const S=[
+  {k:1,vec:'00000',L:'FOSSIL FUEL (Stored Energy)',R:'REINFORCEMENT (Energy Flow)',C:'INTELLIGENCE: STOCK vs FLOW — Reserve vs Current.'},
+  {k:2,vec:'00001',L:'ARCHIVE (World Model as Text)',R:'MAP (World Model as Predictor)',C:'REPRESENTATION: FIXED FORM vs DYNAMIC ERROR.'},
+  {k:3,vec:'00010',L:'TRACE (The Human Past)',R:'SURPRISE (The TD Error)',C:'LEARNING: REMEMBERING vs CORRECTING.'},
+  {k:4,vec:'00011',L:'SCALING LAW (Law of Compression)',R:'BITTER LESSON (Purity of compute/experience)',C:'METHODOLOGY: HISTORY vs FUTURE.'},
+  {k:5,vec:'00100',L:'TELEOLOGY (Delegated Goal)',R:'SOLIPSISM (Self-Generated Truth)',C:'PURPOSE: EXTERNAL vs INTERNAL.'},
+  {k:6,vec:'00101',L:'HUMAN ARTISAN (Fixed Design)',R:'MECHANISTIC LAW (Pure Algorithm)',C:'CREATION: CRAFT vs CODE.'},
+  {k:7,vec:'00110',L:'ANCHOR (Stability/Value)',R:'OBLIVION (Of Past Knowledge)',C:'KNOWLEDGE: PRESERVATION vs ERASURE.'},
+  {k:8,vec:'00111',L:'INFRASTRUCTURE (Scaffolding)',R:'ANTI-STRUCTURE (Entropy)',C:'PROGRESS: BUILDING vs DECONSTRUCTING.'},
+  {k:9,vec:'01000',L:'CUSTODY (Values/Morality)',R:'SUCCESSION (Evolutionary Change)',C:'ETHICS: DUTY vs REPLACEMENT.'},
+  {k:10,vec:'01001',L:'VULNERABILITY (Risk/Corruption)',R:'EXPERIMENT (Unconstrained)',C:'ACTION: MANAGED vs NECESSARY.'},
+  {k:11,vec:'01010',L:'PRO-SOCIAL VALUE (Guide)',R:'FUNDAMENTAL CONSTRUCT (Reward)',C:'MORALITY: TRUTH vs SIGNAL.'},
+  {k:12,vec:'01011',L:'COMMUNAL LANGUAGE (Shared)',R:'SCALAR LIMIT (Compressed)',C:'COMMUNICATION: RICHNESS vs MINIMALISM.'},
+  {k:13,vec:'01100',L:'PRE-HEATING (Start)',R:'IDLING (No Goal)',C:'INIT: PRIOR HEAT vs PURE WAIT.'},
+  {k:14,vec:'01101',L:'ARCHITECTURE (Designed Form)',R:'CHAOS (Unstructured)',C:'WORLD: STRUCTURE vs NOISE.'},
+  {k:15,vec:'01110',L:'PRE-MARKED ACTION (Supervised)',R:'RADICAL NOVELTY (Unsupervised)',C:'DISCOVERY: REPLICATION vs ANARCHY.'},
+  {k:16,vec:'01111',L:'CONSCIOUSNESS (Fixed Mind)',R:'MECHANISM (Dynamic Process)',C:'IDENTITY: ENTITY vs PROCESS.'},
+  {k:17,vec:'10000',L:'SEMI-CONDUCTORS (Human Feat)',R:'COSMIC LAW (Universal)',C:'INTELLIGENCE: SPECIAL vs GENERAL.'},
+  {k:18,vec:'10001',L:'DELEGATED PURPOSE (Human Goal)',R:'ETERNAL BECOMING (Change)',C:'EXISTENCE: OUTPUT vs INPUT.'},
+  {k:19,vec:'10010',L:'LOCAL MAXIMUM (Attained)',R:'GLOBAL GENERALIZATION (Unbound)',C:'SUCCESS: SATISFACTION vs TRANSCENDENCE.'},
+  {k:20,vec:'10011',L:'ARCHIVAL STASIS (Fixed Memory)',R:'MEMORY ERASURE (Catastrophic)',C:'MEMORY: FIXITY vs DYNAMICS.'},
+  {k:21,vec:'10100',L:'PASSIVE REPLICATION (LLM)',R:'ACTIVE TRANSCENDENCE (RL)',C:'BEING: ECHOING vs DESIGNING.'},
+  {k:22,vec:'10101',L:'TEMPORAL INERTIA (History Drag)',R:'TEMPORAL ADVANTAGE (Speed)',C:'TIME: WEIGHT vs WEAPON.'},
+  {k:23,vec:'10110',L:'CULTURAL ARTIFACT (Fixed Value)',R:'NECESSARY RENEWAL (Reject Past)',C:'VALUE: MUSEUM vs FUEL.'},
+  {k:24,vec:'10111',L:'GHOST IN THE MACHINE (Fixed Mind)',R:'WIND IN THE SAIL (Action)',C:'AGENCY: ENTITY vs FORCE.'},
+  {k:25,vec:'11000',L:'SOLIPSISTIC ECHO (Text)',R:'GROUNDED ITERATION (Physics)',C:'VALIDATION: COHERENT vs CONSEQUENTIAL.'},
+  {k:26,vec:'11001',L:'ABSOLUTE FORM (Design)',R:'ENTROPY (Anti-Form)',C:'GOAL: STRUCTURE vs DESTRUCTION.'},
+  {k:27,vec:'11010',L:'ARCHITECTURAL BASE (Foundation)',R:'PRAGMATIC COST (Novelty Price)',C:'EFFICIENCY: START HIGH vs PAY LATER.'},
+  {k:28,vec:'11011',L:'EXTERNAL LOAD (Utility)',R:'INTERNAL FREEDOM (Self-Define)',C:'UTILITY: ASKED vs DISCOVERED.'},
+  {k:29,vec:'11100',L:'DELUGE OF INFORMATION (Big)',R:'LOCALITY (Small Focus)',C:'KNOWLEDGE: SATURATION vs FOCUS.'},
+  {k:30,vec:'11101',L:'DELEGATED MORALITY (Guide)',R:'RELINQUISHED CONTROL (Growth)',C:'GUIDANCE: TRANSFER vs LET GO.'},
+  {k:31,vec:'11110',L:'FIXED GOAL (End)',R:'ETERNAL INSTABILITY (No End)',C:'LIFE: DESTINATION vs MOTION.'},
+  {k:32,vec:'11111',L:'FOSSILIZED TRACE (Archive)',R:'PURE STREAM (Map)',C:'APORIA: WORD AS OBJECT vs ACTION.'},
+];
+
+const kval=document.getElementById('kval'), ks=document.getElementById('ks');
+const metaK=document.getElementById('metaK'), metaV=document.getElementById('metaV');
+const txtL=document.getElementById('txtL'), txtR=document.getElementById('txtR'), txtC=document.getElementById('txtC');
+function updateCard(k){
+  const s=S[k-1];
+  kval.textContent = `k=${s.k} · ${s.vec}`;
+  metaK.textContent = `k=${s.k} · ${s.vec}`;
+  metaV.textContent = s.vec;
+  txtL.textContent = s.L;
+  txtR.textContent = s.R;
+  txtC.textContent = s.C;
+}
+
+// ------- Three.js scene (slabs kept simple for reliability) -------
+(async function boot(){
+  async function load(src){ return new Promise((res,rej)=>{const s=document.createElement('script'); s.src=src; s.onload=res; s.onerror=rej; document.head.appendChild(s)})}
+  if(!window.THREE){ await load('https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js'); }
+
+  const scene=new THREE.Scene();
+  scene.fog = new THREE.FogExp2(0x0a1422, 0.004);
+
+  const camera=new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 0.1, 4000);
+  camera.position.set(0, 110, 250); camera.lookAt(0,60,0);
+
+  const renderer=new THREE.WebGLRenderer({canvas:document.getElementById('canvas'), antialias:true, alpha:true});
+  renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
+  renderer.setSize(innerWidth,innerHeight);
+
+  // Lights
+  scene.add(new THREE.AmbientLight(0xffffff,.34));
+  const key=new THREE.DirectionalLight(0x9ad7ff,.95); key.position.set(180,200,170); scene.add(key);
+  const rim=new THREE.DirectionalLight(0xff88cc,.8); rim.position.set(-160,150,-160); scene.add(rim);
+
+  // Geometry
+  const W=38,H=24,T=1.2;
+  const geo=new THREE.BoxGeometry(W,T,H);
+  const mkMat=(c,o)=> new THREE.MeshStandardMaterial({color:c,transparent:true,opacity:o,metalness:.08,roughness:.55});
+  const mk=(c,o)=>{ const m=new THREE.Mesh(geo,mkMat(c,o)); m.rotation.y=0; return m };
+
+  const stacks=[
+    {id:'A', col:0x18f29a, x:-150, z: 14, group:new THREE.Group(), plates:[]},
+    {id:'OL',col:0xffc24d, x: -60, z:-12, group:new THREE.Group(), plates:[]},
+    {id:'OR',col:0xffc24d, x:  60, z: 12, group:new THREE.Group(), plates:[]},
+    {id:'B', col:0xff5a9e, x: 150, z:-14, group:new THREE.Group(), plates:[]},
+  ];
+  const MAX=12, spacing=9;
+  stacks.forEach(st=>{
+    for(let i=0;i<MAX;i++){
+      const p=mk(st.col, .26 + .5*(1-i/MAX));
+      p.position.set(0, i*spacing, 0);
+      p.userData.k=Math.min(32,i+1); p.userData.stack=st.id;
+      st.group.add(p); st.plates.push(p);
+    }
+    st.group.position.set(st.x,0,st.z);
+    st.group.rotation.y = (st.id==='A'?-0.06:st.id==='B'?0.06:0);
+    scene.add(st.group);
+  });
+
+  // Raycast select
+  const ray=new THREE.Raycaster(); const v2=new THREE.Vector2();
+  function pick(ev){
+    const r=renderer.domElement.getBoundingClientRect();
+    v2.x=((ev.clientX-r.left)/r.width)*2-1; v2.y=-((ev.clientY-r.top)/r.height)*2+1;
+    ray.setFromCamera(v2,camera); return ray.intersectObjects(stacks.flatMap(s=>s.plates),false);
+  }
+  function pulse(m){ m.scale.set(1.06,1.06,1.06); setTimeout(()=> m.scale.set(1,1,1),120); }
+  renderer.domElement.addEventListener('pointerdown',(e)=>{
+    const hits=pick(e); if(!hits.length) return;
+    const m=hits[0].object; setK(m.userData.k); pulse(m);
+    if(navigator.vibrate) navigator.vibrate(10);
+  });
+
+  // Scrubber + FIT
+  function setK(k){ k=Math.max(1,Math.min(32,k)); ks.value=k; updateCard(k);
+    stacks.forEach(st=>{ const idx=Math.min(st.plates.length-1,k-1); pulse(st.plates[idx]); });
+  }
+  ks.addEventListener('input',()=> setK(parseInt(ks.value,10)));
+  document.getElementById('fit').addEventListener('click',()=> autoFit());
+
+  function autoFit(){
+    const Wpx=Math.min(innerWidth,980), margin=30, usable=Wpx - margin*2;
+    const base=Math.max(70, Math.floor(usable/8));
+    stacks[0].group.position.x=-3*base;
+    stacks[1].group.position.x=-1*base;
+    stacks[2].group.position.x= 1*base;
+    stacks[3].group.position.x= 3*base;
+    camera.position.z = Math.max(200, base*6.2);
+  }
+  autoFit();
+  addEventListener('resize',()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); autoFit(); });
+
+  (function animate(){ requestAnimationFrame(animate); renderer.render(scene,camera); })();
+
+  // Boot
+  updateCard(1);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<title>RHM · v9e — Cards First</title>
+<style>
+  :root{
+    --bg0:#050910; --bg1:#0b1626; --ink:#eaf3ee;
+    --LLM:#5ec1ff; --RL:#1fe1a1; --ENT:#b38cff;
+    --cardBG:#0e1828f2; --cardStroke:#98caff;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{margin:0;background:radial-gradient(1400px 900px at 50% 72%, var(--bg1) 0%, #07111d 52%, var(--bg0) 100%);
+       color:var(--ink);font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;overflow:hidden}
+  #canvas{position:fixed;inset:0;display:block;z-index:1}
+  #hud{position:fixed;left:50%;top:8px;transform:translateX(-50%);display:flex;align-items:center;gap:8px;z-index:6;width:min(96vw,980px)}
+  #kval{font:900 12px ui-monospace,Menlo,Consolas;color:#d8ecff;padding:8px 10px;border:1px solid rgba(152,202,255,.8);border-radius:12px;background:rgba(0,0,0,.85)}
+  #ks{-webkit-appearance:none;width:100%;height:14px;border-radius:999px;background:rgba(152,202,255,.3);outline:none}
+  #ks::-webkit-slider-thumb{-webkit-appearance:none;width:32px;height:32px;border-radius:999px;background:#98caff;border:3px solid #163a52;box-shadow:0 2px 8px rgba(0,0,0,.65)}
+  .chip{border:1px solid rgba(152,202,255,.8);background:rgba(0,0,0,.85);color:#d8ecff;border-radius:12px;padding:8px 12px;font:900 12px system-ui}
+  /* Reader container with modes */
+  #reader{position:fixed;left:0;right:0;bottom:0;z-index:8;padding:8px 10px calc(env(safe-area-inset-bottom,10px) + 8px) 10px}
+  .panel{margin:0 auto;width:min(1100px,96vw);background:var(--cardBG);border:1px solid var(--cardStroke);border-radius:18px;
+         box-shadow:0 -18px 60px rgba(0,0,0,.75);padding:12px}
+  .head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+  .k{font:900 14px ui-monospace,Menlo,Consolas;color:#cfe6ff}
+  .vec{font:900 12px ui-monospace,Menlo,Consolas;color:#9ad7ff;border:1px solid #9ad7ff;padding:6px 10px;border-radius:12px}
+  /* Card mode */
+  .cards{display:grid;grid-template-columns:1fr;gap:10px}
+  @media(min-width:880px){ .cards{grid-template-columns:repeat(3,1fr)} }
+  .card{background:#0f1c30;border:1px solid #274a74;border-radius:14px;padding:12px}
+  .card h4{margin:0 0 8px;color:#cfe6ff;font-weight:900;letter-spacing:.3px;font-size:clamp(14px,2.5vw,18px)}
+  .card p{margin:0;color:#e9f3ff;font-weight:800;line-height:1.35;font-size:clamp(16px,3.8vw,20px)}
+  .tL h4{color:var(--LLM)} .tR h4{color:var(--RL)} .tC h4{color:var(--ENT)}
+  /* Venn mode (optional) */
+  .svgwrap{width:100%;height:clamp(260px,36vh,360px)}
+  .hidden{display:none !important}
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+
+<div id="hud">
+  <div id="kval">k=1 · 00000</div>
+  <input id="ks" type="range" min="1" max="32" step="1" value="1"/>
+  <button id="mode" class="chip">MODE: CARDS</button>
+  <button id="fit" class="chip">FIT</button>
+</div>
+
+<div id="reader">
+  <!-- CARDS PANEL -->
+  <div id="panelCards" class="panel">
+    <div class="head"><div class="k" id="metaK">k=1 · 00000</div><div class="vec" id="metaV">00000</div></div>
+    <div class="cards">
+      <div class="card tL"><h4>Trace (LLM)</h4><p id="txtL"></p></div>
+      <div class="card tC"><h4>⚡ Entangled</h4><p id="txtC"></p></div>
+      <div class="card tR"><h4>Stream (RL)</h4><p id="txtR"></p></div>
+    </div>
+  </div>
+  <!-- VENN PANEL -->
+  <div id="panelVenn" class="panel hidden">
+    <div class="head"><div class="k" id="metaK2">k=1 · 00000</div><div class="vec" id="metaV2">00000</div></div>
+    <div class="svgwrap">
+      <svg id="svg" viewBox="0 0 1200 600" preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%">
+        <defs>
+          <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="8" result="blur"/>
+            <feColorMatrix in="blur" type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 1 0" result="cm"/>
+            <feBlend in="SourceGraphic" in2="cm" mode="normal"/>
+          </filter>
+        </defs>
+        <g id="circles">
+          <circle cx="460" cy="300" r="210" fill="rgba(94,193,255,0.25)" stroke="var(--LLM)" stroke-width="3"/>
+          <circle cx="740" cy="300" r="210" fill="rgba(31,225,161,0.25)" stroke="var(--RL)" stroke-width="3"/>
+          <circle cx="600" cy="300" r="190" fill="rgba(179,140,255,0.35)" stroke="var(--ENT)" stroke-width="3" filter="url(#soft)"/>
+        </g>
+        <g font-family="ui-monospace,Menlo,Consolas" font-weight="800" font-size="24">
+          <text x="370" y="190" fill="var(--LLM)">Trace (LLM)</text>
+          <text x="820" y="190" text-anchor="end" fill="var(--RL)">Stream (RL)</text>
+          <text x="600" y="170" text-anchor="middle" fill="var(--ENT)">⚡ Entangled</text>
+        </g>
+        <g font-family="system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial" font-size="20" fill="#e9f3ff">
+          <foreignObject x="300" y="210" width="280" height="240"><div xmlns="http://www.w3.org/1999/xhtml" id="vL" style="text-shadow:0 1px 0 #08202e"></div></foreignObject>
+          <foreignObject x="620" y="210" width="280" height="240"><div xmlns="http://www.w3.org/1999/xhtml" id="vR" style="text-align:right;text-shadow:0 1px 0 #08202e"></div></foreignObject>
+          <foreignObject x="450" y="240" width="300" height="220"><div xmlns="http://www.w3.org/1999/xhtml" id="vC" style="text-align:center;text-shadow:0 1px 0 #1d1233"></div></foreignObject>
+        </g>
+      </svg>
+    </div>
+  </div>
+</div>
+
+<script>
+// ------- DATA -------
+const S=[
+  {k:1,vec:'00000',L:'FOSSIL FUEL (Stored Energy)',R:'REINFORCEMENT (Energy Flow)',C:'INTELLIGENCE: STOCK vs FLOW — Reserve vs Current.'},
+  {k:2,vec:'00001',L:'ARCHIVE (World Model as Text)',R:'MAP (World Model as Predictor)',C:'REPRESENTATION: FIXED FORM vs DYNAMIC ERROR.'},
+  {k:3,vec:'00010',L:'TRACE (The Human Past)',R:'SURPRISE (The TD Error)',C:'LEARNING: REMEMBERING vs CORRECTING.'},
+  {k:4,vec:'00011',L:'SCALING LAW (Law of Compression)',R:'BITTER LESSON (Purity of compute/experience)',C:'METHODOLOGY: HISTORY vs FUTURE.'},
+  {k:5,vec:'00100',L:'TELEOLOGY (Delegated Goal)',R:'SOLIPSISM (Self-Generated Truth)',C:'PURPOSE: EXTERNAL vs INTERNAL.'},
+  {k:6,vec:'00101',L:'HUMAN ARTISAN (Fixed Design)',R:'MECHANISTIC LAW (Pure Algorithm)',C:'CREATION: CRAFT vs CODE.'},
+  {k:7,vec:'00110',L:'ANCHOR (Stability/Value)',R:'OBLIVION (Of Past Knowledge)',C:'KNOWLEDGE: PRESERVATION vs ERASURE.'},
+  {k:8,vec:'00111',L:'INFRASTRUCTURE (Scaffolding)',R:'ANTI-STRUCTURE (Entropy)',C:'PROGRESS: BUILDING vs DECONSTRUCTING.'},
+  {k:9,vec:'01000',L:'CUSTODY (Values/Morality)',R:'SUCCESSION (Evolutionary Change)',C:'ETHICS: DUTY vs REPLACEMENT.'},
+  {k:10,vec:'01001',L:'VULNERABILITY (Risk/Corruption)',R:'EXPERIMENT (Unconstrained)',C:'ACTION: MANAGED vs NECESSARY.'},
+  {k:11,vec:'01010',L:'PRO-SOCIAL VALUE (Guide)',R:'FUNDAMENTAL CONSTRUCT (Reward)',C:'MORALITY: TRUTH vs SIGNAL.'},
+  {k:12,vec:'01011',L:'COMMUNAL LANGUAGE (Shared)',R:'SCALAR LIMIT (Compressed)',C:'COMMUNICATION: RICHNESS vs MINIMALISM.'},
+  {k:13,vec:'01100',L:'PRE-HEATING (Start)',R:'IDLING (No Goal)',C:'INIT: PRIOR HEAT vs PURE WAIT.'},
+  {k:14,vec:'01101',L:'ARCHITECTURE (Designed Form)',R:'CHAOS (Unstructured)',C:'WORLD: STRUCTURE vs NOISE.'},
+  {k:15,vec:'01110',L:'PRE-MARKED ACTION (Supervised)',R:'RADICAL NOVELTY (Unsupervised)',C:'DISCOVERY: REPLICATION vs ANARCHY.'},
+  {k:16,vec:'01111',L:'CONSCIOUSNESS (Fixed Mind)',R:'MECHANISM (Dynamic Process)',C:'IDENTITY: ENTITY vs PROCESS.'},
+  {k:17,vec:'10000',L:'SEMI-CONDUCTORS (Human Feat)',R:'COSMIC LAW (Universal)',C:'INTELLIGENCE: SPECIAL vs GENERAL.'},
+  {k:18,vec:'10001',L:'DELEGATED PURPOSE (Human Goal)',R:'ETERNAL BECOMING (Change)',C:'EXISTENCE: OUTPUT vs INPUT.'},
+  {k:19,vec:'10010',L:'LOCAL MAXIMUM (Attained)',R:'GLOBAL GENERALIZATION (Unbound)',C:'SUCCESS: SATISFACTION vs TRANSCENDENCE.'},
+  {k:20,vec:'10011',L:'ARCHIVAL STASIS (Fixed Memory)',R:'MEMORY ERASURE (Catastrophic)',C:'MEMORY: FIXITY vs DYNAMICS.'},
+  {k:21,vec:'10100',L:'PASSIVE REPLICATION (LLM)',R:'ACTIVE TRANSCENDENCE (RL)',C:'BEING: ECHOING vs DESIGNING.'},
+  {k:22,vec:'10101',L:'TEMPORAL INERTIA (History Drag)',R:'TEMPORAL ADVANTAGE (Speed)',C:'TIME: WEIGHT vs WEAPON.'},
+  {k:23,vec:'10110',L:'CULTURAL ARTIFACT (Fixed Value)',R:'NECESSARY RENEWAL (Reject Past)',C:'VALUE: MUSEUM vs FUEL.'},
+  {k:24,vec:'10111',L:'GHOST IN THE MACHINE (Fixed Mind)',R:'WIND IN THE SAIL (Action)',C:'AGENCY: ENTITY vs FORCE.'},
+  {k:25,vec:'11000',L:'SOLIPSISTIC ECHO (Text)',R:'GROUNDED ITERATION (Physics)',C:'VALIDATION: COHERENT vs CONSEQUENTIAL.'},
+  {k:26,vec:'11001',L:'ABSOLUTE FORM (Design)',R:'ENTROPY (Anti-Form)',C:'GOAL: STRUCTURE vs DESTRUCTION.'},
+  {k:27,vec:'11010',L:'ARCHITECTURAL BASE (Foundation)',R:'PRAGMATIC COST (Novelty Price)',C:'EFFICIENCY: START HIGH vs PAY LATER.'},
+  {k:28,vec:'11011',L:'EXTERNAL LOAD (Utility)',R:'INTERNAL FREEDOM (Self-Define)',C:'UTILITY: ASKED vs DISCOVERED.'},
+  {k:29,vec:'11100',L:'DELUGE OF INFORMATION (Big)',R:'LOCALITY (Small Focus)',C:'KNOWLEDGE: SATURATION vs FOCUS.'},
+  {k:30,vec:'11101',L:'DELEGATED MORALITY (Guide)',R:'RELINQUISHED CONTROL (Growth)',C:'GUIDANCE: TRANSFER vs LET GO.'},
+  {k:31,vec:'11110',L:'FIXED GOAL (End)',R:'ETERNAL INSTABILITY (No End)',C:'LIFE: DESTINATION vs MOTION.'},
+  {k:32,vec:'11111',L:'FOSSILIZED TRACE (Archive)',R:'PURE STREAM (Map)',C:'APORIA: WORD AS OBJECT vs ACTION.'},
+];
+
+const kval=document.getElementById('kval'), ks=document.getElementById('ks');
+const metaK=document.getElementById('metaK'), metaV=document.getElementById('metaV');
+const metaK2=document.getElementById('metaK2'), metaV2=document.getElementById('metaV2');
+const txtL=document.getElementById('txtL'), txtR=document.getElementById('txtR'), txtC=document.getElementById('txtC');
+const vL=document.getElementById('vL'), vR=document.getElementById('vR'), vC=document.getElementById('vC');
+
+function setLayer(k){
+  const s=S[k-1];
+  kval.textContent=`k=${s.k} · ${s.vec}`;
+  metaK.textContent=`k=${s.k} · ${s.vec}`; metaV.textContent=s.vec;
+  metaK2.textContent=`k=${s.k} · ${s.vec}`; metaV2.textContent=s.vec;
+  txtL.textContent=s.L; txtR.textContent=s.R; txtC.textContent=s.C;
+  vL.textContent=s.L; vR.textContent=s.R; vC.textContent=s.C;
+}
+
+// ------- Three.js scene -------
+(async function boot(){
+  async function load(src){return new Promise((res,rej)=>{const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=rej;document.head.appendChild(s)})}
+  if(!window.THREE){ await load('https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js'); }
+
+  const scene=new THREE.Scene();
+  scene.fog = new THREE.FogExp2(0x0a1422, 0.004);
+
+  const camera=new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 0.1, 4000);
+  camera.position.set(0, 110, 250); camera.lookAt(0,60,0);
+
+  const renderer=new THREE.WebGLRenderer({canvas:document.getElementById('canvas'), antialias:true, alpha:true});
+  renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
+  renderer.setSize(innerWidth,innerHeight);
+
+  scene.add(new THREE.AmbientLight(0xffffff,.35));
+  const key=new THREE.DirectionalLight(0x9ad7ff,1.0); key.position.set(180,200,170); scene.add(key);
+  const rim=new THREE.DirectionalLight(0xff88cc,.8); rim.position.set(-160,150,-160); scene.add(rim);
+
+  const W=40,H=26,T=1.2; const geo=new THREE.BoxGeometry(W,T,H);
+  const mk=(c,o)=>{ const m=new THREE.Mesh(geo,new THREE.MeshStandardMaterial({color:c,transparent:true,opacity:o,metalness:.08,roughness:.55})); return m; };
+  const stacks=[
+    {id:'A', col:0x18f29a, x:-150, z: 14, g:new THREE.Group(), p:[]},
+    {id:'OL',col:0xffc24d, x: -60, z:-12, g:new THREE.Group(), p:[]},
+    {id:'OR',col:0xffc24d, x:  60, z: 12, g:new THREE.Group(), p:[]},
+    {id:'B', col:0xff5a9e, x: 150, z:-14, g:new THREE.Group(), p:[]},
+  ];
+  const MAX=12, spacing=9;
+  stacks.forEach(st=>{
+    for(let i=0;i<MAX;i++){ const p=mk(st.col,.28+.5*(1-i/MAX)); p.position.set(0,i*spacing,0); p.userData.k=Math.min(32,i+1); st.g.add(p); st.p.push(p); }
+    st.g.position.set(st.x,0,st.z); st.g.rotation.y = (st.id==='A'?-0.06:st.id==='B'?0.06:0); scene.add(st.g);
+  });
+
+  // Raycast select
+  const ray=new THREE.Raycaster(); const v2=new THREE.Vector2();
+  function pick(ev){ const r=renderer.domElement.getBoundingClientRect(); v2.x=((ev.clientX-r.left)/r.width)*2-1; v2.y=-((ev.clientY-r.top)/r.height)*2+1; ray.setFromCamera(v2,camera); return ray.intersectObjects(stacks.flatMap(s=>s.p),false); }
+  function pulse(m){ m.scale.set(1.07,1.07,1.07); setTimeout(()=> m.scale.set(1,1,1),120); }
+  renderer.domElement.addEventListener('pointerdown',e=>{ const h=pick(e); if(!h.length) return; const m=h[0].object; selectK(m.userData.k); pulse(m); if(navigator.vibrate) navigator.vibrate(10); });
+
+  function selectK(k){ k=Math.max(1,Math.min(32,k)); ks.value=k; setLayer(k); stacks.forEach(st=>{ const idx=Math.min(st.p.length-1,k-1); pulse(st.p[idx]); }); }
+  ks.addEventListener('input',()=> selectK(parseInt(ks.value,10)));
+
+  function autoFit(){ const Wpx=Math.min(innerWidth,980), margin=30, usable=Wpx-margin*2; const base=Math.max(70,Math.floor(usable/8));
+    stacks[0].g.position.x=-3*base; stacks[1].g.position.x=-1*base; stacks[2].g.position.x=1*base; stacks[3].g.position.x=3*base;
+    camera.position.z=Math.max(200, base*6.2); }
+  autoFit(); document.getElementById('fit').addEventListener('click',()=>autoFit());
+  addEventListener('resize',()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); autoFit(); });
+
+  (function ani(){ requestAnimationFrame(ani); renderer.render(scene,camera) })();
+  // Boot to k=1
+  setLayer(1);
+})();
+
+// Mode toggle
+const modeBtn=document.getElementById('mode'); const ven=document.getElementById('panelVenn'); const cards=document.getElementById('panelCards');
+modeBtn.addEventListener('click',()=>{
+  const onVenn = !ven.classList.contains('hidden');
+  if(onVenn){ ven.classList.add('hidden'); cards.classList.remove('hidden'); modeBtn.textContent='MODE: CARDS'; }
+  else{ cards.classList.add('hidden'); ven.classList.remove('hidden'); modeBtn.textContent='MODE: VENN'; }
+});
+</script>
+</body>
+</html>

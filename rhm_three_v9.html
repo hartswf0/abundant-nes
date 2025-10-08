@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<title>RHM · v9 — Three.js + Readable Cards</title>
+<style>
+  :root{
+    --bg:#06090e; --ink:#eaf3ee; --ui:#8ed3ff;
+    --A:#18f29a; --B:#ff5a9e; --O:#ffc24d;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{margin:0;background:radial-gradient(1200px 600px at 50% 70%, #0c141f 0%, #06090e 60%, #020305 100%);color:var(--ink);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;overflow:hidden}
+  #wrap{position:fixed;inset:0}
+  #canvas{position:absolute;inset:0;display:block;z-index:1}
+  #labels{position:absolute;inset:0;pointer-events:none;z-index:3}
+  #hud{position:fixed;left:50%;top:10px;transform:translateX(-50%);display:flex;align-items:center;gap:10px;z-index:6;width:min(96vw,960px)}
+  #kval{font:800 12px ui-monospace,Menlo,Consolas;color:#cdeaff;padding:8px 12px;border:1px solid rgba(142,211,255,.5);border-radius:12px;background:rgba(0,0,0,.6)}
+  #ks{-webkit-appearance:none;width:100%;height:12px;border-radius:999px;background:rgba(142,211,255,.25);outline:none}
+  #ks::-webkit-slider-thumb{-webkit-appearance:none;width:28px;height:28px;border-radius:999px;background:#89d3ff;border:3px solid #173d4f;box-shadow:0 2px 8px rgba(0,0,0,.5)}
+  #fit{border:1px solid rgba(142,211,255,.55);background:rgba(0,0,0,.65);color:#cfe6ff;border-radius:12px;padding:6px 10px;font:800 12px system-ui}
+  /* Card */
+  .card{min-width:240px;max-width:360px;pointer-events:auto}
+  .paper{background:linear-gradient(#fbfcff 26px, rgba(255,255,255,.96) 26px), repeating-linear-gradient(#fbfcff, #fbfcff 26px, #e9f2ff 27px, #fbfcff 54px);
+         color:#0a0d10;border:1px solid #b7d7ff;border-radius:14px;box-shadow:0 12px 48px rgba(0,0,0,.6);padding:10px}
+  .meta{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #b7d7ff;padding-bottom:6px;margin-bottom:8px;font:900 12px ui-monospace,Menlo,Consolas;color:#08324a}
+  .section{border:1px dashed #b7d7ff;border-radius:12px;background:#ffffffcc;color:#0a0d10;padding:8px;margin-top:6px}
+  .section h4{margin:0 0 4px;font-size:12px;color:#0c4762}
+  .section p{margin:0;font-size:13px;line-height:1.4}
+  /* Plate hit helper (2D) */
+  .tag{position:absolute;left:50%;transform:translateX(-50%);bottom:-16px;font:900 11px ui-monospace,Menlo;color:#bfe2ff;text-shadow:0 1px 0 #000}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="hud">
+    <div id="kval">k=1 · 00000</div>
+    <input id="ks" type="range" min="1" max="32" step="1" value="1"/>
+    <button id="fit">FIT</button>
+  </div>
+  <canvas id="canvas"></canvas>
+  <div id="labels"></div>
+</div>
+
+<script>
+// ====== DATA (32 layers) ======
+const S=[
+  {k:1,vec:'00000',L:'FOSSIL FUEL (Stored Energy)',R:'REINFORCEMENT (Energy Flow)',C:'INTELLIGENCE: STOCK vs FLOW — Reserve vs Current.'},
+  {k:2,vec:'00001',L:'ARCHIVE (World Model as Text)',R:'MAP (World Model as Predictor)',C:'REPRESENTATION: FIXED FORM vs DYNAMIC ERROR.'},
+  {k:3,vec:'00010',L:'TRACE (The Human Past)',R:'SURPRISE (The TD Error)',C:'LEARNING: REMEMBERING vs CORRECTING.'},
+  {k:4,vec:'00011',L:'SCALING LAW (Law of Compression)',R:'BITTER LESSON (Purity of compute/experience)',C:'METHODOLOGY: HISTORY vs FUTURE.'},
+  {k:5,vec:'00100',L:'TELEOLOGY (Delegated Goal)',R:'SOLIPSISM (Self-Generated Truth)',C:'PURPOSE: EXTERNAL vs INTERNAL.'},
+  {k:6,vec:'00101',L:'HUMAN ARTISAN (Fixed Design)',R:'MECHANISTIC LAW (Pure Algorithm)',C:'CREATION: CRAFT vs CODE.'},
+  {k:7,vec:'00110',L:'ANCHOR (Stability/Value)',R:'OBLIVION (Of Past Knowledge)',C:'KNOWLEDGE: PRESERVATION vs ERASURE.'},
+  {k:8,vec:'00111',L:'INFRASTRUCTURE (Scaffolding)',R:'ANTI-STRUCTURE (Entropy)',C:'PROGRESS: BUILDING vs DECONSTRUCTING.'},
+  {k:9,vec:'01000',L:'CUSTODY (Values/Morality)',R:'SUCCESSION (Evolutionary Change)',C:'ETHICS: DUTY vs REPLACEMENT.'},
+  {k:10,vec:'01001',L:'VULNERABILITY (Risk/Corruption)',R:'EXPERIMENT (Unconstrained)',C:'ACTION: MANAGED vs NECESSARY.'},
+  {k:11,vec:'01010',L:'PRO-SOCIAL VALUE (Guide)',R:'FUNDAMENTAL CONSTRUCT (Reward)',C:'MORALITY: TRUTH vs SIGNAL.'},
+  {k:12,vec:'01011',L:'COMMUNAL LANGUAGE (Shared)',R:'SCALAR LIMIT (Compressed)',C:'COMMUNICATION: RICHNESS vs MINIMALISM.'},
+  {k:13,vec:'01100',L:'PRE-HEATING (Start)',R:'IDLING (No Goal)',C:'INIT: PRIOR HEAT vs PURE WAIT.'},
+  {k:14,vec:'01101',L:'ARCHITECTURE (Designed Form)',R:'CHAOS (Unstructured)',C:'WORLD: STRUCTURE vs NOISE.'},
+  {k:15,vec:'01110',L:'PRE-MARKED ACTION (Supervised)',R:'RADICAL NOVELTY (Unsupervised)',C:'DISCOVERY: REPLICATION vs ANARCHY.'},
+  {k:16,vec:'01111',L:'CONSCIOUSNESS (Fixed Mind)',R:'MECHANISM (Dynamic Process)',C:'IDENTITY: ENTITY vs PROCESS.'},
+  {k:17,vec:'10000',L:'SEMI-CONDUCTORS (Human Feat)',R:'COSMIC LAW (Universal)',C:'INTELLIGENCE: SPECIAL vs GENERAL.'},
+  {k:18,vec:'10001',L:'DELEGATED PURPOSE (Human Goal)',R:'ETERNAL BECOMING (Change)',C:'EXISTENCE: OUTPUT vs INPUT.'},
+  {k:19,vec:'10010',L:'LOCAL MAXIMUM (Attained)',R:'GLOBAL GENERALIZATION (Unbound)',C:'SUCCESS: SATISFACTION vs TRANSCENDENCE.'},
+  {k:20,vec:'10011',L:'ARCHIVAL STASIS (Fixed Memory)',R:'MEMORY ERASURE (Catastrophic)',C:'MEMORY: FIXITY vs DYNAMICS.'},
+  {k:21,vec:'10100',L:'PASSIVE REPLICATION (LLM)',R:'ACTIVE TRANSCENDENCE (RL)',C:'BEING: ECHOING vs DESIGNING.'},
+  {k:22,vec:'10101',L:'TEMPORAL INERTIA (History Drag)',R:'TEMPORAL ADVANTAGE (Speed)',C:'TIME: WEIGHT vs WEAPON.'},
+  {k:23,vec:'10110',L:'CULTURAL ARTIFACT (Fixed Value)',R:'NECESSARY RENEWAL (Reject Past)',C:'VALUE: MUSEUM vs FUEL.'},
+  {k:24,vec:'10111',L:'GHOST IN THE MACHINE (Fixed Mind)',R:'WIND IN THE SAIL (Action)',C:'AGENCY: ENTITY vs FORCE.'},
+  {k:25,vec:'11000',L:'SOLIPSISTIC ECHO (Text)',R:'GROUNDED ITERATION (Physics)',C:'VALIDATION: COHERENT vs CONSEQUENTIAL.'},
+  {k:26,vec:'11001',L:'ABSOLUTE FORM (Design)',R:'ENTROPY (Anti-Form)',C:'GOAL: STRUCTURE vs DESTRUCTION.'},
+  {k:27,vec:'11010',L:'ARCHITECTURAL BASE (Foundation)',R:'PRAGMATIC COST (Novelty Price)',C:'EFFICIENCY: START HIGH vs PAY LATER.'},
+  {k:28,vec:'11011',L:'EXTERNAL LOAD (Utility)',R:'INTERNAL FREEDOM (Self-Define)',C:'UTILITY: ASKED vs DISCOVERED.'},
+  {k:29,vec:'11100',L:'DELUGE OF INFORMATION (Big)',R:'LOCALITY (Small Focus)',C:'KNOWLEDGE: SATURATION vs FOCUS.'},
+  {k:30,vec:'11101',L:'DELEGATED MORALITY (Guide)',R:'RELINQUISHED CONTROL (Growth)',C:'GUIDANCE: TRANSFER vs LET GO.'},
+  {k:31,vec:'11110',L:'FIXED GOAL (End)',R:'ETERNAL INSTABILITY (No End)',C:'LIFE: DESTINATION vs MOTION.'},
+  {k:32,vec:'11111',L:'FOSSILIZED TRACE (Archive)',R:'PURE STREAM (Map)',C:'APORIA: WORD AS OBJECT vs ACTION.'},
+];
+
+// ====== THREE bootstrap ======
+(async function boot(){
+  // Load THREE core + CSS2D
+  async function load(src){ return new Promise((res,rej)=>{const s=document.createElement('script'); s.src=src; s.onload=res; s.onerror=rej; document.head.appendChild(s)})}
+  if(!window.THREE){ await load('https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js'); }
+  if(!THREE.CSS2DRenderer){
+    await load('https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/renderers/CSS2DRenderer.min.js').catch(()=>{});
+    // Fallback shim if module path failed: include legacy build
+    if(!THREE.CSS2DRenderer){ await load('https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/renderers/CSS2DRenderer.js'); }
+  }
+
+  const scene=new THREE.Scene();
+  scene.background=new THREE.Color(0x06090e);
+  const camera=new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 0.1, 4000);
+  camera.position.set(0, 80, 160);
+
+  const renderer=new THREE.WebGLRenderer({canvas:document.getElementById('canvas'), antialias:true});
+  renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
+  renderer.setSize(innerWidth,innerHeight);
+
+  const labelRenderer=new THREE.CSS2DRenderer();
+  labelRenderer.setSize(innerWidth, innerHeight);
+  labelRenderer.domElement.id='labels';
+  document.getElementById('labels').replaceWith(labelRenderer.domElement);
+
+  // Lights
+  scene.add(new THREE.AmbientLight(0xffffff, .28));
+  const key=new THREE.DirectionalLight(0x8ed3ff, .9); key.position.set(120,160,140); scene.add(key);
+  const rim=new THREE.DirectionalLight(0xff8aa6, .7); rim.position.set(-160,120,-140); scene.add(rim);
+
+  // Helpers
+  const planeGeo=new THREE.PlaneGeometry(28,16);
+  function plateMat(color,op){ return new THREE.MeshStandardMaterial({color,transparent:true,opacity:op,side:THREE.DoubleSide,roughness:.6,metalness:.08,depthWrite:false}) }
+  function mkPlate(color,op){ const m=new THREE.Mesh(planeGeo, plateMat(color,op)); m.rotation.x=-Math.PI/2; return m }
+
+  // Stacks
+  const stacks=[
+    {id:'A', color:0x18f29a, x:-90, plates:[], group:new THREE.Group()},
+    {id:'OL',color:0xffc24d, x:-45, plates:[], group:new THREE.Group()},
+    {id:'OR',color:0xffc24d, x: 45, plates:[], group:new THREE.Group()},
+    {id:'B', color:0xff5a9e, x: 90, plates:[], group:new THREE.Group()},
+  ];
+
+  const MAX=12, spacing=6;
+  stacks.forEach(st=>{
+    for(let i=0;i<MAX;i++){
+      const p=mkPlate(st.color, .22 + .5*(1 - i/MAX));
+      p.position.set(0, i*spacing, 0);
+      st.group.add(p); st.plates.push(p);
+
+      // CSS2D tag that always faces camera (for quick k + vec)
+      const d=document.createElement('div'); d.className='tag'; d.textContent=`k${Math.min(32,i+1)} · ${S[i].vec}`;
+      const tag=new THREE.CSS2DObject(d); tag.position.set(0, p.position.y+0.1, 0); st.group.add(tag);
+
+      // Click → open card
+      p.userData.k = Math.min(32,i+1);
+      p.userData.stack = st.id;
+    }
+    st.group.position.set(st.x,0,0);
+    scene.add(st.group);
+  });
+
+  // Cards (CSS2D)
+  function makeCardEl(s){
+    const wrap=document.createElement('div'); wrap.className='card';
+    wrap.innerHTML=`<div class="paper">
+      <div class="meta"><span>k=${s.k} · ${s.vec}</span><span>${s.vec.split('').map(b=> b==='1'?'🟣':'🟢').join(' ')}</span></div>
+      <div class="section"><h4>⚡ Entangled</h4><p>${s.C}</p></div>
+      <div class="section"><h4>Trace (LLM)</h4><p>${s.L}</p></div>
+      <div class="section"><h4>Stream (RL)</h4><p>${s.R}</p></div>
+    </div>`;
+    return wrap;
+  }
+  const activeCards=new Set();
+  function openCardAt(stack, yLevel, k){
+    const s=S[k-1];
+    const el=makeCardEl(s);
+    const obj=new THREE.CSS2DObject(el);
+    obj.position.set(stack.group.position.x, yLevel+14, 18);
+    scene.add(obj);
+    activeCards.add(obj);
+    setTimeout(()=>{ el.style.opacity='1' },0);
+  }
+  function clearCards(){ activeCards.forEach(o=>{ o.element.remove(); scene.remove(o); }); activeCards.clear(); }
+
+  // Raycasting
+  const ray=new THREE.Raycaster(); const v2=new THREE.Vector2();
+  function pick(ev){
+    const rect=renderer.domElement.getBoundingClientRect();
+    v2.x=((ev.clientX-rect.left)/rect.width)*2-1;
+    v2.y=-((ev.clientY-rect.top)/rect.height)*2+1;
+    ray.setFromCamera(v2,camera);
+    const objs=stacks.flatMap(s=>s.plates);
+    return ray.intersectObjects(objs,false);
+  }
+  renderer.domElement.addEventListener('pointerdown', (e)=>{
+    const hits=pick(e);
+    if(!hits.length){ return; }
+    const m=hits[0].object; const st=stacks.find(s=> s.id===m.userData.stack);
+    clearCards();
+    openCardAt(st, m.position.y, m.userData.k);
+    if(navigator.vibrate) navigator.vibrate(12);
+    setK(m.userData.k);
+  });
+
+  // Camera views (stable)
+  const camTargets=[
+    {name:'ISO‑L', pos:[-120,90,160]},
+    {name:'FRONT', pos:[0,88,200]},
+    {name:'ISO‑R', pos:[120,90,160]},
+    {name:'TOP', pos:[0,220,0.01]},
+  ];
+  let view=1;
+  function applyView(){ const v=camTargets[view]; camera.position.set(...v.pos); camera.lookAt(0,60,0); }
+  applyView();
+
+  // Auto-fit stacks into view
+  function autoFit(){
+    // Fit horizontally by moving stack x positions and adjusting camera z
+    const W = Math.min(innerWidth, 960);
+    const baseGap = Math.max(60, Math.min(140, Math.floor(W/8)));
+    stacks[0].group.position.x = -baseGap*2;
+    stacks[1].group.position.x = -baseGap;
+    stacks[2].group.position.x =  baseGap;
+    stacks[3].group.position.x =  baseGap*2;
+    camera.position.z = Math.max(160, baseGap*3.2);
+  }
+  autoFit();
+
+  // K scrubber
+  const kval=document.getElementById('kval'), ks=document.getElementById('ks');
+  function setK(k){ ks.value=k; kval.textContent=`k=${S[k-1].k} · ${S[k-1].vec}`; }
+  ks.addEventListener('input', ()=>{
+    const k=parseInt(ks.value,10);
+    clearCards();
+    // Pulse the same index plate across stacks and open one card in center
+    stacks.forEach(st=>{
+      const idx=Math.min(st.plates.length-1, k-1);
+      const p=st.plates[idx];
+      p.scale.set(1.08,1,1.08);
+      setTimeout(()=>p.scale.set(1,1,1),120);
+    });
+    // Show card above overlap center
+    const mid = stacks[2]; // OR as anchor
+    openCardAt(mid, Math.min(mid.plates.length-1, k-1)*spacing, k);
+    setK(k);
+  });
+
+  // FIT button
+  document.getElementById('fit').addEventListener('click', ()=>{ autoFit(); applyView(); if(navigator.vibrate) navigator.vibrate(8); });
+
+  // Resize
+  addEventListener('resize', ()=>{
+    camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth,innerHeight);
+    labelRenderer.setSize(innerWidth,innerHeight);
+    autoFit();
+  });
+
+  // Render
+  (function animate(){ requestAnimationFrame(animate); renderer.render(scene,camera); labelRenderer.render(scene,camera); })();
+
+  // Boot: open card for k=1
+  openCardAt(stacks[1], 0, 1);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
+<title>venn‑32 · 3D Stage Index (Isometric)</title>
+<style>
+  :root{
+    --bg:#070a09; --ink:#eaf2ec; --muted:#aab5ae; --edge:#0f1815;
+    --ui:#21ff86; --amber:#ffdca8; --orange:#ffb167; --cyan:#7de3ff; --neutral:#b8c4bd;
+    --radius:18px; --glow:.9;
+    --iso-yaw: 45deg;         /* true-ish ISO quadrants */
+    --iso-pitch: 35deg;       /* ~35.264° */
+    --yaw: 45deg;             /* camera yaw */
+    --pitch: 35deg;           /* camera pitch */
+    --camZ: -950px;           /* camera distance */
+    --zOffset: 0px;           /* global Z scroll */
+    --gapZ: 34px;             /* spacing between cards along Z */
+    --stackX: 360px;          /* spacing between stacks along X */
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:radial-gradient(1600px 900px at 10% -10%,#0e1613 0%,#0a0d0f 45%,#07090a 100%);color:var(--ink);font:400 14px/1.45 system-ui,-apple-system,Segoe UI,Inter,Roboto,"Helvetica Neue",Arial}
+  a{color:inherit;text-decoration:none}
+
+  /* ===== Header: Menu Engine (crisp, compact) ===== */
+  header{position:sticky;top:0;z-index:80;backdrop-filter:saturate(120%) blur(8px);background:rgba(8,12,11,.76);border-bottom:1px solid #12231c}
+  .bar{display:grid;grid-template-columns:auto 1fr auto;gap:.6rem;align-items:center;padding:.5rem .8rem}
+  .brand{font-weight:900;letter-spacing:.2px;font-size:13px;opacity:.9}
+  .menu{display:flex;align-items:center;gap:.6rem;justify-self:center;min-width:0}
+  .seg{display:flex;background:#0d1613;border:1px solid #163026;border-radius:12px;padding:.2rem}
+  .segbtn{appearance:none;border:0;background:transparent;color:var(--ink);padding:.35rem .55rem;border-radius:10px;cursor:pointer;font-weight:700;font-size:12px;opacity:.8}
+  .segbtn[aria-pressed="true"], .segbtn.active{background:#0f1a16;border:1px solid #214233}
+  .chips{display:flex;gap:.35rem;overflow-x:auto;max-width:40vw;padding-bottom:.2rem}
+  .chip{border:1px solid #193427;background:#0d1613;padding:.32rem .55rem;border-radius:999px;font:700 11px/1 ui-monospace,Menlo,monospace;white-space:nowrap;cursor:pointer}
+  .chip.active{background:#113024}
+  .scrub{display:flex;align-items:center;gap:.35rem;border:1px solid #163026;background:#0d1613;border-radius:12px;padding:.2rem .5rem}
+  .scrub input{width:180px}
+  .search{display:flex;align-items:center;gap:.45rem;background:#0d1613;border:1px solid #163026;border-radius:12px;padding:.38rem .6rem;min-width:160px}
+  .search input{background:transparent;border:0;outline:0;width:100%;color:var(--ink);font:inherit}
+
+  /* ===== Stage: true 3D world ===== */
+  main{height:calc(100vh - 54px);position:relative;overflow:hidden}
+  .stageWrap{position:absolute;inset:0;perspective:1400px}
+  .stage{position:absolute;left:50%;top:56%;transform-style:preserve-3d;will-change:transform;
+    transform:translate3d(-50%,-50%,var(--camZ)) rotateX(var(--pitch)) rotateY(var(--yaw));}
+  .floor{position:absolute;left:-2000px;right:-2000px;top:320px;height:1600px;background:radial-gradient(closest-side,rgba(33,255,134,.12),transparent 70%);transform:translateZ(-700px) rotateX(90deg)}
+
+  /* Stacks (X dimension) and Cards (Z dimension) */
+  .stack{position:absolute;transform-style:preserve-3d;will-change:transform}
+  .stack .tag{position:absolute;top:-18px;left:-6px;padding:.18rem .4rem;border-radius:10px;border:1px solid #1b352a;background:#0d1613;font:700 10px/1 ui-monospace,Menlo,monospace;color:#b8c4bd;transform:translateZ(60px)}
+
+  .card{position:absolute;width:272px;height:168px;border-radius:16px;background:linear-gradient(180deg,#0f1513,#091110);border:1px solid #132219;overflow:hidden;transform-style:preserve-3d;cursor:pointer;will-change:transform,filter}
+  .card::after{content:"";position:absolute;inset:-30%;filter:blur(calc(22px * var(--glow)));opacity:.55;pointer-events:none}
+  .g::after{background:radial-gradient(40% 35% at 50% 40%,rgba(33,255,134,.18),transparent),radial-gradient(65% 55% at 50% 60%,rgba(33,255,134,.12),transparent)}
+  .a::after{background:radial-gradient(40% 35% at 50% 40%,rgba(255,220,168,.20),transparent),radial-gradient(65% 55% at 50% 60%,rgba(255,210,140,.14),transparent)}
+  .o::after{background:radial-gradient(40% 35% at 50% 40%,rgba(255,177,103,.20),transparent),radial-gradient(65% 55% at 50% 60%,rgba(255,150,80,.16),transparent)}
+  .c::after{background:radial-gradient(40% 35% at 50% 40%,rgba(125,227,255,.22),transparent),radial-gradient(65% 55% at 50% 60%,rgba(110,210,250,.16),transparent)}
+  .n::after{background:radial-gradient(40% 35% at 50% 40%,rgba(184,196,189,.22),transparent),radial-gradient(65% 55% at 50% 60%,rgba(160,170,166,.16),transparent)}
+  .card .title{position:absolute;left:12px;bottom:12px;font-weight:800;font-size:12px;letter-spacing:.2px;transform:translateZ(30px)}
+  .card .sub{position:absolute;left:12px;bottom:32px;font:700 10px/1 ui-monospace,Menlo,monospace;color:#aab5ae;opacity:.9;transform:translateZ(22px)}
+
+  /* ===== Fixed Preview Dock (always same absolute position; mobile-first) ===== */
+  .previewDock{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0) + 8px);width:min(1100px,96vw);height:56vh;border-radius:14px;overflow:hidden;border:1px solid #21362c;background:linear-gradient(180deg,#0e1714,#0a1210);box-shadow:0 24px 70px rgba(0,0,0,.45);display:none;z-index:90}
+  .previewDock.open{display:block}
+  .previewDock header{display:flex;align-items:center;gap:.6rem;padding:.55rem .75rem;border-bottom:1px solid #1b2c23;background:#0f1915}
+  .previewDock .ttl{font-weight:800;font-size:12px}
+  .previewDock .spacer{flex:1}
+  .previewDock .btn{appearance:none;border:1px solid #1b352a;background:#0d1613;color:var(--ink);padding:.38rem .6rem;border-radius:10px;cursor:pointer}
+  .previewDock iframe{display:block;width:100%;height:calc(100% - 42px);border:0;background:#000}
+
+  @media (min-width: 900px){
+    .previewDock{height:62vh}
+  }
+
+  /* Footer legend */
+  footer{position:fixed;left:0;right:0;bottom:0;padding:.45rem .8rem;display:flex;justify-content:space-between;align-items:center;border-top:1px solid #0f1a15;background:rgba(8,12,11,.7);backdrop-filter:saturate(120%) blur(8px)}
+  .legend{font:600 11px/1.2 ui-monospace,Menlo,monospace;color:#b9c3bc}
+  .dot{display:inline-block;width:.6em;height:.6em;border-radius:50%;margin-right:.25em}
+  .gDot{background:#2bff9a}.aDot{background:#ffdeaf}.oDot{background:#ffb167}.cDot{background:#7de3ff}.nDot{background:#b8c4bd}
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <div class="brand">V32 · ISO</div>
+
+    <div class="menu" role="menubar" aria-label="Menu engine">
+      <div class="seg" role="group" aria-label="Layout">
+        <button id="segMulti" class="segbtn active" aria-pressed="true">Stacks</button>
+        <button id="segTall" class="segbtn" aria-pressed="false">Tall</button>
+      </div>
+      <div class="seg" role="group" aria-label="Snap">
+        <button id="segSnap" class="segbtn active" aria-pressed="true">Snap ISO</button>
+      </div>
+      <div class="seg" role="group" aria-label="View">
+        <button class="segbtn viewBtn" data-yaw="45" aria-label="SE">SE</button>
+        <button class="segbtn viewBtn" data-yaw="135" aria-label="NE">NE</button>
+        <button class="segbtn viewBtn" data-yaw="225" aria-label="NW">NW</button>
+        <button class="segbtn viewBtn" data-yaw="315" aria-label="SW">SW</button>
+      </div>
+      <div class="chips" id="familyChips" aria-label="Families"></div>
+      <div class="scrub" aria-label="Depth">
+        <span style="font:700 10px/1 ui-monospace,Menlo,monospace;color:#b6c1ba">Z</span>
+        <input id="zScrub" type="range" min="-2200" max="2200" step="10" value="0"/>
+      </div>
+    </div>
+
+    <div class="search"><input id="q" type="search" placeholder="Search ( / )" autocomplete="off" aria-label="Search"/></div>
+  </div>
+</header>
+
+<main>
+  <div class="stageWrap" id="stageWrap">
+    <div class="stage" id="stage">
+      <div class="floor" aria-hidden="true"></div>
+    </div>
+  </div>
+</main>
+
+<!-- Fixed preview dock (always same absolute position) -->
+<section id="dock" class="previewDock" aria-label="Preview" aria-hidden="true">
+  <header>
+    <div id="dockTitle" class="ttl"></div>
+    <div class="spacer"></div>
+    <a id="dockOpen" class="btn" target="_blank" rel="noopener">Open</a>
+    <button id="dockClose" class="btn" aria-label="Close">Close</button>
+  </header>
+  <iframe id="dockFrame" sandbox="allow-scripts allow-forms allow-same-origin allow-pointer-lock allow-downloads" referrerpolicy="no-referrer"></iframe>
+</section>
+
+<footer>
+  <div class="legend">
+    <span><span class="dot gDot"></span>RHM</span>
+    <span><span class="dot aDot"></span>Volumetric/Nexus</span>
+    <span><span class="dot oDot"></span>VOL Media</span>
+    <span><span class="dot cDot"></span>Stack Index</span>
+    <span><span class="dot nDot"></span>General</span>
+  </div>
+  <div></div>
+</footer>
+
+<script>
+// ===== DATA (filenames only; URLs computed for GitHub Pages + ?simple) =====
+const DATA = {
+  families: [
+    { id:'general', label:'General', color:'n', items:[
+      { title:'README', file:'README.md' },
+      { title:'Index', file:'index.html' },
+      { title:'RHM visible layers (data)', file:'RHM_visible_layers.json' }
+    ]},
+    { id:'rhm', label:'RHM series', color:'g', items:[
+      { title:'RHM · 32 Layer Instrument', file:'rhm_32_layer_instrument.html' },
+      { title:'RHM · Cards on Face', file:'rhm_cards_on_face.html' },
+      { title:'RHM · Cards on Face v3', file:'rhm_cards_on_face_v3.html' },
+      { title:'RHM · Cards on Face v4', file:'rhm_cards_on_face_v4.html' },
+      { title:'RHM · Cards on Face v4a', file:'rhm_cards_on_face_v4a.html' },
+      { title:'RHM · Cards on Face v5', file:'rhm_cards_on_face_v5.html' },
+      { title:'RHM · Deck Overlap', file:'rhm_deck_overlap.html' },
+      { title:'RHM · DOM v7b', file:'rhm_dom_v7b.html' },
+      { title:'RHM · DOM v7c (mobile)', file:'rhm_dom_v7c_mobile.html' },
+      { title:'RHM · DOM v7d (mobile pro)', file:'rhm_dom_v7d_mobile_pro.html' },
+      { title:'RHM · DOM v7e (mobile cards)', file:'rhm_dom_v7e_mobile_cards.html' },
+      { title:'RHM · DOM v7f (fix stacks colors overlay)', file:'rhm_dom_v7f_fix_stacks_colors_overlay.html' },
+      { title:'RHM · DOM v7g (auto fit)', file:'rhm_dom_v7g_auto_fit.html' },
+      { title:'RHM · DOM v7h (read guaranteed)', file:'rhm_dom_v7h_read_guaranteed.html' },
+      { title:'RHM · Faces Reader (orig)', file:'rhm_faces_reader.html' },
+      { title:'RHM · Faces Reader (1)', file:'rhm_faces_reader (1).html' },
+      { title:'RHM · Faces Reader v2', file:'rhm_faces_reader_v2.html' },
+      { title:'RHM · Post-its (orig)', file:'rhm_postits.html' },
+      { title:'RHM · Post-its (1)', file:'rhm_postits (1).html' },
+      { title:'RHM · Three v9', file:'rhm_three_v9.html' },
+      { title:'RHM · Ultralite v8', file:'rhm_ultralite_v8.html' }
+    ]},
+    { id:'volumetric', label:'Volumetric / Venn / Nexus', color:'a', items:[
+      { title:'Volumetric · Cube Stacks Overlap · Nexus (Gully)', file:'volumetric_cube_stacks_overlap_nexus_gully_edition.html' },
+      { title:'Volumetric · Cube Stacks Overlap · Nexus (Gully) (1)', file:'volumetric_cube_stacks_overlap_nexus_gully_edition (1).html' },
+      { title:'Volumetric · Media Nexus · Unthinkable Applied', file:'volumetric_media_nexus_unthinkable_applied.html' },
+      { title:'Volumetric · Media Nexus · Unthinkable Applied (1)', file:'volumetric_media_nexus_unthinkable_applied (1).html' },
+      { title:'Volumetric · Media Nexus · Unthinkable Applied (2)', file:'volumetric_media_nexus_unthinkable_applied (2).html' },
+      { title:'Volumetric · Media Nexus · Unthinkable Applied (3)', file:'volumetric_media_nexus_unthinkable_applied (3).html' },
+      { title:'Volumetric · Media Nexus · Unthinkable Applied (4)', file:'volumetric_media_nexus_unthinkable_applied (4).html' },
+      { title:'Volumetric · Venn Cubes · Mobile Draggable Dock', file:'volumetric_venn_cubes_mobile_draggable_dock.html' },
+      { title:'Volumetric · Venn Cubes · Mobile Draggable Dock (1)', file:'volumetric_venn_cubes_mobile_draggable_dock (1).html' },
+      { title:'Volumetric · Venn Cubes · Mobile Draggable Dock (2)', file:'volumetric_venn_cubes_mobile_draggable_dock (2).html' },
+      { title:'Volumetric · Venn Cubes · Mobile Draggable Dock (3)', file:'volumetric_venn_cubes_mobile_draggable_dock (3).html' },
+      { title:'Volumetric · Venn Cubes · Mobile Draggable Dock (4)', file:'volumetric_venn_cubes_mobile_draggable_dock (4).html' },
+      { title:'Volumetric · Venn Cubes · Mobile Draggable Dock (5)', file:'volumetric_venn_cubes_mobile_draggable_dock (5).html' },
+      { title:'Volumetric · Venn Cubes · Mobile Draggable Dock (6)', file:'volumetric_venn_cubes_mobile_draggable_dock (6).html' },
+      { title:'Volumetric · Venn Cubes · Mobile Draggable Dock (7)', file:'volumetric_venn_cubes_mobile_draggable_dock (7).html' },
+      { title:'Volumetric · Venn Cubes · Mobile Draggable Dock (8)', file:'volumetric_venn_cubes_mobile_draggable_dock (8).html' },
+      { title:'Volumetric · Venn Cubes · Mobile Draggable Dock (9)', file:'volumetric_venn_cubes_mobile_draggable_dock (9).html' },
+      { title:'Volumetric · Venn Cubes · Mobile Draggable Dock (10)', file:'volumetric_venn_cubes_mobile_draggable_dock (10).html' },
+      { title:'Volumetric · Venn Cubes · Mobile Draggable Dock (11)', file:'volumetric_venn_cubes_mobile_draggable_dock (11).html' },
+      { title:'Volumetric · Venn Cubes · Mobile Draggable Dock (12)', file:'volumetric_venn_cubes_mobile_draggable_dock (12).html' },
+      { title:'Volumetric · Venn Cubes · Mobile Draggable Dock (13)', file:'volumetric_venn_cubes_mobile_draggable_dock (13).html' }
+    ]},
+    { id:'vol_media', label:'VOL Media Decks', color:'o', items:[
+      { title:'VOL Media Decks v6', file:'vol_media_decks_v6.html' },
+      { title:'VOL Media Decks v7', file:'vol_media_decks_v7.html' },
+      { title:'VOL Media Decks v5 · Canvas Only Data Stacks', file:'vol_media_decks_v_5_canvas_only_data_stacks.html' },
+      { title:'VOL Media Decks v5 · Canvas Only Data Stacks (1)', file:'vol_media_decks_v_5_canvas_only_data_stacks (1).html' },
+      { title:'VOL Media Decks v5 · Canvas Only Data Stacks (2)', file:'vol_media_decks_v_5_canvas_only_data_stacks (2).html' },
+      { title:'VOL Media Decks v5 · Canvas Only Data Stacks (3)', file:'vol_media_decks_v_5_canvas_only_data_stacks (3).html' }
+    ]},
+    { id:'stack_index', label:'Stack Index (Minimal Preview)', color:'c', items:[
+      { title:'Stack Index · Minimal Preview', file:'stack_index_minimal_preview_single_file_html.html' },
+      { title:'Stack Index · Minimal Preview (1)', file:'stack_index_minimal_preview_single_file_html (1).html' },
+      { title:'Stack Index · Minimal Preview (2)', file:'stack_index_minimal_preview_single_file_html (2).html' },
+      { title:'Stack Index · Minimal Preview (3)', file:'stack_index_minimal_preview_single_file_html (3).html' },
+      { title:'Stack Index · Minimal Preview (4)', file:'stack_index_minimal_preview_single_file_html (4).html' },
+      { title:'Stack Index · Minimal Preview (5)', file:'stack_index_minimal_preview_single_file_html (5).html' }
+    ]}
+  ]
+};
+
+// ===== UTIL =====
+const qs=(s,el=document)=>el.querySelector(s);
+const qsa=(s,el=document)=>Array.from(el.querySelectorAll(s));
+const PAGES_BASE='https://hartswf0.github.io/venn-32/';
+const SIMPLE='?simple';
+function urlFor(file){return PAGES_BASE+encodeURIComponent(file).replace(/%2F/g,'/')+SIMPLE}
+
+// ===== STATE =====
+let mode='multi'; // 'multi' | 'tall'
+let snapISO=true; // snap to isometric on release
+let activeFamily=null; // current stack focus (id) or null
+let activeCard=null;   // current open card element
+
+const stage=qs('#stage');
+const dock=qs('#dock');
+const dockTitle=qs('#dockTitle');
+const dockOpen=qs('#dockOpen');
+const dockFrame=qs('#dockFrame');
+const zScrub=qs('#zScrub');
+
+// ===== BUILD =====
+function build(){
+  stage.querySelectorAll('.stack').forEach(n=>n.remove());
+  // chips
+  const chips=qs('#familyChips'); chips.innerHTML='';
+  DATA.families.forEach((f,xi)=>{
+    const st=mkStack(xi,f.id.toUpperCase(),f.color);
+    if(mode==='tall'){
+      f.items.forEach((it,zi)=>{ st.appendChild(mkCard(it,f)); positionCard(st.lastChild, zi, xi); });
+      stage.appendChild(st);
+    }else{
+      f.items.forEach((it,zi)=>{ st.appendChild(mkCard(it,f)); positionCard(st.lastChild, zi, xi); });
+      stage.appendChild(st);
+    }
+    const chip=document.createElement('button'); chip.className='chip'; chip.textContent=f.label; chip.onclick=()=>centerFamily(f.id); chips.appendChild(chip);
+  });
+  // activate chip state
+  updateChipActive();
+}
+
+function mkStack(xIndex,label,color){
+  const s=document.createElement('div'); s.className='stack';
+  const offsetX=(xIndex-0.5)*parseInt(getComputedStyle(document.documentElement).getPropertyValue('--stackX'));
+  s.style.transform=`translate3d(${offsetX}px,0,0)`;
+  const tag=document.createElement('div'); tag.className='tag'; tag.textContent=label; s.appendChild(tag);
+  s.dataset.color=color; s.dataset.x=String(offsetX); return s;
+}
+
+function mkCard(item,fam){
+  const c=document.createElement('div'); c.className=`card ${fam.color}`;
+  c.innerHTML=`<div class="sub">${fam.id}</div><div class="title">${item.title}</div>`;
+  c.addEventListener('click',(ev)=>{ ev.stopPropagation(); openDock(item.title, urlFor(item.file)); if(activeCard) activeCard.classList.remove('active'); activeCard=c; c.classList.add('active'); });
+  return c;
+}
+
+function positionCard(card,zIndex,xIndex){
+  const gapZ=parseInt(getComputedStyle(document.documentElement).getPropertyValue('--gapZ'));
+  const z=(zIndex*gapZ)+parseInt(getComputedStyle(document.documentElement).getPropertyValue('--zOffset'));
+  card.style.transform=`translate3d(0px, ${-zIndex*4}px, ${z}px)`;
+}
+
+// ===== DOCK (fixed preview) =====
+function openDock(title,url){
+  dockTitle.textContent=title; dockOpen.href=url; dockFrame.src=url; dock.classList.add('open'); dock.setAttribute('aria-hidden','false');
+}
+function closeDock(){ dock.classList.remove('open'); dock.setAttribute('aria-hidden','true'); dockFrame.removeAttribute('src'); if(activeCard){ activeCard.classList.remove('active'); activeCard=null; } }
+qs('#dockClose').addEventListener('click', closeDock);
+
+// ===== CAMERA & INTERACTION =====
+const wrap=qs('#stageWrap');
+let dragging=false, lastX=0, lastY=0; let pendingYaw=null, pendingZO=null; let rafId=null;
+wrap.addEventListener('pointerdown',e=>{ dragging=true; lastX=e.clientX; lastY=e.clientY; wrap.setPointerCapture(e.pointerId); });
+wrap.addEventListener('pointermove',e=>{
+  if(!dragging) return; const dx=e.clientX-lastX, dy=e.clientY-lastY; lastX=e.clientX; lastY=e.clientY; queueYawDelta(dx*0.12); queueZDelta(dy*2.0);
+});
+wrap.addEventListener('pointerup',()=>{ dragging=false; if(snapISO) snapToIso(); });
+wrap.addEventListener('wheel',e=>{ e.preventDefault(); queueZDelta(e.deltaY*1.2); }, {passive:false});
+
+function queueYawDelta(d){ pendingYaw=(pendingYaw??0)+d; scheduleTick(); }
+function queueZDelta(d){ pendingZO=(pendingZO??0)+d; scheduleTick(); }
+function scheduleTick(){ if(rafId) return; rafId=requestAnimationFrame(tick); }
+function tick(){ rafId=null; const root=document.documentElement; const yaw=getYaw()+((pendingYaw??0)); const z=getZOffset()+((pendingZO??0)); pendingYaw=null; pendingZO=null; root.style.setProperty('--yaw', yaw+'deg'); root.style.setProperty('--zOffset', z+'px'); rebuildPositions(); }
+
+function rebuildPositions(){ stage.querySelectorAll('.card').forEach((c,i)=>{ const t=c.style.transform.match(/translate3d\(0px, (-?\d+)px, (-?\d+)px\)/); const zi=i; positionCard(c, zi, 0); }); }
+function getYaw(){ return parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--yaw')); }
+function getZOffset(){ return parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--zOffset')); }
+
+function snapToIso(){
+  const root=document.documentElement; const cur=getYaw();
+  const targets=[45,135,225,315];
+  let best=targets[0], diff=1e9; targets.forEach(t=>{ const d=Math.abs(((cur-t+540)%360)-180); if(d<diff){ diff=d; best=t; } });
+  root.style.setProperty('--yaw', best+'deg'); root.style.setProperty('--pitch', getComputedStyle(root).getPropertyValue('--iso-pitch'));
+}
+
+// ===== MENU ENGINE WIRING =====
+qs('#segMulti').onclick=()=>{ mode='multi'; qs('#segMulti').classList.add('active'); qs('#segMulti').setAttribute('aria-pressed','true'); qs('#segTall').classList.remove('active'); qs('#segTall').setAttribute('aria-pressed','false'); build(); };
+qs('#segTall').onclick=()=>{ mode='tall'; qs('#segTall').classList.add('active'); qs('#segTall').setAttribute('aria-pressed','true'); qs('#segMulti').classList.remove('active'); qs('#segMulti').setAttribute('aria-pressed','false'); build(); };
+qs('#segSnap').onclick=(e)=>{ snapISO=!snapISO; e.currentTarget.classList.toggle('active', snapISO); e.currentTarget.setAttribute('aria-pressed', String(snapISO)); if(snapISO) snapToIso(); };
+qsa('.viewBtn').forEach(b=> b.addEventListener('click', ()=>{ const yaw=parseFloat(b.dataset.yaw); document.documentElement.style.setProperty('--yaw', yaw+'deg'); document.documentElement.style.setProperty('--pitch', getComputedStyle(document.documentElement).getPropertyValue('--iso-pitch')); }));
+
+function centerFamily(id){ activeFamily=id; updateChipActive(); /* later: animate X offset if needed */ }
+function updateChipActive(){ qsa('.chip').forEach(ch=>{ ch.classList.toggle('active', ch.textContent.toLowerCase().includes((activeFamily||'').split('_')[0])); }); }
+
+zScrub.addEventListener('input', e=>{ document.documentElement.style.setProperty('--zOffset', e.target.value+'px'); rebuildPositions(); });
+
+// Search filter (visual emphasis, keep minimal text)
+const q=qs('#q'); q.addEventListener('keydown', e=>{ if(e.key=== '/') { e.preventDefault(); } });
+q.addEventListener('input', ()=>{ const term=q.value.trim().toLowerCase(); stage.querySelectorAll('.card').forEach(c=>{ const t=c.querySelector('.title').textContent.toLowerCase(); const s=c.querySelector('.sub').textContent.toLowerCase(); c.style.filter = (!term || t.includes(term) || s.includes(term))? 'none' : 'grayscale(.9) brightness(.6)'; }); });
+
+// ===== INIT =====
+build(); snapToIso();
+
+// ===== TESTS =====
+console.log('[v32-iso] url test', urlFor('rhm_cards_on_face.html')==='https://hartswf0.github.io/venn-32/rhm_cards_on_face.html?simple');
+</script>
+</body>
+</html>

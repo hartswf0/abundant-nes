@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>BTINE — Western Filmmaking Engine · Edge-Only Controls · v1.3 (Persistence)</title>
+<style>
+  :root{
+    /* Visual */
+    --bg:#07080a; --fg:#f7f5ef; --sub:#b9b3aa; --accent:#ffb703; --edge:#17181c;
+    --glass:rgba(10,10,14,.42); /* lighter for see-through */
+    --ghost:0.42;               /* idle opacity */
+    /* Ergonomics */
+    --hit:64px;       /* min tap size */
+    --rail:78px;      /* rail thickness on phones */
+    /* Safe alley: keep middle-bottom center EMPTY */
+    --safe-left:30vw;   /* left boundary of central safe alley */
+    --safe-right:70vw;  /* right boundary */
+    --safe-bottom:65vh; /* start of bottom area to stay clear */
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;background:var(--bg);color:var(--fg);font-family:ui-sans-serif,system-ui,Inter,Roboto,Arial,sans-serif;overflow:hidden}
+  #stage{position:fixed;inset:0}
+
+  /* Subtle matte + vignette */
+  .letterbox::before,.letterbox::after{content:"";position:fixed;left:0;right:0;height:6.5vh;background:linear-gradient(180deg,rgba(0,0,0,.92),rgba(0,0,0,.55));pointer-events:none;z-index:9}
+  .letterbox::before{top:0}.letterbox::after{bottom:0}
+  #vignette{position:fixed;inset:0;pointer-events:none;z-index:8;background:radial-gradient(120% 120% at 50% 50%, rgba(0,0,0,0) 55%, rgba(0,0,0,.22) 100%)}
+
+  /* HUD (top edges only) */
+  #hud-left{position:fixed;top:.65rem;left:.65rem;z-index:20}
+  #hud-right{position:fixed;top:.65rem;right:.65rem;z-index:20}
+  .pill{background:var(--glass);border:1px solid var(--edge);border-radius:12px;padding:.45rem .7rem;backdrop-filter:blur(8px) saturate(120%);box-shadow:0 8px 28px rgba(0,0,0,.35);font-size:clamp(11px,2.5vw,13px)}
+  #brand{letter-spacing:.08em;font-weight:800;color:var(--accent)}
+  #cam{font-variant-numeric:tabular-nums;font-weight:900}
+  #persist-ind{position:fixed;top:.65rem;left:50%;transform:translateX(-50%);z-index:20;font-size:12px;color:#9ad67a;opacity:0;transition:opacity .25s ease}
+  #persist-ind.show{opacity:.9}
+  #persist-warn{position:fixed;top:calc(1.8rem + env(safe-area-inset-top,0));left:50%;transform:translateX(-50%);z-index:20;font-size:12px;color:#ffbaba;background:rgba(60,10,10,.45);border:1px solid #552; padding:.2rem .5rem;border-radius:8px;display:none}
+
+  /* Edge rails (never cross into center) */
+  #rail-left, #rail-right{position:fixed;top:10vh;bottom:10vh;width:var(--rail);display:flex;flex-direction:column;gap:.6rem;z-index:21}
+  #rail-left{left:.4rem;align-items:flex-start}
+  #rail-right{right:.4rem;align-items:flex-end}
+  .edge-btn{width:var(--rail);height:var(--hit);border-radius:14px;background:var(--glass);border:1px solid var(--edge);display:flex;align-items:center;justify-content:center;font-weight:900;backdrop-filter:blur(8px) saturate(120%);box-shadow:0 10px 30px rgba(0,0,0,.35)}
+  .edge-small{height:52px}
+
+  /* Edge tabs for drawers */
+  .tab{position:fixed;top:50%;transform:translateY(-50%);width:22px;height:64px;background:var(--glass);border:1px solid var(--edge);border-radius:10px;z-index:22;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(8px)}
+  #tabL{left:0}.tab::after{content:"";width:6px;height:24px;border-radius:3px;background:#2a2d35}
+  #tabR{right:0}
+
+  /* Side drawers — glassy, never intrude center */
+  .drawer{position:fixed;top:8vh;bottom:8vh;width:clamp(220px,28vw,30vw);background:rgba(12,12,16,.35);border:1px solid var(--edge);backdrop-filter:blur(12px) saturate(120%);z-index:23;padding:.7rem;display:flex;flex-direction:column;gap:.6rem;overflow:auto;transition:transform .25s ease, opacity .25s ease}
+  #drawerL{left:0;transform:translateX(-102%)}
+  #drawerR{right:0;transform:translateX(102%)}
+  .drawer.open#drawerL{transform:translateX(0)}
+  .drawer.open#drawerR{transform:translateX(0)}
+  .drawer.dim{opacity:.6}
+  .row{display:flex;align-items:center;gap:.6rem}
+  .row>label{flex:0 0 88px;color:var(--sub);font-size:clamp(12px,2.6vw,14px)}
+  .row select, .row input[type=range]{flex:1;background:transparent;border:none;color:var(--fg);font-weight:800}
+  .chips{display:grid;grid-template-columns:repeat(4,1fr);gap:.5rem}
+  .chip{height:var(--hit);border-radius:14px;background:rgba(16,18,24,.6);border:1px solid #24262f;display:flex;align-items:center;justify-content:center;font-weight:800;backdrop-filter:blur(6px)}
+  .chip.on{background:rgba(24,32,42,.6);border-color:#1f2f3a;outline:2px solid rgba(255,183,3,.25)}
+
+  /* Top progress bar (edge-only) */
+  #topbar{position:fixed;left:0;right:0;top:0;height:3px;background:#0f1013;z-index:10}
+  #prog{height:100%;width:0;background:#ffb703}
+
+  /* Safe alley visual (debug toggleable) */
+  #safe-overlay{position:fixed;left:var(--safe-left);right:calc(100vw - var(--safe-right));bottom:0;top:var(--safe-bottom);pointer-events:none;border:1px dashed rgba(255,183,3,.4);border-bottom:none;z-index:7;display:none}
+
+  /* Idle fade of all chrome */
+  body.ui-idle #hud-left,
+  body.ui-idle #hud-right,
+  body.ui-idle #rail-left,
+  body.ui-idle #rail-right,
+  body.ui-idle #tabL,
+  body.ui-idle #tabR,
+  body.ui-idle #topbar{ opacity:var(--ghost); transition:opacity .35s ease }
+  body.ui-idle .drawer.open{ opacity:.85 }
+
+  @media (min-width:920px){ :root{ --rail:88px } }
+</style>
+</head>
+<body class="letterbox">
+  <div id="stage" aria-label="3D simulation canvas"></div>
+  <div id="vignette"></div>
+
+  <!-- HUD on top edges only -->
+  <div id="hud-left" class="pill"><span id="brand">BTINE · WESTERN</span></div>
+  <div id="hud-right" class="pill"><span id="cam">CAM 01 · 35mm</span></div>
+  <div id="persist-ind">Saved</div>
+  <div id="persist-warn">Persistence disabled (private mode?)</div>
+
+  <!-- Progress bar (top edge) -->
+  <div id="topbar"><div id="prog"></div></div>
+
+  <!-- Left rail (transport + quick actions) -->
+  <div id="rail-left">
+    <button id="playEdge" class="edge-btn" aria-label="Play/Pause">❚❚</button>
+    <button id="prevCam" class="edge-btn edge-small" aria-label="Prev Camera">◀</button>
+    <button id="nextCam" class="edge-btn edge-small" aria-label="Next Camera">▶</button>
+  </div>
+
+  <!-- Right rail (quick toggles) -->
+  <div id="rail-right">
+    <button id="presetQuick" class="edge-btn edge-small" aria-label="Preset">☼</button>
+    <button id="rigQuick" class="edge-btn edge-small" aria-label="Rig">⌖</button>
+    <button id="lensQuick" class="edge-btn edge-small" aria-label="Lens">○</button>
+    <button id="exportQuick" class="edge-btn edge-small" aria-label="Export">⇪</button>
+  </div>
+
+  <!-- Edge tabs to open drawers -->
+  <div id="tabL" class="tab" title="Open left controls"></div>
+  <div id="tabR" class="tab" title="Open right controls"></div>
+
+  <!-- Left drawer: transport & path -->
+  <aside id="drawerL" class="drawer" aria-label="Transport & Path" aria-hidden="true">
+    <div class="row"><label>Path</label>
+      <select id="path">
+        <option value="DOLLY">Dolly</option>
+        <option value="ARC">Arc</option>
+        <option value="CRANE">Crane</option>
+        <option value="DRONE">Drone</option>
+        <option value="STEADICAM">Steadicam</option>
+      </select>
+    </div>
+    <div class="row"><label>Speed</label><input id="speed" type="range" min="0.2" max="2" step="0.05" value="1"></div>
+  </aside>
+
+  <!-- Right drawer: scene, rig, lens, exposure, export, reset -->
+  <aside id="drawerR" class="drawer" aria-label="Scene & Lens" aria-hidden="true">
+    <div class="row"><label>Preset</label>
+      <select id="preset">
+        <option value="SUNSET">Ride Into Sunset</option>
+        <option value="NOON">High Noon Showdown</option>
+        <option value="TWILIGHT">Ghost Town Twilight</option>
+        <option value="STORM">Thunder Mesa</option>
+        <option value="SALOON">Saloon Glow</option>
+        <option value="STUDIO">Studio Neutral</option>
+      </select>
+    </div>
+    <div class="row"><label>Rig</label>
+      <select id="rig">
+        <option value="ARC_24">Arc · 24</option>
+        <option value="LINEAR_24">Line · 24</option>
+        <option value="RING_32">Ring · 32</option>
+        <option value="CRANE">Crane Sweep</option>
+        <option value="DRONE">Aerial Flyby</option>
+      </select>
+    </div>
+    <div class="row"><label>Lens</label></div>
+    <div id="lenses" class="chips">
+      <div class="chip" data-mm="18">18mm</div>
+      <div class="chip on" data-mm="35">35mm</div>
+      <div class="chip" data-mm="70">70mm</div>
+      <div class="chip" data-mm="100">100mm</div>
+    </div>
+    <div class="row"><label>Exposure</label><input id="expo" type="range" min="-1" max="1" step="0.05" value="0"></div>
+    <div class="row"><button id="export" class="edge-btn" style="width:100%">Export Frames (ZIP)</button></div>
+    <div class="row" style="justify-content:space-between;gap:.4rem">
+      <label><input type="checkbox" id="debugSafe"> Show Safe Alley</label>
+      <button id="resetState" class="edge-btn edge-small" title="Clear saved state">Reset</button>
+    </div>
+  </aside>
+
+  <!-- Visual safe alley (debug) -->
+  <div id="safe-overlay"></div>
+
+  <script type="module">
+  //—— Load Three with fallbacks
+  async function loadThree(){
+    const urls=['https://unpkg.com/three@0.156.1/build/three.module.js','https://cdn.jsdelivr.net/npm/three@0.156.1/build/three.module.js','https://esm.run/three@0.156.1'];
+    for(const u of urls){try{return await import(u);}catch(e){}} throw new Error('three.module.js unavailable');
+  }
+
+  (async()=>{
+    let THREE; try{THREE=await loadThree();}catch(e){fatal('THREE failed to load: '+e.message);return;}
+
+    //—— State & DOM
+    const STORAGE_KEY='btine.v1';
+    const VERSION='1.3';
+    const defaultConfig={rig:'ARC_24',preset:'SUNSET',lens:35,speed:1,exposure:0,path:'DOLLY'};
+    const persisted = loadPersist();
+    const CONFIG = Object.assign({}, defaultConfig, persisted?.CONFIG || {});
+    const STATE={COUNT:24,RADIUS:18,phase:0,time:0,playing: persisted?.STATE?.playing ?? true, current: persisted?.STATE?.current ?? 0};
+
+    let scene,renderer,horse; const rigs=[]; let pinchBase=null; let dragBase=null;
+
+    // DOM refs
+    const $=q=>document.querySelector(q);
+    const stage=$('#stage');
+    const camHUD=$('#cam');
+    const prog=$('#prog');
+    const playEdge=$('#playEdge');
+    const prevCam=$('#prevCam'), nextCam=$('#nextCam');
+    const tabL=$('#tabL'), tabR=$('#tabR');
+    const drawerL=$('#drawerL'), drawerR=$('#drawerR');
+    const presetSel=$('#preset'), rigSel=$('#rig'), pathSel=$('#path');
+    const speedRange=$('#speed'), expoRange=$('#expo');
+    const lensChips=[...document.querySelectorAll('#lenses .chip')];
+    const exportBtn=$('#export');
+    const debugSafe=$('#debugSafe'), safeOverlay=$('#safe-overlay');
+    const persistInd=$('#persist-ind');
+    const persistWarn=$('#persist-warn');
+    const resetBtn=$('#resetState');
+
+    //—— Boot scene
+    function boot(){
+      scene=new THREE.Scene(); scene.background=new THREE.Color(0x0b0c10); scene.fog=new THREE.Fog(0x0b0c10,70,220);
+      renderer=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true}); renderer.setPixelRatio(Math.min(devicePixelRatio,2)); renderer.setSize(innerWidth,innerHeight); renderer.shadowMap.enabled=true; stage.appendChild(renderer.domElement);
+      addLights(); addGround(); addSky(); addDust();
+      buildRig(CONFIG.rig); buildHorse(); applyPreset(CONFIG.preset); updateLens(CONFIG.lens); applyExposure();
+      // apply persisted UI
+      try{
+        presetSel.value=CONFIG.preset; rigSel.value=CONFIG.rig; pathSel.value=CONFIG.path; speedRange.value=String(CONFIG.speed); expoRange.value=String(CONFIG.exposure);
+        lensChips.forEach(c=>c.classList.toggle('on', +c.dataset.mm===CONFIG.lens));
+        if(persisted?.drawerL) drawerL.classList.toggle('open', !!persisted.drawerL);
+        if(persisted?.drawerR) drawerR.classList.toggle('open', !!persisted.drawerR);
+        debugSafe.checked = !!persisted?.debugSafe; safeOverlay.style.display=debugSafe.checked?'block':'none';
+      }catch(_){}
+      onResize(); requestAnimationFrame(tick);
+      startIdleWatcher();
+    }
+
+    //—— Lights / Env
+    let key,fill,rim,sun,dustGroup; function addLights(){ key=new THREE.DirectionalLight(0xffd6a3,1.25); key.position.set(18,24,12); key.castShadow=true; key.shadow.mapSize.set(1024,1024); const s=42; Object.assign(key.shadow.camera,{left:-s,right:s,top:s,bottom:-s,near:2,far:220}); scene.add(key); fill=new THREE.DirectionalLight(0xa7d6ff,.5); fill.position.set(-26,16,-8); scene.add(fill); rim=new THREE.DirectionalLight(0x8cc6ff,.7); rim.position.set(0,14,-28); scene.add(rim); scene.add(new THREE.AmbientLight(0xffffff,.22)); }
+    function addSky(){ const sk=new THREE.Mesh(new THREE.SphereGeometry(400,32,16),new THREE.MeshBasicMaterial({color:0x0b0c10,side:THREE.BackSide})); scene.add(sk); const c=document.createElement('canvas'); c.width=c.height=256; const ctx=c.getContext('2d'); const g=ctx.createRadialGradient(128,128,10,128,128,120); g.addColorStop(0,'#fff5d6'); g.addColorStop(1,'rgba(255,214,120,0)'); ctx.fillStyle=g; ctx.beginPath(); ctx.arc(128,128,120,0,Math.PI*2); ctx.fill(); sun=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c),transparent:true,depthWrite:false})); sun.scale.set(24,24,1); sun.position.set(-60,40,-160); scene.add(sun); }
+    function addDust(){ dustGroup=new THREE.Group(); for(let i=0;i<360;i++){ const s=new THREE.Sprite(new THREE.SpriteMaterial({color:0xfff3c4, transparent:true, opacity:Math.random()*0.12})); s.position.set((Math.random()-0.5)*140, Math.random()*3+.2, (Math.random()-0.5)*140); const k=Math.random()*0.35+0.1; s.scale.set(k,k,1); dustGroup.add(s);} scene.add(dustGroup); }
+    function setSun(az,el){ const AZ=az*Math.PI/180, EL=el*Math.PI/180, R=160; const x=R*Math.cos(EL)*Math.sin(AZ), y=R*Math.sin(EL), z=R*Math.cos(EL)*Math.cos(AZ); key.position.set(x/9,y/6,z/9); sun.position.set(x,y,z); }
+    function applyExposure(){ const scale=Math.pow(2,CONFIG.exposure*1.6); renderer.toneMappingExposure=scale; }
+
+    function applyPreset(name){ CONFIG.preset=name; if(name==='SUNSET'){ scene.fog.color.set(0x1b1410); key.color.set(0xffc27a); key.intensity=1.3; fill.color.set(0x6fb5ff); fill.intensity=.4; rim.color.set(0xf2a65a); rim.intensity=.6; setSun(260,12); }
+      else if(name==='NOON'){ scene.fog.color.set(0xa8c7df); key.color.set(0xffffff); key.intensity=1.6; fill.color.set(0xd7ecff); fill.intensity=.35; rim.color.set(0xffffff); rim.intensity=.4; setSun(0,72); }
+      else if(name==='TWILIGHT'){ scene.fog.color.set(0x241b34); key.color.set(0xf3c9ff); key.intensity=.9; fill.color.set(0x96a4ff); fill.intensity=.4; rim.color.set(0xb890ff); rim.intensity=.8; setSun(290,2); }
+      else if(name==='STORM'){ scene.fog.color.set(0x1a2230); key.color.set(0xffffff); key.intensity=.75; fill.color.set(0x9ecbff); fill.intensity=.55; rim.color.set(0x9ecbff); rim.intensity=.9; setSun(330,8); }
+      else if(name==='SALOON'){ scene.fog.color.set(0x3b2a1e); key.color.set(0xffd2a1); key.intensity=1.2; fill.color.set(0x704214); fill.intensity=.35; rim.color.set(0xfff0d4); rim.intensity=.5; setSun(240,8); }
+      else { scene.fog.color.set(0x0b0c10); key.color.set(0xffd6a3); key.intensity=1.25; fill.color.set(0xa7d6ff); fill.intensity=.55; rim.color.set(0x8cc6ff); rim.intensity=.7; setSun(270,18); } persist(); }
+
+    //—— Ground & Subject
+    function addGround(){ const g=new THREE.PlaneGeometry(260,260); const m=new THREE.MeshStandardMaterial({color:0x15171a,roughness:.85,metalness:.1}); const ground=new THREE.Mesh(g,m); ground.rotation.x=-Math.PI/2; ground.receiveShadow=true; scene.add(ground); const lane=new THREE.Mesh(new THREE.PlaneGeometry(3,160), new THREE.MeshBasicMaterial({color:0x252c38})); lane.rotation.x=-Math.PI/2; lane.position.y=.02; scene.add(lane); }
+    function buildHorse(){ const mat=new THREE.MeshStandardMaterial({color:0x111318,roughness:.7,metalness:.05}); horse=new THREE.Group(); const body=new THREE.Mesh(new THREE.BoxGeometry(4,1.8,1.3),mat); body.position.y=1.8; body.castShadow=true; horse.add(body); const neck=new THREE.Mesh(new THREE.BoxGeometry(1.2,2.2,1),mat); neck.position.set(2.2,2.5,0); neck.rotation.z=.5; horse.add(neck); const head=new THREE.Mesh(new THREE.BoxGeometry(1.2,1.2,.9),mat); head.position.set(3.2,3.8,0); head.rotation.z=.2; horse.add(head); const ear=new THREE.Mesh(new THREE.ConeGeometry(.15,.4,5),mat); ear.position.set(3.5,4.5,.3); horse.add(ear); const ear2=ear.clone(); ear2.position.z=-.3; horse.add(ear2); const legG=new THREE.CylinderGeometry(.15,.12,2,10); horse.legs=[]; const legs=[{x:1.5,z:.5,p:0},{x:1.5,z:-.5,p:Math.PI},{x:-1.3,z:.5,p:Math.PI*.6},{x:-1.3,z:-.5,p:Math.PI*1.6}]; legs.forEach(L=>{const l=new THREE.Mesh(legG,mat); l.position.set(L.x,1,L.z); l.userData={bx:L.x,bz:L.z,p:L.p}; l.castShadow=true; horse.add(l); horse.legs.push(l)}); const tail=new THREE.Mesh(new THREE.CylinderGeometry(.1,.05,1.5,8),mat); tail.position.set(-2.5,2,0); tail.rotation.z=-.8; horse.add(tail); const torso=new THREE.Mesh(new THREE.BoxGeometry(.8,1.8,.8),mat); torso.position.set(-.3,3.5,0); horse.add(torso); const headR=new THREE.Mesh(new THREE.SphereGeometry(.4,16,12),mat); headR.position.set(-.3,4.7,0); horse.add(headR); horse.position.set(-20,0,0); scene.add(horse); }
+
+    function updateHorse(phase){ const s=phase*Math.PI*2; horse.legs.forEach(l=>{ const q=s+l.userData.p; const lift=Math.max(0,Math.sin(q))*1.2; l.position.y=1+lift; l.rotation.z=Math.sin(q)*.28; l.position.x=l.userData.bx+Math.cos(q)*.48;}); horse.children[0].position.y=1.8+Math.sin(s)*.2; horse.children[0].rotation.z=Math.sin(s)*.1; horse.children[0].rotation.x=Math.cos(s*2)*.05; }
+
+    //—— Rigs
+    function clearRig(){ rigs.splice(0); const kill=[]; scene.traverse(o=>{ if(o.userData&&o.userData.stand) kill.push(o)}); kill.forEach(o=>scene.remove(o)); }
+    function buildRig(mode){ clearRig(); if(mode==='ARC_24'){ STATE.COUNT=24; addArc(24);} else if(mode==='LINEAR_24'){ STATE.COUNT=24; addLine(24);} else if(mode==='RING_32'){ STATE.COUNT=32; addRing(32);} else if(mode==='CRANE'){ STATE.COUNT=24; addCrane(24);} else { STATE.COUNT=24; addDrone(24);} STATE.current = Math.min(STATE.current, STATE.COUNT-1); STATE.phase=0; updateHUD(); persist(); }
+    function addArc(n){ const a0=-Math.PI*.42,a1=Math.PI*.42; for(let i=0;i<n;i++){ const t=i/(n-1),ang=a0+(a1-a0)*t; placeCam(Math.sin(ang)*STATE.RADIUS,3.4,Math.cos(ang)*STATE.RADIUS);} }
+    function addRing(n){ for(let i=0;i<n;i++){ const ang=(i/n)*Math.PI*2; placeCam(Math.sin(ang)*STATE.RADIUS,3.4,Math.cos(ang)*STATE.RADIUS);} }
+    function addLine(n){ const span=STATE.RADIUS*2, z=STATE.RADIUS*.95; for(let i=0;i<n;i++){ const t=i/(n-1); placeCam(-STATE.RADIUS+span*t,3.4,z);} }
+    function addCrane(n){ for(let i=0;i<n;i++){ const t=i/(n-1); const x=Math.sin(t*Math.PI*2)*STATE.RADIUS*.8; const y=3.4 + Math.sin(t*Math.PI)*4; const z=Math.cos(t*Math.PI*2)*STATE.RADIUS*.8; placeCam(x,y,z);} }
+    function addDrone(n){ for(let i=0;i<n;i++){ const t=i/(n-1); const x=Math.sin(t*Math.PI*2)*STATE.RADIUS*1.2; const y=8 + Math.sin(t*Math.PI)*6; const z=Math.cos(t*Math.PI*2)*STATE.RADIUS*1.2; placeCam(x,y,z);} }
+    function placeCam(x,y,z){ const cam=new THREE.PerspectiveCamera(55, innerWidth/innerHeight, .5, 260); cam.position.set(x,y,z); cam.lookAt(0,1.6,0); const stand=new THREE.Group(); stand.userData.stand=true; const post=new THREE.Mesh(new THREE.CylinderGeometry(.06,.08,3.2,12), new THREE.MeshLambertMaterial({color:0x0f141b})); post.position.y=1.6; stand.add(post); stand.position.set(x,0,z); stand.lookAt(0,0,0); scene.add(stand); rigs.push({camera:cam,stand}); }
+
+    //—— Lens
+    function updateLens(mm){ CONFIG.lens=mm; const fov=mmToFov(mm); rigs.forEach(r=>{ r.camera.fov=fov; r.camera.updateProjectionMatrix();}); lensChips.forEach(c=>c.classList.toggle('on', +c.dataset.mm===mm)); updateHUD(); persist(); }
+    function mmToFov(mm){ const sensor=36; return 2*Math.atan(sensor/(2*mm))*180/Math.PI; }
+
+    //—— Loop
+    let last=0; function tick(t){ requestAnimationFrame(tick); const dt=(t-last)/1000||0; last=t; if(STATE.playing){ STATE.phase += dt*.35*CONFIG.speed; STATE.current = Math.floor( STATE.phase * STATE.COUNT ) % STATE.COUNT; }
+      const ph=STATE.current/STATE.COUNT; updateHorse(ph); applyExposure();
+      dustGroup.children.forEach((d,i)=>{ d.position.x += (Math.sin(i*14.2)*.02 + .18*.02); if(d.position.x>70) d.position.x=-70; });
+      const cam = rigs[STATE.current]?.camera || rigs[0].camera; renderer.render(scene, cam);
+      const pct = ( (STATE.phase % 1) )*100; prog.style.width = pct+'%';
+      updateHUD();
+    }
+
+    function updateHUD(){ camHUD.textContent = `CAM ${String(STATE.current+1).padStart(2,'0')} · ${CONFIG.lens}mm`; }
+
+    //—— Interactions (gestures-only in center; controls on edges)
+    playEdge.addEventListener('click',()=>{ STATE.playing=!STATE.playing; playEdge.textContent = STATE.playing ? '❚❚' : '▶'; persist(); });
+    prevCam.addEventListener('click',()=>{ STATE.current = (STATE.current-1+STATE.COUNT)%STATE.COUNT; persist(); });
+    nextCam.addEventListener('click',()=>{ STATE.current = (STATE.current+1)%STATE.COUNT; persist(); });
+
+    // Open/close drawers (edges) + outside-to-close + swipe-to-close
+    const toggleL = (open)=>{ const willOpen = open===undefined ? !drawerL.classList.contains('open') : open; drawerL.classList.toggle('open', willOpen); drawerL.setAttribute('aria-hidden', String(!willOpen)); syncDrawerDim(); persist(); };
+    const toggleR = (open)=>{ const willOpen = open===undefined ? !drawerR.classList.contains('open') : open; drawerR.classList.toggle('open', willOpen); drawerR.setAttribute('aria-hidden', String(!willOpen)); syncDrawerDim(); persist(); };
+    function syncDrawerDim(){ const lOpen = drawerL.classList.contains('open'); const rOpen = drawerR.classList.contains('open'); drawerL.classList.toggle('dim', rOpen && !lOpen); drawerR.classList.toggle('dim', lOpen && !rOpen); }
+    tabL.addEventListener('click',()=>toggleL()); tabR.addEventListener('click',()=>toggleR());
+    // Quick buttons map to opening the appropriate drawer and focusing the field
+    $('#presetQuick').addEventListener('click',()=>{ if(!drawerR.classList.contains('open')) toggleR(true); presetSel.focus();});
+    $('#rigQuick').addEventListener('click',()=>{ if(!drawerR.classList.contains('open')) toggleR(true); rigSel.focus();});
+    $('#lensQuick').addEventListener('click',()=>{ if(!drawerR.classList.contains('open')) toggleR(true); });
+    $('#exportQuick').addEventListener('click',()=>{ if(!drawerR.classList.contains('open')) toggleR(true); exportBtn.focus();});
+
+    // Tap outside to close drawers immediately
+    document.addEventListener('pointerdown',(e)=>{
+      const inDL = drawerL.contains(e.target) || e.target===drawerL || e.target===tabL;
+      const inDR = drawerR.contains(e.target) || e.target===drawerR || e.target===tabR;
+      if(!inDL && !inDR){ toggleL(false); toggleR(false); }
+    });
+
+    // Swipe inward on a drawer to close
+    let swipeBaseX=null; function swipeHandlerFactory(panel,toggleFn){ panel.addEventListener('pointerdown', e=>{ swipeBaseX=e.clientX; }); panel.addEventListener('pointermove', e=>{ if(swipeBaseX==null) return; const dx=e.clientX-swipeBaseX; const thresh=35; if(panel===drawerL && dx< -thresh) { toggleFn(false); swipeBaseX=null; } if(panel===drawerR && dx> thresh){ toggleFn(false); swipeBaseX=null; } }); panel.addEventListener('pointerup', ()=>{ swipeBaseX=null; }); }
+    swipeHandlerFactory(drawerL, toggleL); swipeHandlerFactory(drawerR, toggleR);
+
+    // Gestures on the stage (center) — swipe cameras, pinch zoom
+    stage.addEventListener('pointerdown',e=>{ dragBase={x:e.clientX,y:e.clientY}; });
+    stage.addEventListener('pointermove',e=>{ if(!dragBase) return; const dx=e.clientX-dragBase.x, dy=e.clientY-dragBase.y; if(Math.abs(dx)>Math.abs(dy)){ const step = Math.sign(dx)*Math.floor(Math.abs(dx)/18); if(step!==0){ STATE.current = ((STATE.current+step)%STATE.COUNT+STATE.COUNT)%STATE.COUNT; dragBase.x=e.clientX; persist(); }} else { const cam = rigs[STATE.current]?.camera; if(!cam) return; const k = dy*0.005; if(CONFIG.path==='DOLLY') cam.translateZ(k*8); else if(CONFIG.path==='CRANE') cam.position.y = Math.max(1.2, cam.position.y + k*12); else if(CONFIG.path==='ARC'){ const r = cam.position.clone().setY(0).length(); const a = Math.atan2(cam.position.x, cam.position.z) + k*1.2; cam.position.set(Math.sin(a)*r, cam.position.y, Math.cos(a)*r); cam.lookAt(0,1.6,0);} else if(CONFIG.path==='DRONE') cam.translateZ(k*14); else if(CONFIG.path==='STEADICAM') cam.translateZ(k*9); }
+    });
+    stage.addEventListener('pointerup',()=>{ dragBase=null; });
+
+    // Pinch zoom
+    const touches=new Map();
+    stage.addEventListener('pointerdown',e=>{ touches.set(e.pointerId,{x:e.clientX,y:e.clientY}); if(touches.size===2){ pinchBase=distance(); }});
+    stage.addEventListener('pointermove',e=>{ if(!touches.has(e.pointerId)) return; touches.set(e.pointerId,{x:e.clientX,y:e.clientY}); if(touches.size===2){ const d=distance(); if(pinchBase){ const cam=rigs[STATE.current]?.camera; const fov=THREE.MathUtils.clamp(cam.fov * (pinchBase/d), 24, 100); cam.fov=fov; cam.updateProjectionMatrix(); updateLens(fovToMM(fov)); } }});
+    stage.addEventListener('pointerup',e=>{ touches.delete(e.pointerId); pinchBase=null; });
+    function distance(){ const v=[...touches.values()]; const dx=v[0].x-v[1].x, dy=v[0].y-v[1].y; return Math.hypot(dx,dy); }
+    function fovToMM(fov){ const sensor=36; const rad=fov*Math.PI/180; return Math.round( (sensor/(2*Math.tan(rad/2))) ); }
+
+    // Drawer controls
+    presetSel.addEventListener('change',()=>applyPreset(presetSel.value));
+    rigSel.addEventListener('change',()=>{ CONFIG.rig=rigSel.value; buildRig(CONFIG.rig); });
+    pathSel.addEventListener('change',()=>{ CONFIG.path=pathSel.value; persist(); });
+    speedRange.addEventListener('input',()=>{ CONFIG.speed=parseFloat(speedRange.value); persist(); });
+    expoRange.addEventListener('input',()=>{ CONFIG.exposure=parseFloat(expoRange.value); applyExposure(); persist(); });
+    lensChips.forEach(ch=>ch.addEventListener('click',()=>updateLens(+ch.dataset.mm)));
+    debugSafe.addEventListener('change',()=>{ safeOverlay.style.display=debugSafe.checked?'block':'none'; persist(); });
+    resetBtn.addEventListener('click',()=>{ if(confirm('Clear saved state and reset controls?')){ try{ localStorage.removeItem(STORAGE_KEY); }catch(_){} location.reload(); }});
+
+    // Export frames (ZIP)
+    exportBtn.addEventListener('click', async ()=>{
+      const W=640,H=Math.round(W*9/16); const frames=[]; const size=renderer.getSize(new THREE.Vector2()); const ratio=renderer.getPixelRatio(); renderer.setPixelRatio(1); renderer.setSize(W,H); const prev=STATE.playing; STATE.playing=false; const prevIdx=STATE.current;
+      for(let i=0;i<STATE.COUNT;i++){ STATE.current=i; const ph=i/STATE.COUNT; updateHorse(ph); const cam=rigs[i].camera; renderer.render(scene,cam); frames.push(renderer.domElement.toDataURL('image/png')); }
+      STATE.current=prevIdx; STATE.playing=prev; renderer.setPixelRatio(ratio); renderer.setSize(size.x,size.y);
+      const blob=await makeZip(frames); download(blob,'btine_frames.zip');
+    });
+
+    // Tiny zip (store only)
+    async function makeZip(urls){ const enc=new TextEncoder(); const chunks=[]; for(let i=0;i<urls.length;i++){ const b=await (await fetch(urls[i])).arrayBuffer(); const name=enc.encode(`f${String(i).padStart(3,'0')}.png`); const header=new Uint8Array(30+name.length); header.set([0x50,0x4b,0x03,0x04,20,0,0,0,0,0,0,0,0,0,0,0]); header[26]=name.length&255; header[27]=(name.length>>>8)&255; header.set(name,30); chunks.push(header,new Uint8Array(b)); } return new Blob(chunks,{type:'application/zip'}); }
+    function download(blob,name){ const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1500); }
+
+    // Idle fade management: any user activity wakes the chrome
+    let idleTimer=null; function startIdleWatcher(){ wakeUI(); ['pointerdown','pointermove','wheel','keydown','touchstart'].forEach(ev=>document.addEventListener(ev, wakeUI, {passive:true})); scheduleIdle(); }
+    function scheduleIdle(){ clearTimeout(idleTimer); idleTimer=setTimeout(()=>document.body.classList.add('ui-idle'), 1500); }
+    function wakeUI(){ document.body.classList.remove('ui-idle'); scheduleIdle(); }
+
+    // Persistence
+    let persistTimer=null; function persist(){ try{ const snapshot={VERSION, CONFIG, STATE:{playing:STATE.playing,current:STATE.current}, drawerL:drawerL.classList.contains('open'), drawerR:drawerR.classList.contains('open'), debugSafe:debugSafe.checked}; clearTimeout(persistTimer); persistTimer=setTimeout(()=>{ localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot)); flashSaved(); }, 120); }catch(e){ persistWarn.style.display='block'; } }
+    function loadPersist(){ try{ const raw=localStorage.getItem(STORAGE_KEY); if(!raw) return null; return JSON.parse(raw); }catch(e){ persistWarn.style.display='block'; return null; } }
+    function flashSaved(){ persistInd.classList.add('show'); clearTimeout(flashSaved.t); flashSaved.t=setTimeout(()=>persistInd.classList.remove('show'), 650); }
+
+    // Resize
+    addEventListener('resize', onResize); function onResize(){ renderer.setSize(innerWidth,innerHeight); rigs.forEach(r=>{ r.camera.aspect=innerWidth/innerHeight; r.camera.updateProjectionMatrix(); }); }
+
+    // --- Self-tests (edge, transparency, persistence) ---
+    window.__btine_tests__ = function(){
+      const results=[]; const ok=(name,cond)=>results.push({test:name, pass:!!cond});
+      ok('THREE loaded', !!THREE && !!THREE.Scene);
+      ok('Scene booted', !!scene && !!renderer);
+      ok('Rig cameras match COUNT', rigs.length===STATE.COUNT);
+      ok('Lens 35mm FOV reasonable', (function(){ const f=mmToFov(35); return f>45 && f<65; })());
+      const prev=STATE.current; STATE.current=5; updateHUD(); ok('HUD shows CAM 06', /CAM\s+06/.test(camHUD.textContent)); STATE.current=prev;
+      // Controls avoid bottom-center safe alley
+      const box=(el)=>el.getBoundingClientRect();
+      const vw=innerWidth, vh=innerHeight; const safe={left:vw*0.30, right:vw*0.70, top:vh*0.65, bottom:vh*0.98};
+      const ids=[ '#rail-left', '#rail-right', '#tabL', '#tabR', '#drawerL', '#drawerR', '#hud-left', '#hud-right', '#topbar', '#playEdge', '#prevCam', '#nextCam' ];
+      drawerL.classList.add('open'); drawerR.classList.add('open');
+      const intrudes = ids.map(q=>document.querySelector(q)).filter(Boolean).some(el=>{ const r=box(el); const overlapX = Math.max(0, Math.min(r.right, safe.right) - Math.max(r.left, safe.left)); const overlapY = Math.max(0, Math.min(r.bottom, safe.bottom) - Math.max(r.top, safe.top)); return overlapX>1 && overlapY>1; });
+      drawerL.classList.remove('open'); drawerR.classList.remove('open');
+      ok('Controls avoid bottom-center safe alley', !intrudes);
+      // Persistence roundtrip
+      const before=loadPersist(); ok('Persistence writes', !!before);
+      ok('Roundtrip lens matches', before?.CONFIG?.lens===CONFIG.lens);
+      console.table(results); return results;
+    };
+
+    // Start
+    boot();
+  })();
+
+  function fatal(msg){ const d=document.createElement('div'); d.style.cssText='position:fixed;inset:auto 1rem 1rem 1rem;background:rgba(20,20,24,.65);color:#fff;border:1px solid #2a2a2f;border-radius:12px;padding:12px 14px;z-index:9999;box-shadow:0 10px 30px rgba(0,0,0,.5);backdrop-filter:blur(8px)'; d.innerHTML=`<b>Engine disabled</b><br><small>${msg}</small>`; document.body.appendChild(d); }
+  </script>
+</body>
+</html>

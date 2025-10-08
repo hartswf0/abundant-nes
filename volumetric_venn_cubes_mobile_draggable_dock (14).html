@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>VOL‑MEDIA DECKS — Clean Minimal DJ Stacks</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;touch-action:none}
+  html,body{height:100%}
+  body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:#000;color:#fff;overflow:hidden}
+  #canvas{width:100vw;height:100vh;display:block}
+  #hint{position:fixed;top:10px;left:50%;transform:translateX(-50%);font-size:12px;color:#9ad7ff;background:rgba(0,0,0,.6);border:1px solid rgba(154,215,255,.35);padding:6px 10px;border-radius:10px;z-index:5}
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+<div id="hint">Tap plates = step • Hold+drag ↑/↓ = tune • Swipe left/right (empty) = change view • Pinch = resize • Two‑finger drag ↔ (empty) = separation • Double‑tap empty = play/pause</div>
+<script>
+(async function(){
+  // --- Load THREE defensively ---
+  if(!window.THREE){
+    const CDNs=[
+      'https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js',
+      'https://unpkg.com/three@0.152.2/build/three.min.js',
+      'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js'
+    ];
+    for(const src of CDNs){
+      try{await new Promise((res,rej)=>{const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=rej;document.head.appendChild(s)});if(window.THREE)break;}catch(_){}}
+  }
+
+  // ===== Small utilities (needed across handlers) =====
+  function clamp(value,min,max){ return Math.max(min, Math.min(max, value)); }
+  function lerp(a,b,t){ return a + (b-a)*t; }
+
+  // Predeclare gesture state EARLY to avoid TDZ issues
+  const dragBG={active:false,startX:0,startY:0,lastX:0,lastY:0};
+  const pinch={baseDist:0, baseSep:0, baseSizeA:1, baseSizeB:1, mode:null};
+
+  // ===== Core scene (orthographic isometric) =====
+  const CQS=60; // virtual width at z=0
+  const canvas=document.getElementById('canvas');
+  const scene=new THREE.Scene(); scene.background=new THREE.Color(0x000000);
+  function makeOrtho(){ const aspect=innerWidth/innerHeight; const hw=CQS/2, hh=hw/aspect; return new THREE.OrthographicCamera(-hw,hw,hh,-hh,-2000,2000); }
+  let camera=makeOrtho(); scene.add(camera);
+  const renderer=new THREE.WebGLRenderer({canvas,antialias:true}); renderer.setSize(innerWidth,innerHeight); renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
+  addEventListener('resize',()=>{ const c=makeOrtho(); Object.assign(camera,{left:c.left,right:c.right,top:c.top,bottom:c.bottom,near:c.near,far:c.far}); camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); });
+
+  scene.add(new THREE.AmbientLight(0xffffff,.25));
+  const key=new THREE.PointLight(0x66ddff,1.1,600); key.position.set(0,80,140); scene.add(key);
+  const warm=new THREE.PointLight(0xffaa66,.9,500); warm.position.set(90,60,-80); scene.add(warm);
+
+  // ===== Camera views =====
+  const ISO_TILT=Math.atan(1/Math.sqrt(2));
+  function isoPos(r,az){return [r*Math.cos(ISO_TILT)*Math.sin(az), r*Math.sin(ISO_TILT), r*Math.cos(ISO_TILT)*Math.cos(az)];}
+  const VIEWS=[{name:'ISO 45°',pos:isoPos(180,Math.PI/4)},{name:'ISO 135°',pos:isoPos(180,3*Math.PI/4)},{name:'ISO 225°',pos:isoPos(180,5*Math.PI/4)},{name:'ISO 315°',pos:isoPos(180,7*Math.PI/4)},{name:'TOP',pos:[0,180,0.0001]}];
+  let viewIdx=0, orbit=false, orbitSpeed=12, tOrbit=0;
+  function applyView(){ const v=VIEWS[viewIdx%VIEWS.length]; camera.position.set(...v.pos); camera.lookAt(0,12,0); }
+  applyView();
+
+  // ===== State =====
+  const MAX_PLATES=24, UNIT=12;
+  const decks={
+    A:{color:0x00ff88, steps:16, root:110, scale:'minorPent', spacing:1.0, layers:12, size:1.0, seq:Array(32).fill(0), tune:Array(32).fill(0), group:null, plates:[]},
+    B:{color:0xff4488, steps:16, root:220, scale:'majorPent', spacing:1.0, layers:12, size:1.0, seq:Array(32).fill(0), tune:Array(32).fill(0), group:null, plates:[]}
+  };
+  const focusLayer={A:-1,B:-1}; // no initial highlight
+  let sep=28; // enforced to avoid overlap
+
+  // ===== Builders =====
+  function mkPlate(color,op){ const g=new THREE.PlaneGeometry(UNIT,UNIT); const m=new THREE.MeshStandardMaterial({color,transparent:true,opacity:op,side:THREE.DoubleSide,depthWrite:false,roughness:.55,metalness:.08}); const mesh=new THREE.Mesh(g,m); mesh.rotation.x=-Math.PI/2; m.emissive=new THREE.Color(color); m.emissiveIntensity=.22; mesh.userData.role='deckPlate'; return mesh; }
+  function buildDeck(which,x){ const d=decks[which]; if(d.group){ scene.remove(d.group); d.plates.length=0; } const g=new THREE.Group(); g.position.set(x,0,0); for(let i=0;i<MAX_PLATES;i++){ const op=0.35 - (i/MAX_PLATES)*0.18; const p=mkPlate(d.color,Math.max(.14,op)); p.position.y=i*d.spacing; g.add(p); d.plates.push(p); } scene.add(g); d.group=g; refreshDeck(which); }
+  function refreshDeck(which){ const d=decks[which]; const baseScale=d.size; const EI=.20; const OP=.38; d.plates.forEach((p,i)=>{ const vis=i<d.layers; p.visible=vis; if(!vis) return; p.position.y=i*d.spacing; const hi=i===focusLayer[which]; p.material.emissiveIntensity= (hi?1.0:EI)*(0.96-(i/d.layers)*0.5); p.material.opacity=(hi?0.92:OP)*(0.96-(i/d.layers)*0.4); p.scale.set(baseScale*(hi?1.1:1),1,baseScale*(hi?1.1:1)); }); }
+
+  buildDeck('A',-sep); buildDeck('B',sep);
+
+  // ===== Audio (minimal but musical) =====
+  let AC=null, master=null, synthA=null, synthB=null, playing=false, bpm=110, energy=.5, resonance=.4;
+  function audioInit(){ if(AC) return; const C=window.AudioContext||window.webkitAudioContext; AC=new C(); master=AC.createGain(); master.gain.value=.22; master.connect(AC.destination); synthA=mkVoice(); synthB=mkVoice(); }
+  function mkVoice(){ const env=AC.createGain(); env.gain.value=0; const filt=AC.createBiquadFilter(); filt.type='lowpass'; filt.frequency.value=1400; filt.Q.value=.7; filt.connect(env).connect(master); const o1=AC.createOscillator(); o1.type='sawtooth'; o1.start(); o1.connect(filt); const o2=AC.createOscillator(); o2.type='triangle'; o2.detune.value=+5; o2.start(); o2.connect(filt); return {env,filt,o1,o2}; }
+  function trigger(v,level=.6,dur=.18){ const t=AC.currentTime; v.env.gain.cancelScheduledValues(t); v.env.gain.setValueAtTime(v.env.gain.value,t); v.env.gain.linearRampToValueAtTime(level,t+0.01); v.env.gain.exponentialRampToValueAtTime(0.0001,t+dur); }
+  function setFreq(v,f){ v.o1.frequency.setTargetAtTime(f,AC.currentTime,.02); v.o2.frequency.setTargetAtTime(f*1.003,AC.currentTime,.02); }
+  function scaleFreq(scale,root,degree){ const tbl={minorPent:[0,3,5,7,10],majorPent:[0,2,4,7,9]}; const arr=tbl[scale]||tbl.minorPent; const semi=arr[degree%arr.length]; return root*Math.pow(2,semi/12); }
+
+  // ===== Sequencer =====
+  function startClock(){ let last=performance.now(); function loop(){ if(playing && AC && AC.state==='running'){ const beat=60000/bpm; const step=beat/4; const now=performance.now(); if(now-last>=step){ last+=step; tick(); } } requestAnimationFrame(loop); } loop(); }
+  function tick(){ ['A','B'].forEach(which=>{ const d=decks[which]; d._phase=(d._phase||0)+1; d._phase%=d.steps; const idx=d._phase; if(d.seq[idx]){ const f=scaleFreq(d.scale,d.root,idx); const tuned=f*Math.pow(2,(d.tune[idx]||0)/12); const v=(which==='A')?synthA:synthB; if(AC){ setFreq(v,tuned); v.filt.frequency.setTargetAtTime(900+1800*energy,AC.currentTime,.03); v.filt.Q.setTargetAtTime(.7+5*resonance,AC.currentTime,.03); trigger(v,.28+.3*energy,.14+.1*resonance); } const plate=d.plates[idx%Math.max(1,d.layers)]; if(plate){ plate.scale.set(d.size*1.18,1,d.size*1.18); setTimeout(()=>plate.scale.set(d.size,1,d.size),100); } } }); }
+
+  // ===== Interactions (stacks ARE controls) =====
+  const ray=new THREE.Raycaster(); const v2=new THREE.Vector2();
+  function pickAt(x,y,objs){ v2.x=(x/innerWidth)*2-1; v2.y=-(y/innerHeight)*2+1; ray.setFromCamera(v2,camera); return ray.intersectObjects(objs); }
+
+  let dragging=false, active=null, hold=false, tuneIdx=null, start={x:0,y:0}; let mode=null;
+  canvas.addEventListener('pointerdown',ev=>{
+    const hits=pickAt(ev.clientX,ev.clientY,[...decks.A.plates,...decks.B.plates]);
+    if(!hits.length){ // empty start → for view swipe or two-finger sep
+      dragBG.startX=ev.clientX; dragBG.startY=ev.clientY; dragBG.active=true; dragBG.lastX=ev.clientX; dragBG.lastY=ev.clientY; return; }
+    const mesh=hits[0].object; active = decks.A.plates.includes(mesh)?'A':'B'; dragging=true; hold=true; start.x=ev.clientX; start.y=ev.clientY; tuneIdx = (active==='A'? decks.A.plates.indexOf(mesh): decks.B.plates.indexOf(mesh));
+    // press-and-hold → tune mode
+    setTimeout(()=>{ if(hold){ mode='tune'; showTuner(active,tuneIdx,0); if(navigator.vibrate) navigator.vibrate(7); } },260);
+  });
+  canvas.addEventListener('pointermove',ev=>{
+    if(dragging && active){ const dx=ev.clientX-start.x; const dy=ev.clientY-start.y; const d=decks[active]; if(mode==='tune'){ const st=clamp(Math.round(-dy/12),-12,12); d.tune[tuneIdx%d.steps]=st; showTuner(active,tuneIdx,st); previewTone(active,tuneIdx,st); }
+      else { hold=false; // vertical adjusts spacing, horizontal adjusts size (both visual+sound)
+        if(Math.abs(dy)>Math.abs(dx)){ d.spacing = clamp(d.spacing + (-dy)*0.002, 0.6, 2.0); start.y=ev.clientY; } else { d.size = clamp(d.size + (dx)*0.002, 0.7, 1.6); start.x=ev.clientX; }
+        refreshDeck(active);
+      }
+    }
+  });
+  canvas.addEventListener('pointerup',ev=>{
+    if(dragging && active){ if(mode==='tune'){ hideTuner(); } else { const d=decks[active]; const step=tuneIdx%d.steps; d.seq[step]=d.seq[step]?0:1; pulse(d.plates[tuneIdx%Math.max(1,d.layers)]); }}
+    dragging=false; active=null; hold=false; mode=null; tuneIdx=null; dragBG.active=false;
+  });
+
+  // Empty-space gestures (view + separation + play)
+  addEventListener('pointermove',e=>{
+    if(!dragBG.active || dragging) return; const dx=e.clientX-dragBG.lastX, dy=e.clientY-dragBG.lastY; const tdx=e.clientX-dragBG.startX, tdy=e.clientY-dragBG.startY;
+    if(Math.abs(tdx)>80 && Math.abs(tdx)>Math.abs(tdy)){ viewIdx=(viewIdx+(tdx>0?1:-1)+VIEWS.length)%VIEWS.length; applyView(); dragBG.startX=e.clientX; if(navigator.vibrate) navigator.vibrate(5); }
+    dragBG.lastX=e.clientX; dragBG.lastY=e.clientY;
+  });
+  canvas.addEventListener('dblclick',async()=>{ try{ if(!AC){ audioInit(); } await AC.resume?.(); playing=!playing; if(navigator.vibrate) navigator.vibrate(10);}catch(_){} });
+
+  // Two-finger separation & pinch resize
+  addEventListener('touchstart',e=>{ if(e.touches.length===2){ pinch.baseDist=dist2(e.touches); pinch.baseSep=sep; pinch.baseSizeA=decks.A.size; pinch.baseSizeB=decks.B.size; pinch.mode='sep'; } });
+  addEventListener('touchmove',e=>{ if(e.touches.length!==2) return; const k=dist2(e.touches)/pinch.baseDist; if(pinch.mode==='sep'){ sep = clamp(pinch.baseSep + (e.touches[0].clientX+e.touches[1].clientX-innerWidth)/40, 18, 120); enforceSep(); } });
+  function dist2(t){ const dx=t[0].clientX-t[1].clientX; const dy=t[0].clientY-t[1].clientY; return Math.hypot(dx,dy); }
+
+  // Visual feedback pulse
+  function pulse(p){ if(!p) return; p.material.emissiveIntensity=.95; p.scale.set(1.2,1,1.2); setTimeout(()=>{ p.material.emissiveIntensity=.22; p.scale.set(1,1,1); },110); }
+
+  // Tuner sprite
+  const tuner=makeSprite(''); tuner.visible=false; scene.add(tuner);
+  function makeSprite(txt){ const cvs=document.createElement('canvas'); const s=256; cvs.width=cvs.height=s; const ctx=cvs.getContext('2d'); ctx.clearRect(0,0,s,s); ctx.fillStyle='rgba(0,0,0,0)'; ctx.fillRect(0,0,s,s); ctx.fillStyle='#fff'; ctx.font='bold 48px Inter, system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.shadowColor='rgba(0,0,0,.7)'; ctx.shadowBlur=14; ctx.fillText(txt,s/2,s/2); const tex=new THREE.CanvasTexture(cvs); const mat=new THREE.SpriteMaterial({map:tex,transparent:true,depthWrite:false}); const spr=new THREE.Sprite(mat); spr.scale.set(8,8,1); return spr; }
+  function updateSprite(sprite,txt){ const t=sprite.material.map.image; const ctx=t.getContext('2d'); const s=t.width; ctx.clearRect(0,0,s,s); ctx.fillStyle='#fff'; ctx.font='bold 48px Inter, system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.shadowColor='rgba(0,0,0,.7)'; ctx.shadowBlur=14; ctx.fillText(txt,s/2,s/2); sprite.material.map.needsUpdate=true; }
+  function showTuner(which,idx,st){ const d=decks[which]; tuner.visible=true; tuner.position.set(d.group.position.x, d.plates[idx].position.y+6, 0); updateSprite(tuner, `${st>0?'+':''}${st} st`); }
+  function hideTuner(){ tuner.visible=false; }
+  function previewTone(which,idx,st){ if(!AC) return; const d=decks[which]; const f=scaleFreq(d.scale,d.root, idx % d.steps); const tuned=f*Math.pow(2,st/12); const v=(which==='A')?synthA:synthB; setFreq(v,tuned); trigger(v,.12,.12); }
+
+  // Separation guard (no visual overlap)
+  function footprint(d){ return UNIT*d.size + 2; }
+  function enforceSep(){ const min=(footprint(decks.A)+footprint(decks.B))/2 + 4; if(sep<min) sep=min; if(decks.A.group) decks.A.group.position.x=-sep; if(decks.B.group) decks.B.group.position.x=sep; }
+  enforceSep();
+
+  // Loop
+  function animate(){ requestAnimationFrame(animate); if(orbit){ tOrbit+=0.0015*orbitSpeed*(60/bpm); const R=140; camera.position.x=Math.sin(tOrbit)*R; camera.position.z=Math.cos(tOrbit)*R; camera.position.y=60; camera.lookAt(0,12,0); } renderer.render(scene,camera); }
+  animate(); startClock();
+
+  // ===== Tests =====
+  ;(function tests(){
+    const T=(name,pass)=>console.log(`[TEST] ${name}:`, pass? 'PASS':'FAIL');
+    T('THREE loaded', !!window.THREE);
+    T('VIEWS defined early', Array.isArray(VIEWS) && VIEWS.length>=3);
+    T('Deck groups exist', !!(decks.A.group && decks.B.group));
+    T('No ReferenceErrors on refreshDeck', (function(){ try{refreshDeck('A');refreshDeck('B');return true}catch(_){return false}})());
+    T('enforceSep keeps left/right', (function(){ const old=sep; sep=2; enforceSep(); const ok=decks.A.group.position.x<0 && decks.B.group.position.x>0; sep=old; enforceSep(); return ok; })());
+    T('clamp exists', typeof clamp==='function');
+    T('clamp bounds', clamp(5,0,3)===3 && clamp(-2,0,3)===0 && clamp(2,0,3)===2);
+    T('pinch predeclared', typeof pinch==='object' && 'baseDist' in pinch);
+  })();
+})();
+</script>
+</body>
+</html>

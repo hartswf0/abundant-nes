@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>BTINE — Multi‑Camera Field Instrument (Studio)</title>
+<style>
+  /* ——— Visual System: Studio (bright, crisp, high contrast) ——— */
+  :root{
+    --bg:#050505;           /* deeper black for contrast */
+    --fg:#fafafa;           /* bright text */
+    --sub:#b7bcc5;          /* secondary text */
+    --accent:#ffd166;       /* warm amber */
+    --accent-2:#6ec1ff;     /* cool cyan */
+    --border:#191919;       /* UI borders */
+    --glass:rgba(14,14,16,.72);
+    --ring:0 0 0 2px rgba(255,209,102,.75) inset,0 0 .8rem rgba(255,209,102,.35);
+    --shadow:0 12px 32px rgba(0,0,0,.45);
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Inter,Roboto,Arial,sans-serif;overflow:hidden}
+  #stage{position:fixed;inset:0}
+
+  /* Filmic letterbox + light vignette for depth */
+  .letterbox::before,.letterbox::after{content:"";position:fixed;left:0;right:0;height:7vh;background:linear-gradient(180deg,rgba(0,0,0,.95),rgba(0,0,0,.75));pointer-events:none;z-index:15}
+  .letterbox::before{top:0}.letterbox::after{bottom:0}
+  #vignette{position:fixed;inset:0;pointer-events:none;z-index:10;background:radial-gradient(120% 120% at 50% 50%, rgba(0,0,0,0) 55%, rgba(0,0,0,.3) 100%)}
+
+  /* HUD */
+  #hud{position:fixed;top:.75rem;left:.75rem;display:flex;gap:.5rem;align-items:center;z-index:20}
+  .pill{background:var(--glass);border:1px solid var(--border);border-radius:12px;padding:.45rem .7rem;backdrop-filter:blur(6px);box-shadow:var(--shadow)}
+  #brand{letter-spacing:.08em;font-weight:800;color:var(--accent)}
+  #cam-readout{font-variant-numeric:tabular-nums;font-weight:900;border-color:#30363d;color:var(--fg)}
+
+  /* Bottom dock — large, thumbable controls */
+  #dock{position:fixed;left:50%;transform:translateX(-50%);bottom:.9rem;width:min(94vw,920px);display:grid;grid-template-columns:1.1fr 1.4fr 1.4fr .9fr;gap:.6rem;z-index:20}
+  .btn{background:var(--glass);border:1px solid var(--border);border-radius:16px;padding:1rem 1.1rem;color:var(--fg);font-weight:800;letter-spacing:.02em;text-align:center}
+  .btn:active{transform:scale(.98)}
+  .primary{background:linear-gradient(180deg,#ffd166,#f7b733);color:#0b0b0b;border-color:#f1a300;text-shadow:0 1px 0 rgba(255,255,255,.25)}
+  .field{display:flex;align-items:center;gap:.6rem;background:var(--glass);border:1px solid var(--border);border-radius:16px;padding:.65rem .8rem}
+  .field label{font-size:.8rem;color:var(--sub)}
+  select, input[type=range]{flex:1;background:transparent;border:none;color:var(--fg);font-weight:700}
+  input[type=range]{accent-color:var(--accent)}
+
+  /* Scrubber — draggable slider replaces tiny dots */
+  #scrub-wrap{position:fixed;left:50%;transform:translateX(-50%);bottom:5.6rem;width:min(94vw,920px);z-index:20}
+  #scrub{appearance:none;width:100%;height:10px;border-radius:10px;background:#0f1013;border:1px solid #1e1f24}
+  #scrub::-webkit-slider-thumb{appearance:none;width:28px;height:28px;border-radius:14px;background:linear-gradient(180deg,#ffd166,#f7b733);border:2px solid #0b0b0b;box-shadow:var(--ring)}
+  #scrub:active::-webkit-slider-thumb{transform:scale(1.02)}
+
+  /* Toasts */
+  #toast{position:fixed;right:.9rem;bottom:8.6rem;z-index:25}
+  .toast{background:var(--glass);border:1px solid var(--border);border-radius:12px;padding:.6rem .7rem;margin-top:.4rem;box-shadow:var(--shadow);font-size:.9rem}
+
+  /* A11y */
+  [aria-live]{position:fixed;left:-9999px}
+
+  @media (max-width:560px){
+    #dock{grid-template-columns:1fr;}
+    #scrub-wrap{bottom:7.2rem}
+  }
+</style>
+</head>
+<body class="letterbox">
+  <div id="stage" aria-label="3D simulation canvas"></div>
+  <div id="vignette"></div>
+
+  <div id="hud">
+    <div id="brand" class="pill">BTINE · STUDIO</div>
+    <div id="cam-readout" class="pill">CAM 01</div>
+  </div>
+
+  <!-- Scrubber -->
+  <div id="scrub-wrap"><input id="scrub" type="range" min="0" max="23" step="1" value="0" aria-label="Frame scrub"/></div>
+
+  <!-- Bottom Dock -->
+  <div id="dock" role="toolbar" aria-label="controls">
+    <button id="play" class="btn primary" aria-pressed="true">Pause</button>
+    <div class="field"><label>Rig</label>
+      <select id="rig">
+        <option value="ARC_24">Arc · 24</option>
+        <option value="LINEAR_24">Line · 24</option>
+        <option value="RING_32">Ring · 32</option>
+      </select>
+    </div>
+    <div class="field"><label>Motion</label>
+      <select id="motion">
+        <option value="RUN_TRACK">Run</option>
+        <option value="RUN_IN_PLACE">In‑place</option>
+        <option value="STILL">Still</option>
+      </select>
+    </div>
+    <div class="field"><label>Light/Exp</label>
+      <input id="exp" type="range" min="-1" max="1" step="0.05" value="0" />
+    </div>
+  </div>
+
+  <div id="toast"></div>
+  <div id="aria" aria-live="polite"></div>
+
+  <script type="module">
+  // --- Robust module import for Three.js ---
+  async function loadThree(){
+    const urls=[
+      'https://unpkg.com/three@0.155.0/build/three.module.js',
+      'https://cdn.jsdelivr.net/npm/three@0.155.0/build/three.module.js',
+      'https://esm.run/three@0.155.0'
+    ];
+    for(const u of urls){try{return await import(u);}catch(e){}}
+    throw new Error('three.module.js unavailable');
+  }
+
+  (async()=>{
+    let THREE; try{THREE=await loadThree();}catch(err){fatal(`THREE failed to load: ${err.message}`);return;}
+
+    // ——— STATE ———
+    const CONFIG={ rig:'ARC_24', motion:'RUN_TRACK', speed:1, exposure:0 };
+    let scene, renderer, horse, current=0, playing=true; const rigs=[]; const STATE={ COUNT:24, RADIUS:18, phase:0 };
+
+    // Elements
+    const stage=document.getElementById('stage');
+    const scrub=document.getElementById('scrub');
+    const playBtn=document.getElementById('play');
+    const rigSel=document.getElementById('rig');
+    const motSel=document.getElementById('motion');
+    const expRange=document.getElementById('exp');
+    const camUI=document.getElementById('cam-readout');
+
+    // Haptics helper
+    const bump = (ms=10)=>{ try{ if('vibrate' in navigator) navigator.vibrate(ms); }catch(_){} };
+
+    // ——— Boot ———
+    function boot(){
+      scene=new THREE.Scene();
+      scene.background=new THREE.Color(0x0a0b0e);
+      scene.fog=new THREE.Fog(0x0a0b0e,60,180);
+
+      renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
+      renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+      renderer.setSize(innerWidth,innerHeight);
+      renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+      stage.appendChild(renderer.domElement);
+
+      addLights();
+      addGround();
+      buildRig(CONFIG.rig);
+      buildHorse();
+      bindUI();
+      onResize();
+      requestAnimationFrame(tick);
+      toast('Studio lighting active');
+    }
+
+    // ——— Lighting: key/fill/rim + exposure ———
+    let key, fill, rim;
+    function addLights(){
+      // key — warm, directional
+      key=new THREE.DirectionalLight(0xffd6a3, 1.35); key.position.set(18,24,12);
+      key.castShadow=true; key.shadow.mapSize.set(2048,2048);
+      const s=42; Object.assign(key.shadow.camera,{left:-s,right:s,top:s,bottom:-s,near:2,far:200}); scene.add(key);
+      // fill — cool, soft
+      fill=new THREE.DirectionalLight(0xa7d6ff, 0.55); fill.position.set(-26,20,-8); scene.add(fill);
+      // rim — blue back edge for silhouette
+      rim=new THREE.DirectionalLight(0x8cc6ff, 0.7); rim.position.set(0,18,-28); scene.add(rim);
+      // ambient floor bounce
+      scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+    }
+
+    function applyExposure(){
+      const e = CONFIG.exposure; // -1..1
+      const scale = Math.pow(2, e*1.5); // photographic-ish
+      [key,fill,rim].forEach(l=> l.intensity = Math.max(0.05, l.intensityBase? l.intensityBase*scale : l.intensity*scale));
+      // store base once
+      [key,fill,rim].forEach(l=>{ if(!l.intensityBase) l.intensityBase = l.intensity/scale; });
+      renderer.toneMappingExposure = 1 * scale;
+    }
+
+    // ——— Ground with subtle reflection strip for depth ———
+    let ground;
+    function addGround(){
+      const g=new THREE.PlaneGeometry(220,220);
+      const m=new THREE.MeshStandardMaterial({color:0x111216,metalness:0.15,roughness:0.85});
+      ground=new THREE.Mesh(g,m); ground.rotation.x=-Math.PI/2; ground.receiveShadow=true; scene.add(ground);
+      // glossy lane (simple texture alt): a faint stripe
+      const lane=new THREE.Mesh(new THREE.PlaneGeometry(3,120), new THREE.MeshBasicMaterial({color:0x1f2533}));
+      lane.rotation.x=-Math.PI/2; lane.position.y=.02; scene.add(lane);
+    }
+
+    // ——— Rigs ———
+    function clearRig(){ rigs.splice(0); const kill=[]; scene.traverse(o=>{ if(o.userData && o.userData.stand){ kill.push(o) } }); kill.forEach(o=>scene.remove(o)); }
+
+    function buildRig(mode){
+      clearRig();
+      if(mode==='ARC_24'){ STATE.COUNT=24; addArc(24); }
+      else if(mode==='LINEAR_24'){ STATE.COUNT=24; addLine(24); }
+      else { STATE.COUNT=32; addRing(32); }
+      scrub.max = String(STATE.COUNT-1); scrub.value = '0'; current = 0; STATE.phase = 0; bump();
+    }
+
+    function addArc(n){ const a0=-Math.PI*.42,a1=Math.PI*.42; for(let i=0;i<n;i++){ const t=i/(n-1),ang=a0+(a1-a0)*t; placeCam(i, Math.sin(ang)*STATE.RADIUS, 3.4, Math.cos(ang)*STATE.RADIUS); } }
+    function addRing(n){ for(let i=0;i<n;i++){ const ang=(i/n)*Math.PI*2; placeCam(i, Math.sin(ang)*STATE.RADIUS, 3.4, Math.cos(ang)*STATE.RADIUS); } }
+    function addLine(n){ const span=STATE.RADIUS*2, z=STATE.RADIUS*.95; for(let i=0;i<n;i++){ const t=i/(n-1); placeCam(i, -STATE.RADIUS+span*t, 3.4, z); } }
+
+    function placeCam(idx,x,y,z){
+      const cam=new THREE.PerspectiveCamera(55, innerWidth/innerHeight, .5, 220);
+      cam.position.set(x,y,z); cam.lookAt(0,1.6,0);
+      const stand=new THREE.Group(); stand.userData.stand=true;
+      const post=new THREE.Mesh(new THREE.CylinderGeometry(.06,.07,3.3,12), new THREE.MeshLambertMaterial({color:0x0f141b})); post.position.y=1.65; stand.add(post);
+      stand.position.set(x,0,z); stand.lookAt(0,0,0); scene.add(stand);
+      rigs.push({camera:cam, stand});
+    }
+
+    // ——— Subject ———
+    function buildHorse(){
+      const mat=new THREE.MeshStandardMaterial({color:0x121418, roughness:.7, metalness:.05});
+      horse=new THREE.Group();
+      const body=new THREE.Mesh(new THREE.BoxGeometry(4,1.8,1.3),mat); body.position.y=1.8; body.castShadow=true; horse.add(body);
+      const neck=new THREE.Mesh(new THREE.BoxGeometry(1.2,2.2,1),mat); neck.position.set(2.2,2.5,0); neck.rotation.z=.5; neck.castShadow=true; horse.add(neck);
+      const head=new THREE.Mesh(new THREE.BoxGeometry(1.2,1.2,.9),mat); head.position.set(3.2,3.8,0); head.rotation.z=.2; head.castShadow=true; horse.add(head);
+      const ear=new THREE.Mesh(new THREE.ConeGeometry(.15,.4,5),mat); ear.position.set(3.5,4.5,.3); ear.castShadow=true; horse.add(ear); const ear2=ear.clone(); ear2.position.z=-.3; horse.add(ear2);
+      const legG=new THREE.CylinderGeometry(.15,.12,2,10); horse.legs=[]; const legs=[{x:1.5,z:.5,p:0},{x:1.5,z:-.5,p:Math.PI},{x:-1.3,z:.5,p:Math.PI*.6},{x:-1.3,z:-.5,p:Math.PI*1.6}];
+      legs.forEach(L=>{const l=new THREE.Mesh(legG,mat); l.position.set(L.x,1,L.z); l.userData={bx:L.x,bz:L.z,p:L.p}; l.castShadow=true; horse.add(l); horse.legs.push(l)});
+      const tail=new THREE.Mesh(new THREE.CylinderGeometry(.1,.05,1.5,8),mat); tail.position.set(-2.5,2,0); tail.rotation.z=-.8; tail.castShadow=true; horse.add(tail);
+      const torso=new THREE.Mesh(new THREE.BoxGeometry(.8,1.8,.8),mat); torso.position.set(-.3,3.5,0); torso.castShadow=true; horse.add(torso);
+      const headR=new THREE.Mesh(new THREE.SphereGeometry(.4,16,12),mat); headR.position.set(-.3,4.7,0); headR.castShadow=true; horse.add(headR);
+      horse.position.set(-20,0,0); scene.add(horse);
+    }
+
+    // ——— Frame UI sync ———
+    function setActive(){
+      document.getElementById('cam-readout').textContent = `CAM ${String(current+1).padStart(2,'0')}`;
+    }
+
+    // ——— Motion & Animation ———
+    function updateHorse(phase){
+      const stride = phase*Math.PI*2; const k = (CONFIG.motion==='STILL')?0:1; const move = CONFIG.motion==='RUN_TRACK' ? (-20+phase*40) : 0;
+      horse.legs.forEach(l=>{const q=stride+l.userData.p; const lift=Math.max(0,Math.sin(q))*1.35*k; l.position.y=1+lift; l.rotation.z=Math.sin(q)*.3*k; l.position.x=l.userData.bx+Math.cos(q)*.5*k;});
+      horse.children[0].position.y=1.8+Math.sin(stride)*.24*k; horse.children[0].rotation.z=Math.sin(stride)*.1*k; horse.children[0].rotation.x=Math.cos(stride*2)*.05*k; horse.position.x=move;
+    }
+
+    // ——— Loop ———
+    let last=0; function tick(t){ requestAnimationFrame(tick); const dt=(t-last)/1000||0; last=t;
+      if(playing){ STATE.phase += dt*.35*CONFIG.speed; current = Math.floor( STATE.phase * STATE.COUNT ) % STATE.COUNT; scrub.value = String(current); }
+      const phase=current/STATE.COUNT; updateHorse(phase); setActive(); applyExposure();
+      const cam = rigs[current]?.camera || rigs[0].camera; renderer.render(scene, cam);
+    }
+
+    // ——— UI ———
+    function bindUI(){
+      playBtn.addEventListener('click',()=>{ playing=!playing; playBtn.textContent = playing?'Pause':'Play'; playBtn.classList.toggle('primary', playing); bump(); });
+      scrub.addEventListener('input',()=>{ current = parseInt(scrub.value,10)||0; STATE.phase = current/STATE.COUNT; playing=false; playBtn.textContent='Play'; playBtn.classList.remove('primary'); bump(8); });
+      rigSel.addEventListener('change',()=>{ CONFIG.rig=rigSel.value; buildRig(CONFIG.rig); toast(`Rig: ${rigSel.options[rigSel.selectedIndex].text}`); });
+      motSel.addEventListener('change',()=>{ CONFIG.motion=motSel.value; toast(`Motion: ${motSel.options[motSel.selectedIndex].text}`); });
+      expRange.addEventListener('input',()=>{ CONFIG.exposure = parseFloat(expRange.value); applyExposure(); });
+      addEventListener('resize', onResize);
+      // Swipe scrub (with inertia-lite)
+      let down=false,lastX=0,acc=0; stage.addEventListener('pointerdown',e=>{down=true;lastX=e.clientX;acc=0});
+      stage.addEventListener('pointermove',e=>{ if(!down) return; const dx=e.clientX-lastX; if(Math.abs(dx)>6){ const step = dx>0?1:-1; jump(current+step); lastX=e.clientX; acc=.7*acc + .3*step; } });
+      addEventListener('pointerup',()=>{down=false; // tiny inertia burst
+        const shots = Math.min(6, Math.max(-6, Math.round(acc*4))); if(shots!==0){ let i=0; const id=setInterval(()=>{ jump(current + (shots>0?1:-1)); i++; if(i>=Math.abs(shots)) clearInterval(id); }, 28); }
+      });
+    }
+
+    function jump(i){ current = ( (i%STATE.COUNT)+STATE.COUNT )%STATE.COUNT; scrub.value=String(current); STATE.phase=current/STATE.COUNT; setActive(); bump(5); }
+
+    function onResize(){ renderer.setSize(innerWidth,innerHeight); rigs.forEach(r=>{ r.camera.aspect=innerWidth/innerHeight; r.camera.updateProjectionMatrix(); }); }
+
+    function toast(msg){ const host=document.getElementById('toast'); const el=document.createElement('div'); el.className='toast'; el.textContent=msg; host.appendChild(el); setTimeout(()=>{ el.style.opacity='.0'; el.style.transform='translateY(-6px)'; setTimeout(()=>host.removeChild(el),300); }, 1200); }
+
+    // Tests — quick smoke
+    function runTests(){ const results=[]; const ok=(name,cond)=>results.push(`${cond?'✅':'❌'} ${name}`);
+      ok('THREE loaded', typeof THREE.Scene==='function');
+      ok('Scene booted', !!scene && !!renderer);
+      ok('Rig placed', rigs.length===STATE.COUNT);
+      ok('Scrub bound', parseInt(scrub.max,10)+1===STATE.COUNT);
+      ok('RUN_IN_PLACE x≈0', (CONFIG.motion='RUN_IN_PLACE', updateHorse(.3), Math.abs(horse.position.x)<.01));
+      ok('RUN moves x', (CONFIG.motion='RUN_TRACK', updateHorse(.7), Math.abs(horse.position.x)>10));
+      alert(`Tests ${results.filter(r=>r.startsWith('✅')).length}/${results.length}\n\n`+results.join('\n'));
+    }
+    // Expose tests via dev console
+    window.__btine_tests__ = runTests;
+
+    boot();
+  })();
+
+  function fatal(msg){ const d=document.createElement('div'); d.style.cssText='position:fixed;inset:auto 1rem 1rem 1rem;background:rgba(18,18,20,.95);color:#fff;border:1px solid #2a2a2f;border-radius:12px;padding:12px 14px;z-index:9999;box-shadow:0 10px 30px rgba(0,0,0,.5)'; d.innerHTML=`<b>Simulation disabled</b><br><small>${msg}</small>`; document.body.appendChild(d); }
+  </script>
+</body>
+</html>

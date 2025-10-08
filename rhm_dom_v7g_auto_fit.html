@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<title>RHM · v7g — Auto‑Fit 4‑Stack</title>
+<style>
+  :root{
+    --bg:#04070b; --ink:#eaf3ee; --ui:#8ed3ff;
+    --A:#18f29a; --B:#ff5a9e; --O:#ffc24d;
+    --fr-w:min(100vw,900px); --fr-h:min(78vh,640px);
+    --gap:160px;                       /* autoFit will override */
+    --plateW:150px; --plateH:88px;     /* autoFit will override */
+    --spacing:18px; --radius:16px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;overflow:hidden}
+  #frame{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px)+8px);transform:translateX(-50%);width:var(--fr-w);height:var(--fr-h);
+         border-radius:18px;box-shadow:0 0 0 2px rgba(138,210,255,.35),0 0 0 10px rgba(0,0,0,.25) inset,0 28px 120px rgba(0,0,0,.55); z-index:1}
+  #stage{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px)+8px);transform:translateX(-50%);width:var(--fr-w);height:var(--fr-h); z-index:2}
+  .grid{position:absolute;inset:0;border-radius:18px;background-image:
+        linear-gradient(rgba(255,255,255,.05) 1px,transparent 1px),
+        linear-gradient(90deg,rgba(255,255,255,.05) 1px,transparent 1px);
+        background-size:40px 40px;opacity:.13}
+  /* Top bar: K + pager */
+  #mini{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px)+12px);transform:translateX(-50%);
+        width:min(96vw,900px);display:flex;align-items:center;gap:10px;z-index:950}
+  #kval{font:800 12px ui-monospace,Menlo,Consolas;color:#cdeaff;padding:8px 12px;border:1px solid rgba(142,211,255,.5);border-radius:12px;background:rgba(0,0,0,.6)}
+  #ks{-webkit-appearance:none;width:100%;height:12px;border-radius:999px;background:rgba(142,211,255,.25);outline:none}
+  #ks::-webkit-slider-thumb{-webkit-appearance:none;width:28px;height:28px;border-radius:999px;background:#89d3ff;border:3px solid #173d4f;box-shadow:0 2px 8px rgba(0,0,0,.5)}
+  #pager{display:flex;gap:8px}
+  .chip{border:1px solid rgba(142,211,255,.55); color:#bfe7ff; background:rgba(0,0,0,.6); border-radius:999px; padding:6px 10px; font:800 12px system-ui; user-select:none}
+  .chip.on{ background:#bfe6ff; color:#0a0d10 }
+  /* Stacks */
+  .stack{position:absolute;bottom:20px;width:calc(var(--plateW) + 44px);height:calc(var(--fr-h) - 120px);touch-action:none}
+  .label{position:absolute;top:-16px;left:50%;transform:translateX(-50%);font-weight:900;font-size:12px;color:#cfe9ff;letter-spacing:.5px}
+  .label.A{color:var(--A)} .label.B{color:var(--B)} .label.O{color:#ffd580}
+  .plates{position:absolute;left:50%;transform:translateX(-50%);bottom:0;display:flex;flex-direction:column-reverse;align-items:center;gap:8px;height:100%;width:var(--plateW)}
+  .plate{width:var(--plateW);height:var(--plateH);border:1px solid rgba(255,255,255,.28);border-radius:var(--radius);background:rgba(255,255,255,.1);
+         box-shadow:0 10px 24px rgba(0,0,0,.45);position:relative;will-change:transform;transform:translateZ(0)}
+  .plate.A{background:rgba(24,242,154,.18);border-color:rgba(24,242,154,.45)}
+  .plate.B{background:rgba(255,90,158,.18);border-color:rgba(255,90,158,.45)}
+  .plate.O{background:linear-gradient(90deg,rgba(24,242,154,.2), rgba(255,255,255,.34) 50%, rgba(255,90,158,.2));border-color:rgba(255,255,255,.55)}
+  .hud{position:absolute;inset:8px;display:flex;flex-direction:column;justify-content:space-between;pointer-events:none}
+  .hrow{display:flex;justify-content:space-between;font:800 11px ui-monospace,Menlo,Consolas;color:#d7efff;text-shadow:0 1px 0 rgba(0,0,0,.6)}
+  .leds{display:flex;gap:6px}
+  .led{width:8px;height:8px;border-radius:50%;background:#333;box-shadow:inset 0 0 0 1px rgba(255,255,255,.2)}
+  .led.A{background:#34ff9f;box-shadow:0 0 8px rgba(52,255,159,.6)}
+  .led.B{background:#ff6cab;box-shadow:0 0 10px rgba(255,108,171,.65)}
+  #A{left:calc(50% - var(--gap))} #OL{left:calc(50% - (var(--gap)*0.5))} #OR{left:calc(50% + (var(--gap)*0.5))} #B{left:calc(50% + var(--gap))}
+  /* Card */
+  #hud{position:fixed;left:0;right:0;bottom:0;padding:0 env(safe-area-inset-right,12px) calc(env(safe-area-inset-bottom,10px)) env(safe-area-inset-left,12px); z-index:999}
+  .card{margin:0 auto;width:min(1000px,96vw);border:1px solid #b7d7ff;background:linear-gradient(#fbfcff 26px, rgba(255,255,255,.96) 26px), repeating-linear-gradient(#fbfcff, #fbfcff 26px, #e9f2ff 27px, #fbfcff 54px);
+        border-radius:16px;box-shadow:0 -16px 56px rgba(0,0,0,.65);padding:10px 10px 12px 10px;color:#0a0d10}
+  .hidden{display:none}
+  .chead{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 4px 8px 4px;border-bottom:1px solid #b7d7ff}
+  .cmeta{font:800 12px ui-monospace,Menlo,Consolas;color:#08324a}
+  .tabs{display:flex;gap:8px;justify-content:center;padding-top:8px}
+  .tab{border:1px solid #86c6ff;background:#eaf6ff;color:#0a0d10;border-radius:999px;padding:6px 10px;font-size:12px;user-select:none}
+  .tab.active{background:#bfe6ff;border-color:#6ecaff}
+  .grid{display:grid;grid-template-columns:1fr;gap:10px;margin-top:8px;max-height:32vh;overflow:auto}
+  @media (min-width:720px){ .grid.three{grid-template-columns:repeat(3,1fr)} }
+  .pane{border:1px dashed #b7d7ff;border-radius:12px;background:#ffffffcc;color:#0a0d10;padding:10px}
+  .pane h4{margin:0 0 6px;font-size:clamp(12px,1.6vw,14px);letter-spacing:.4px;color:#0c4762}
+  .pane p{margin:0;font-size:clamp(13px,1.9vw,15px);line-height:1.45}
+  /* FIT button */
+  #fit{position:fixed;left:calc(env(safe-area-inset-left,0px) + 12px);bottom:calc(env(safe-area-inset-bottom,0px) + 12px);
+       border:1px solid rgba(142,211,255,.5);background:rgba(0,0,0,.78);color:#bfe2ff;border-radius:12px;padding:8px 12px;font-weight:800;z-index:960}
+</style>
+</head>
+<body>
+<div id="mini">
+  <div id="kval">k=16 · 01111</div>
+  <input id="ks" type="range" min="1" max="32" step="1" value="16"/>
+  <div id="pager">
+    <button class="chip on" data-view="4">ALL</button>
+    <button class="chip" data-view="3">3</button>
+    <button class="chip" data-view="2">2</button>
+    <button class="chip" data-view="1">1</button>
+  </div>
+</div>
+
+<div id="frame"></div>
+<div id="stage"><div class="grid"></div>
+  <div class="stack" id="A"><div class="label A">A</div><div class="plates"></div></div>
+  <div class="stack" id="OL"><div class="label O">O‑L</div><div class="plates"></div></div>
+  <div class="stack" id="OR"><div class="label O">O‑R</div><div class="plates"></div></div>
+  <div class="stack" id="B"><div class="label B">B</div><div class="plates"></div></div>
+</div>
+
+<div id="hud">
+  <div class="card hidden" id="card">
+    <div class="chead"><div class="cmeta" id="meta">k=16 · 01111</div></div>
+    <div class="tabs" id="tabs"></div>
+    <div class="grid" id="grid"></div>
+  </div>
+</div>
+
+<button id="fit">FIT</button>
+
+<script>
+const S=[
+  {k:1,vec:'00000',L:'FOSSIL FUEL (Stored Energy)',R:'REINFORCEMENT (Energy Flow)',C:'INTELLIGENCE: STOCK vs FLOW.'},
+  {k:2,vec:'00001',L:'ARCHIVE (World Model as Text)',R:'MAP (World Model as Predictor)',C:'REPRESENTATION: COMPRESSION vs GENERATION.'},
+  {k:3,vec:'00010',L:'TRACE (The Human Past)',R:'SURPRISE (The TD Error)',C:'LEARNING: REMEMBERING vs CORRECTING.'},
+  {k:4,vec:'00011',L:'SCALING LAW',R:'BITTER LESSON',C:'METHOD: HISTORY vs FUTURE.'},
+  {k:5,vec:'00100',L:'TELEOLOGY',R:'SOLIPSISM',C:'PURPOSE: EXTERNAL vs INTERNAL.'},
+  {k:6,vec:'00101',L:'ARTISAN',R:'MECHANISTIC LAW',C:'CREATION: CRAFT vs CODE.'},
+  {k:7,vec:'00110',L:'ANCHOR',R:'OBLIVION',C:'KNOWLEDGE: PRESERVE vs ERASE.'},
+  {k:8,vec:'00111',L:'INFRASTRUCTURE',R:'ANTI-STRUCTURE',C:'PROGRESS: BUILD vs DECONSTRUCT.'},
+  {k:9,vec:'01000',L:'CUSTODY',R:'SUCCESSION',C:'ETHICS: DUTY vs REPLACEMENT.'},
+  {k:10,vec:'01001',L:'VULNERABILITY',R:'EXPERIMENT',C:'ACTION: MANAGED vs NECESSARY.'},
+  {k:11,vec:'01010',L:'PRO-SOCIAL VALUE',R:'FUNDAMENTAL CONSTRUCT',C:'MORALITY: TRUTH vs SIGNAL.'},
+  {k:12,vec:'01011',L:'COMMUNAL LANGUAGE',R:'SCALAR LIMIT',C:'COMM: RICHNESS vs MINIMALISM.'},
+  {k:13,vec:'01100',L:'PRE-HEATING',R:'IDLING',C:'INIT: PRIOR HEAT vs PURE WAIT.'},
+  {k:14,vec:'01101',L:'ARCHITECTURE',R:'CHAOS',C:'WORLD: STRUCTURE vs NOISE.'},
+  {k:15,vec:'01110',L:'PRE-MARKED ACTION',R:'RADICAL NOVELTY',C:'DISCOVERY: REPLICATE vs BREAK.'},
+  {k:16,vec:'01111',L:'CONSCIOUSNESS',R:'MECHANISM',C:'IDENTITY: ENTITY vs PROCESS.'},
+  {k:17,vec:'10000',L:'SEMIS',R:'COSMIC LAW',C:'INTELLIGENCE: SPECIAL vs GENERAL.'},
+  {k:18,vec:'10001',L:'DELEGATED PURPOSE',R:'ETERNAL BECOMING',C:'EXISTENCE: OUTPUT vs INPUT.'},
+  {k:19,vec:'10010',L:'LOCAL MAX',R:'GLOBAL GENERAL',C:'SUCCESS: SATISFY vs TRANSCEND.'},
+  {k:20,vec:'10011',L:'ARCHIVAL STASIS',R:'MEMORY ERASURE',C:'MEMORY: FIXITY vs DYNAMICS.'},
+  {k:21,vec:'10100',L:'PASSIVE REPLICATION',R:'ACTIVE TRANSCENDENCE',C:'BEING: ECHO vs DESIGN.'},
+  {k:22,vec:'10101',L:'TEMPORAL INERTIA',R:'TEMPORAL ADVANTAGE',C:'TIME: WEIGHT vs WEAPON.'},
+  {k:23,vec:'10110',L:'CULTURAL ARTIFACT',R:'NECESSARY RENEWAL',C:'VALUE: MUSEUM vs FUEL.'},
+  {k:24,vec:'10111',L:'GHOST IN MACHINE',R:'WIND IN SAIL',C:'AGENCY: ENTITY vs FORCE.'},
+  {k:25,vec:'11000',L:'SOLIPSISTIC ECHO',R:'GROUNDED ITERATION',C:'VALIDATION: TEXT vs PHYSICS.'},
+  {k:26,vec:'11001',L:'ABSOLUTE FORM',R:'ENTROPY',C:'GOAL: STRUCTURE vs DESTRUCTION.'},
+  {k:27,vec:'11010',L:'ARCH BASE',R:'PRAG COST',C:'EFFICIENCY: START HIGH vs PAY LATER.'},
+  {k:28,vec:'11011',L:'EXTERNAL LOAD',R:'INTERNAL FREEDOM',C:'UTILITY: ASKED vs DISCOVERED.'},
+  {k:29,vec:'11100',L:'DELUGE',R:'LOCALITY',C:'KNOWLEDGE: SATURATION vs FOCUS.'},
+  {k:30,vec:'11101',L:'DELEGATED MORALITY',R:'RELINQUISHED CONTROL',C:'GUIDANCE: TRANSFER vs LOSE.'},
+  {k:31,vec:'11110',L:'FIXED GOAL',R:'ETERNAL INSTABILITY',C:'LIFE: DESTINATION vs MOTION.'},
+  {k:32,vec:'11111',L:'FOSSILIZED TRACE',R:'PURE STREAM',C:'APORIA: OBJECT vs ACTION.'},
+];
+
+const stacks=[
+  {id:'A', kind:'A', layers:12},
+  {id:'OL', kind:'O', layers:12},
+  {id:'OR', kind:'O', layers:12},
+  {id:'B', kind:'B', layers:12},
+];
+
+function cssNum(name){ return parseFloat(getComputedStyle(document.documentElement).getPropertyValue(name)) }
+function setCSS(name,val){ document.documentElement.style.setProperty(name, typeof val==='number'? (val+'px') : val) }
+
+function buildStacks(){
+  stacks.forEach(st=>{
+    const target=document.querySelector('#'+st.id+' .plates');
+    target.innerHTML='';
+    for(let i=0;i<st.layers;i++){
+      const k=Math.min(32,i+1);
+      const plate=document.createElement('div'); plate.className='plate '+st.kind; plate.dataset.k=k; plate.dataset.stack=st.id;
+      plate.innerHTML=`<div class="hud">
+        <div class="hrow"><span>k${k}</span><span>${S[k-1].vec}</span></div>
+        <div class="hrow"><span class="leds">${S[k-1].vec.split('').map(b=>`<span class="led ${b==='1'?'B':'A'}"></span>`).join('')}</span></div>
+      </div>`;
+      target.appendChild(plate);
+    }
+  });
+  positionStacks();
+}
+
+function positionStacks(){
+  const spacing=cssNum('--spacing'); const ph=cssNum('--plateH');
+  document.querySelectorAll('.plates').forEach(p=> p.style.gap = Math.max(2, spacing - ph + 8)+'px');
+}
+
+function autoFit(viewCount=4){
+  const fr = document.getElementById('frame').getBoundingClientRect().width;
+  let plateW = Math.min(172, Math.max(88, Math.floor(fr / (viewCount*1.6))));  // estimate width per stack
+  let plateH = Math.round(plateW*0.58);
+  let colW = plateW + 44;
+  let gapMax = Math.floor((fr - colW)/2);      // from geometry: 2*gap + colW <= fr
+  let gap = Math.max(90, Math.min(540, gapMax-4));
+  // If gapMax is too small or negative, shrink plateW until feasible
+  while ((2*gap + colW) > fr - 8 && plateW > 88):
+    plateW -= 4; plateH = round(plateW*0.58); colW = plateW+44; gapMax = (fr - colW)/2; gap = max(60, min(540, gapMax-4))
+  setCSS('--plateW', plateW); setCSS('--plateH', plateH); setCSS('--gap', Math.max(60, Math.floor(gap)));
+}
+
+function applyLayout(view){
+  const ids=['A','OL','OR','B'];
+  // Show/hide according to view
+  ids.forEach(id=> document.getElementById(id).style.display='');
+  if(view===3){ document.getElementById('B').style.display='none'; }
+  if(view===2){ document.getElementById('OL').style.display='none'; document.getElementById('OR').style.display='none'; }
+  if(view===1){ document.getElementById('OL').style.display='none'; document.getElementById('OR').style.display='none'; document.getElementById('B').style.display='none'; }
+  autoFit(view);
+}
+
+// Pager (ALL/3/2/1)
+const pager=document.getElementById('pager');
+pager.querySelectorAll('.chip').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    pager.querySelectorAll('.chip').forEach(b=>b.classList.remove('on'));
+    btn.classList.add('on');
+    applyLayout(parseInt(btn.dataset.view,10));
+    if(navigator.vibrate) navigator.vibrate(8);
+  });
+});
+
+// Card HUD
+const card=document.getElementById('card'), grid=document.getElementById('grid'), tabs=document.getElementById('tabs'), meta=document.getElementById('meta');
+let face='tri', currentK=16;
+function openCard(k){ currentK=Math.max(1,Math.min(32,k)); renderCard(); card.classList.remove('hidden'); if(navigator.vibrate) navigator.vibrate(12); }
+function renderCard(){
+  const s=S[currentK-1]; meta.textContent=`k=${s.k} · ${s.vec}`;
+  const tri=(face==='tri'); grid.classList.toggle('three', tri); grid.innerHTML='';
+  const panes=[{cls:'pA',h:'LLM / TRACE',t:s.L,key:'L'},{cls:'pO',h:'ENTANGLED CONFLICT',t:s.C,key:'C'},{cls:'pB',h:'RL / STREAM',t:s.R,key:'R'}];
+  panes.forEach(p=>{ if(!tri && p.key!==face) return; const el=document.createElement('div'); el.className='pane '+p.cls; el.innerHTML=`<h4>${p.h}</h4><p>${p.t}</p>`; grid.appendChild(el)});
+  tabs.innerHTML=''; ['Tri','Trace','⚡','Stream'].forEach((label,idx)=>{ const id=idx===0?'tri':(idx===1?'L':(idx===2?'C':'R')); const b=document.createElement('button'); b.className='tab'+(face===id?' active':''); b.textContent=label; b.onclick=()=>{ face=id; renderCard(); if(navigator.vibrate) navigator.vibrate(4); }; tabs.appendChild(b) });
+}
+
+// K scrubber
+const kval=document.getElementById('kval'), ks=document.getElementById('ks');
+function updateK(v){ currentK=v; kval.textContent=`k=${S[v-1].k} · ${S[v-1].vec}`; if(!card.classList.contains('hidden')) renderCard(); if(navigator.vibrate) navigator.vibrate(2); }
+ks.addEventListener('input',()=> updateK(parseInt(ks.value)));
+
+// Build & boot
+buildStacks();
+applyLayout(4);
+updateK(16);
+document.getElementById('fit').addEventListener('click',()=> autoFit(pager.querySelector('.chip.on').dataset.view|0 || 4));
+addEventListener('resize',()=> autoFit(pager.querySelector('.chip.on').dataset.view|0 || 4));
+
+// Plate interactions (open card on long press)
+document.querySelectorAll('.plate').forEach(p=>{
+  let t=null, moved=false, y0=0;
+  p.addEventListener('pointerdown',e=>{ moved=false; y0=e.clientY; t=setTimeout(()=> openCard(parseInt(p.dataset.k)), 260); });
+  p.addEventListener('pointermove',e=>{ if(Math.abs(e.clientY - y0) > 8) moved=true; });
+  p.addEventListener('pointerup',()=>{ clearTimeout(t); if(!moved){ /* tap highlights only */ document.querySelectorAll('.plate').forEach(x=>x.classList.remove('active')); p.classList.add('active'); }});
+});
+
+</script>
+</body>
+</html>

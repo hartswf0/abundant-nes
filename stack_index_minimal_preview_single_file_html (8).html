@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>VOL‑MEDIA DECKS v12 — Working Grid + Orbit + Tone Packs</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{background:#000;color:#fff;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;overflow:hidden}
+  #canvas{width:100vw;height:100vh;display:block}
+  #hud{position:fixed;inset:0;pointer-events:none;z-index:10}
+  #viewHUD{position:absolute;top:12px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.6);padding:6px 12px;border-radius:10px;font-weight:700;font-size:14px;border:1px solid rgba(255,255,255,.2)}
+  #controls{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);display:flex;gap:8px;pointer-events:auto}
+  button.ctrl{appearance:none;border:1px solid rgba(255,255,255,.25);background:rgba(0,0,0,.6);color:#fff;padding:8px 12px;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer}
+  button.ctrl:active{transform:translateY(1px)}
+  #toast{position:fixed;bottom:10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.85);border:1px solid rgba(255,255,255,.2);padding:6px 10px;border-radius:10px;font-size:12px;color:#fff;z-index:12;display:none}
+  #starter{position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;z-index:20}
+  #starter button{pointer-events:auto}
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+<div id="hud">
+  <div id="viewHUD">FRONT</div>
+  <div id="controls">
+    <button id="btnStart" class="ctrl">▶︎ Start</button>
+    <button id="btnOrbit" class="ctrl">Orbit OFF</button>
+    <button id="btnPackPrev" class="ctrl">◀︎ Pack</button>
+    <button id="btnPackNext" class="ctrl">Pack ▶︎</button>
+  </div>
+</div>
+<div id="toast"></div>
+<script>
+(async function(){
+  // ---- Load THREE (single CDN with fallback)
+  if(!window.THREE){
+    const CDNs=['https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js','https://unpkg.com/three@0.152.2/build/three.min.js'];
+    for(const src of CDNs){
+      try{ await new Promise((res,rej)=>{const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=rej;document.head.appendChild(s)}); if(window.THREE) break; }catch(e){}
+    }
+  }
+
+  // ---- Scene basics
+  const canvas=document.getElementById('canvas');
+  const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
+  renderer.setSize(innerWidth,innerHeight);
+  renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
+  const scene=new THREE.Scene(); scene.background=new THREE.Color(0x000000);
+
+  const camera=new THREE.PerspectiveCamera(60,innerWidth/innerHeight,0.1,3000);
+  camera.position.set(110,60,110);
+  camera.lookAt(0,0,0);
+  addEventListener('resize',()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); });
+
+  // Lights
+  scene.add(new THREE.AmbientLight(0xffffff,0.3));
+  const dir=new THREE.DirectionalLight(0xffffff,1.1); dir.position.set(1,1,1); scene.add(dir);
+  const rim=new THREE.DirectionalLight(0x66ddff,0.6); rim.position.set(-1,1,-0.6); scene.add(rim);
+
+  // HUD helpers
+  const toastEl=document.getElementById('toast');
+  function toast(msg){ toastEl.textContent=msg; toastEl.style.display='block'; clearTimeout(toast._id); toast._id=setTimeout(()=>toastEl.style.display='none',1100); }
+  const viewHUD=document.getElementById('viewHUD');
+
+  // ---- Camera presets & swipe/orbit
+  const VIEWS=[
+    {name:'FRONT',pos:[0,40,140]},
+    {name:'ISO L',pos:[-110,70,110]},
+    {name:'ISO R',pos:[110,70,110]},
+    {name:'TOP',pos:[0,200,0.01]},
+    {name:'SIDE',pos:[0,50,-140]}
+  ];
+  let viewIdx=0; function applyView(){ const v=VIEWS[viewIdx%VIEWS.length]; camera.position.set(...v.pos); camera.lookAt(0,0,0); viewHUD.textContent=v.name; }
+  applyView();
+
+  let orbit=false, theta=0, dist=160; const center=new THREE.Vector3(0,0,0);
+  const btnOrbit=document.getElementById('btnOrbit');
+  function setOrbit(on){ orbit=!!on; btnOrbit.textContent = orbit? 'Orbit ON' : 'Orbit OFF'; }
+  btnOrbit.addEventListener('click',()=>{ setOrbit(!orbit); toast(orbit?'Orbit: ON':'Orbit: OFF'); });
+
+  // Drag to rotate camera (free look)
+  let drag=null; canvas.addEventListener('pointerdown',e=>{ drag={x:e.clientX,y:e.clientY,yaw:Math.atan2(camera.position.z,camera.position.x),pitch:Math.asin((camera.position.y-40)/dist)}; });
+  addEventListener('pointermove',e=>{
+    if(!drag) return; const dx=e.clientX-drag.x; const dy=e.clientY-drag.y; const yaw=drag.yaw - dx*0.005; const pitch=Math.max(-1.2,Math.min(1.2, drag.pitch - dy*0.003));
+    const cx=Math.cos(yaw)*dist, cz=Math.sin(yaw)*dist, cy=40+Math.sin(pitch)*60; camera.position.set(cx,cy,cz); camera.lookAt(center);
+  });
+  addEventListener('pointerup',()=>{ drag=null; });
+
+  // Pinch to zoom (mobile)
+  let pinch=null; addEventListener('touchstart',e=>{ if(e.touches.length===2){ const dx=e.touches[0].clientX-e.touches[1].clientX; const dy=e.touches[0].clientY-e.touches[1].clientY; pinch={d:Math.hypot(dx,dy)}; }},{passive:false});
+  addEventListener('touchmove',e=>{ if(pinch && e.touches.length===2){ const dx=e.touches[0].clientX-e.touches[1].clientX; const dy=e.touches[0].clientY-e.touches[1].clientY; const nd=Math.hypot(dx,dy); const k=nd/(pinch.d||1); pinch.d=nd; dist=Math.max(80,Math.min(420, dist/(k||1))); e.preventDefault(); }},{passive:false});
+  addEventListener('touchend',()=>{ pinch=null; });
+
+  // ---- Build grid of stacks (boxes on a plane)
+  const grid=new THREE.Group(); scene.add(grid);
+  const SIZE=6, GAP=8; const N=5; // 5x5 grid
+  for(let r=0;r<N;r++){
+    for(let c=0;c<N;c++){
+      const mat=new THREE.MeshStandardMaterial({color:0x21ff86,roughness:0.8,metalness:0.2});
+      const box=new THREE.Mesh(new THREE.BoxGeometry(SIZE,1,SIZE),mat);
+      box.userData.phase=(r*N+c)/((N*N));
+      box.position.set((c-(N-1)/2)*GAP*1.4,0,(r-(N-1)/2)*GAP*1.4);
+      grid.add(box);
+    }
+  }
+
+  // ---- Tone packs (visual + audio flavor)
+  const TONE_PACKS=[
+    {name:'TAPE', color:0xffa44d, osc:'sawtooth', mod:0.2},
+    {name:'FM BELLS', color:0x59e0ff, osc:'square', mod:0.6},
+    {name:'GRANULAR', color:0xc47dff, osc:'triangle', mod:0.9},
+    {name:'FORMANT', color:0xff4488, osc:'sine', mod:0.35},
+    {name:'BITDRUM', color:0x00ff88, osc:'square', mod:1.2},
+    {name:'WAVESET', color:0xffffff, osc:'sawtooth', mod:0.5}
+  ];
+  let packIndex=0; function applyPack(i){ const p=TONE_PACKS[(i%TONE_PACKS.length+TONE_PACKS.length)%TONE_PACKS.length]; grid.children.forEach((mesh,idx)=>{ mesh.material.color.set(p.color); }); if(voice){ try{ voice.type=p.osc; }catch{} } toast('Pack: '+p.name); }
+
+  const btnPrev=document.getElementById('btnPackPrev');
+  const btnNext=document.getElementById('btnPackNext');
+  btnPrev.addEventListener('click',()=>{ packIndex=(packIndex-1+TONE_PACKS.length)%TONE_PACKS.length; applyPack(packIndex); });
+  btnNext.addEventListener('click',()=>{ packIndex=(packIndex+1)%TONE_PACKS.length; applyPack(packIndex); });
+
+  // ---- WebAudio (requires user gesture)
+  let AC=null, gain=null, osc=null, voice=null, started=false;
+  async function startAudio(){ if(started) return; const C=window.AudioContext||window.webkitAudioContext; AC=new C(); gain=AC.createGain(); gain.gain.value=0.12; gain.connect(AC.destination); osc=AC.createOscillator(); osc.type=TONE_PACKS[packIndex].osc; voice=osc; osc.frequency.value=220; osc.connect(gain); osc.start(); started=true; toast('Audio started'); }
+
+  // Start button (and any tap) resumes audio
+  const btnStart=document.getElementById('btnStart');
+  async function resumeGesture(){ await startAudio(); if(AC.state==='suspended'){ try{ await AC.resume(); }catch{} } btnStart.textContent='♪ Live'; btnStart.disabled=true; }
+  btnStart.addEventListener('click', resumeGesture);
+  canvas.addEventListener('pointerdown', resumeGesture, {once:true});
+
+  // ---- Animate
+  function animate(){ requestAnimationFrame(animate);
+    if(orbit){ theta+=0.005; camera.position.x=Math.cos(theta)*dist; camera.position.z=Math.sin(theta)*dist; camera.position.y=40+Math.sin(theta*0.6)*20; camera.lookAt(center); }
+    // visual pulsing tied to audio/pack
+    const t=performance.now()/1000; const p=TONE_PACKS[packIndex];
+    grid.children.forEach((mesh)=>{ const ph=mesh.userData.phase; mesh.scale.y=1+Math.sin((t+ph)*2.5)*0.45*(0.5+p.mod); });
+    if(osc && AC){ const base=180+(p.mod*120); osc.frequency.setTargetAtTime(base+Math.sin(t*2.2)*base*0.15, AC.currentTime, 0.02); }
+    renderer.render(scene,camera);
+  }
+  applyPack(packIndex);
+  animate();
+})();
+</script>
+</body>
+</html>

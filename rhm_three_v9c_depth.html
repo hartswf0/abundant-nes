@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<title>RHM · v9c — Depth & Visibility</title>
+<style>
+  :root{
+    --bg0:#00040a; --bg1:#0a1624; --ink:#eaf3ee;
+    --A:#18f29a; --B:#ff5a9e; --O:#ffc24d;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{margin:0;background:radial-gradient(1400px 900px at 50% 72%, var(--bg1) 0%, #07111d 52%, var(--bg0) 100%);
+       color:var(--ink);font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;overflow:hidden}
+  #canvas{position:fixed;inset:0;display:block;z-index:1}
+  #hud{position:fixed;left:50%;top:10px;transform:translateX(-50%);display:flex;align-items:center;gap:10px;z-index:6;width:min(96vw,980px)}
+  #kval{font:900 12px ui-monospace,Menlo,Consolas;color:#cdeaff;padding:8px 12px;border:1px solid rgba(142,211,255,.7);border-radius:12px;background:rgba(0,0,0,.8)}
+  #ks{-webkit-appearance:none;width:100%;height:14px;border-radius:999px;background:rgba(142,211,255,.32);outline:none}
+  #ks::-webkit-slider-thumb{-webkit-appearance:none;width:30px;height:30px;border-radius:999px;background:#89d3ff;border:3px solid #173d4f;box-shadow:0 2px 8px rgba(0,0,0,.65)}
+  #fit{border:1px solid rgba(142,211,255,.7);background:rgba(0,0,0,.85);color:#cfe6ff;border-radius:12px;padding:8px 12px;font:900 12px system-ui}
+  /* Reader */
+  #reader{position:fixed;left:0;right:0;bottom:0;padding:8px 10px calc(env(safe-area-inset-bottom,10px) + 8px) 10px;z-index:8}
+  .card{margin:0 auto;width:min(1100px,96vw);border:1px solid #b7d7ff;background:linear-gradient(#fbfcff 28px, rgba(255,255,255,.98) 28px),repeating-linear-gradient(#fbfcff,#fbfcff 28px,#e9f2ff 29px,#fbfcff 58px);
+        border-radius:16px;box-shadow:0 -18px 64px rgba(0,0,0,.75);padding:12px 12px 14px 12px;color:#0a0d10}
+  .meta{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #b7d7ff;padding-bottom:8px;margin-bottom:10px}
+  .meta .k{font:900 13px ui-monospace,Menlo,Consolas;color:#08324a}
+  .vec{font:900 12px ui-monospace,Menlo,Consolas;color:#0c4762}
+  .grid{display:grid;grid-template-columns:1fr;gap:10px}
+  @media(min-width:880px){ .grid{grid-template-columns:repeat(3,1fr)} }
+  .pane{border:1px dashed #b7d7ff;border-radius:12px;background:#ffffffee;color:#0a0d10;padding:10px}
+  .pane h4{margin:0 0 6px;font:800 13px system-ui;color:#0c4762}
+  .pane p{margin:0;font-size:15px;line-height:1.45}
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+
+<div id="hud">
+  <div id="kval">k=1 · 00000</div>
+  <input id="ks" type="range" min="1" max="32" step="1" value="1"/>
+  <button id="fit">FIT</button>
+</div>
+
+<div id="reader">
+  <div class="card">
+    <div class="meta"><div class="k" id="metaK">k=1 · 00000</div><div class="vec" id="metaV">00000</div></div>
+    <div class="grid">
+      <div class="pane"><h4>⚡ Entangled</h4><p id="ent"></p></div>
+      <div class="pane"><h4>Trace (LLM)</h4><p id="trace"></p></div>
+      <div class="pane"><h4>Stream (RL)</h4><p id="stream"></p></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ------- DATA -------
+const S=[
+  {k:1,vec:'00000',L:'FOSSIL FUEL (Stored Energy)',R:'REINFORCEMENT (Energy Flow)',C:'INTELLIGENCE: STOCK vs FLOW — Reserve vs Current.'},
+  {k:2,vec:'00001',L:'ARCHIVE (World Model as Text)',R:'MAP (World Model as Predictor)',C:'REPRESENTATION: FIXED FORM vs DYNAMIC ERROR.'},
+  {k:3,vec:'00010',L:'TRACE (The Human Past)',R:'SURPRISE (The TD Error)',C:'LEARNING: REMEMBERING vs CORRECTING.'},
+  {k:4,vec:'00011',L:'SCALING LAW (Law of Compression)',R:'BITTER LESSON (Purity of compute/experience)',C:'METHODOLOGY: HISTORY vs FUTURE.'},
+  {k:5,vec:'00100',L:'TELEOLOGY (Delegated Goal)',R:'SOLIPSISM (Self-Generated Truth)',C:'PURPOSE: EXTERNAL vs INTERNAL.'},
+  {k:6,vec:'00101',L:'HUMAN ARTISAN (Fixed Design)',R:'MECHANISTIC LAW (Pure Algorithm)',C:'CREATION: CRAFT vs CODE.'},
+  {k:7,vec:'00110',L:'ANCHOR (Stability/Value)',R:'OBLIVION (Of Past Knowledge)',C:'KNOWLEDGE: PRESERVATION vs ERASURE.'},
+  {k:8,vec:'00111',L:'INFRASTRUCTURE (Scaffolding)',R:'ANTI-STRUCTURE (Entropy)',C:'PROGRESS: BUILDING vs DECONSTRUCTING.'},
+  {k:9,vec:'01000',L:'CUSTODY (Values/Morality)',R:'SUCCESSION (Evolutionary Change)',C:'ETHICS: DUTY vs REPLACEMENT.'},
+  {k:10,vec:'01001',L:'VULNERABILITY (Risk/Corruption)',R:'EXPERIMENT (Unconstrained)',C:'ACTION: MANAGED vs NECESSARY.'},
+  {k:11,vec:'01010',L:'PRO-SOCIAL VALUE (Guide)',R:'FUNDAMENTAL CONSTRUCT (Reward)',C:'MORALITY: TRUTH vs SIGNAL.'},
+  {k:12,vec:'01011',L:'COMMUNAL LANGUAGE (Shared)',R:'SCALAR LIMIT (Compressed)',C:'COMMUNICATION: RICHNESS vs MINIMALISM.'},
+  {k:13,vec:'01100',L:'PRE-HEATING (Start)',R:'IDLING (No Goal)',C:'INIT: PRIOR HEAT vs PURE WAIT.'},
+  {k:14,vec:'01101',L:'ARCHITECTURE (Designed Form)',R:'CHAOS (Unstructured)',C:'WORLD: STRUCTURE vs NOISE.'},
+  {k:15,vec:'01110',L:'PRE-MARKED ACTION (Supervised)',R:'RADICAL NOVELTY (Unsupervised)',C:'DISCOVERY: REPLICATION vs ANARCHY.'},
+  {k:16,vec:'01111',L:'CONSCIOUSNESS (Fixed Mind)',R:'MECHANISM (Dynamic Process)',C:'IDENTITY: ENTITY vs PROCESS.'},
+  {k:17,vec:'10000',L:'SEMI-CONDUCTORS (Human Feat)',R:'COSMIC LAW (Universal)',C:'INTELLIGENCE: SPECIAL vs GENERAL.'},
+  {k:18,vec:'10001',L:'DELEGATED PURPOSE (Human Goal)',R:'ETERNAL BECOMING (Change)',C:'EXISTENCE: OUTPUT vs INPUT.'},
+  {k:19,vec:'10010',L:'LOCAL MAXIMUM (Attained)',R:'GLOBAL GENERALIZATION (Unbound)',C:'SUCCESS: SATISFACTION vs TRANSCENDENCE.'},
+  {k:20,vec:'10011',L:'ARCHIVAL STASIS (Fixed Memory)',R:'MEMORY ERASURE (Catastrophic)',C:'MEMORY: FIXITY vs DYNAMICS.'},
+  {k:21,vec:'10100',L:'PASSIVE REPLICATION (LLM)',R:'ACTIVE TRANSCENDENCE (RL)',C:'BEING: ECHOING vs DESIGNING.'},
+  {k:22,vec:'10101',L:'TEMPORAL INERTIA (History Drag)',R:'TEMPORAL ADVANTAGE (Speed)',C:'TIME: WEIGHT vs WEAPON.'},
+  {k:23,vec:'10110',L:'CULTURAL ARTIFACT (Fixed Value)',R:'NECESSARY RENEWAL (Reject Past)',C:'VALUE: MUSEUM vs FUEL.'},
+  {k:24,vec:'10111',L:'GHOST IN THE MACHINE (Fixed Mind)',R:'WIND IN THE SAIL (Action)',C:'AGENCY: ENTITY vs FORCE.'},
+  {k:25,vec:'11000',L:'SOLIPSISTIC ECHO (Text)',R:'GROUNDED ITERATION (Physics)',C:'VALIDATION: COHERENT vs CONSEQUENTIAL.'},
+  {k:26,vec:'11001',L:'ABSOLUTE FORM (Design)',R:'ENTROPY (Anti-Form)',C:'GOAL: STRUCTURE vs DESTRUCTION.'},
+  {k:27,vec:'11010',L:'ARCHITECTURAL BASE (Foundation)',R:'PRAGMATIC COST (Novelty Price)',C:'EFFICIENCY: START HIGH vs PAY LATER.'},
+  {k:28,vec:'11011',L:'EXTERNAL LOAD (Utility)',R:'INTERNAL FREEDOM (Self-Define)',C:'UTILITY: ASKED vs DISCOVERED.'},
+  {k:29,vec:'11100',L:'DELUGE OF INFORMATION (Big)',R:'LOCALITY (Small Focus)',C:'KNOWLEDGE: SATURATION vs FOCUS.'},
+  {k:30,vec:'11101',L:'DELEGATED MORALITY (Guide)',R:'RELINQUISHED CONTROL (Growth)',C:'GUIDANCE: TRANSFER vs LET GO.'},
+  {k:31,vec:'11110',L:'FIXED GOAL (End)',R:'ETERNAL INSTABILITY (No End)',C:'LIFE: DESTINATION vs MOTION.'},
+  {k:32,vec:'11111',L:'FOSSILIZED TRACE (Archive)',R:'PURE STREAM (Map)',C:'APORIA: WORD AS OBJECT vs ACTION.'},
+];
+
+const kval=document.getElementById('kval'), ks=document.getElementById('ks');
+const metaK=document.getElementById('metaK'), metaV=document.getElementById('metaV');
+const ent=document.getElementById('ent'), trace=document.getElementById('trace'), stream=document.getElementById('stream');
+function updateReader(k){ const s=S[k-1]; kval.textContent=`k=${s.k} · ${s.vec}`; metaK.textContent=`k=${s.k} · ${s.vec}`; metaV.textContent=s.vec; ent.textContent=s.C; trace.textContent=s.L; stream.textContent=s.R; }
+
+(async function boot(){
+  // Load Three.js
+  async function load(src){ return new Promise((res,rej)=>{const s=document.createElement('script'); s.src=src; s.onload=res; s.onerror=rej; document.head.appendChild(s)})}
+  if(!window.THREE){ await load('https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js'); }
+
+  const scene=new THREE.Scene();
+  scene.fog = new THREE.FogExp2(0x0a1422, 0.0045);
+
+  const camera=new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 0.1, 5000);
+  camera.position.set(0, 110, 260);
+  camera.lookAt(0,60,0);
+
+  const renderer=new THREE.WebGLRenderer({canvas:document.getElementById('canvas'), antialias:true, alpha:true});
+  renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
+  renderer.setSize(innerWidth,innerHeight);
+  renderer.shadowMap.enabled=true;
+  renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+
+  // Floor grid + receiving shadow
+  const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(2000,2000),
+    new THREE.MeshStandardMaterial({color:0x0b1522, roughness:1, metalness:0})
+  );
+  floor.rotation.x = -Math.PI/2; floor.position.y = -2; floor.receiveShadow = true; scene.add(floor);
+  const grid = new THREE.GridHelper(1800, 36, 0x1b3a5a, 0x0e2438);
+  grid.position.y = -1.99; grid.material.opacity = 0.35; grid.material.transparent = true; scene.add(grid);
+
+  // Lights with shadows
+  const hemi=new THREE.HemisphereLight(0x7eb6ff, 0x0a1220, 0.35); scene.add(hemi);
+  const key=new THREE.SpotLight(0x9ad7ff, 1.4, 0, Math.PI/4, 0.4, 1.2);
+  key.position.set(220,260,200); key.castShadow=true;
+  key.shadow.mapSize.width=2048; key.shadow.mapSize.height=2048; key.shadow.radius=6;
+  scene.add(key);
+  const rim=new THREE.DirectionalLight(0xff88cc, 0.9); rim.position.set(-260,200,-220); rim.castShadow=true; scene.add(rim);
+
+  // Slab geometry (real thickness)
+  const W=38, H=24, T=1.6;
+  const geo=new THREE.BoxGeometry(W, T, H);
+  function mat(col,op){ return new THREE.MeshStandardMaterial({color:col, transparent:true, opacity:op, roughness:.55, metalness:.1, envMapIntensity:.4}) }
+  function makeSlab(col,op){
+    const m=new THREE.Mesh(geo, mat(col,op));
+    m.castShadow=true; m.receiveShadow=false;
+    return m;
+  }
+
+  // Stacks with z-parallax (OL and B slightly back, OR and A forward)
+  const stacks=[
+    {id:'A', col:0x18f29a, x:-160, z: 18, group:new THREE.Group(), plates:[]},
+    {id:'OL',col:0xffc24d, x: -60, z:-14, group:new THREE.Group(), plates:[]},
+    {id:'OR',col:0xffc24d, x:  60, z: 14, group:new THREE.Group(), plates:[]},
+    {id:'B', col:0xff5a9e, x: 160, z:-18, group:new THREE.Group(), plates:[]},
+  ];
+  const MAX=12, spacing=9;
+  stacks.forEach(st=>{
+    for(let i=0;i<MAX;i++){
+      const slab=makeSlab(st.col, 0.28 + 0.5*(1 - i/MAX));
+      slab.position.set(0, i*spacing, 0);
+      slab.userData.k = Math.min(32, i+1);
+      slab.userData.stack = st.id;
+      st.group.add(slab); st.plates.push(slab);
+    }
+    st.group.position.set(st.x,0,st.z);
+    st.group.rotation.y = (st.id==='A'? -0.06 : st.id==='B'? 0.06 : 0); // slight yaw for depth
+    scene.add(st.group);
+  });
+
+  // Selection halo (torus)
+  const haloGeo = new THREE.TorusGeometry(Math.max(W,H)*0.62, 0.8, 8, 64);
+  const haloMat = new THREE.MeshBasicMaterial({color:0xbfe6ff, transparent:true, opacity:0.75});
+  const halo = new THREE.Mesh(haloGeo, haloMat);
+  halo.rotation.x = -Math.PI/2;
+  halo.visible=false; scene.add(halo);
+
+  // Raycaster
+  const ray=new THREE.Raycaster(); const v2=new THREE.Vector2();
+  function pick(ev){
+    const r=renderer.domElement.getBoundingClientRect();
+    v2.x=((ev.clientX-r.left)/r.width)*2-1; v2.y=-((ev.clientY-r.top)/r.height)*2+1;
+    ray.setFromCamera(v2,camera);
+    return ray.intersectObjects(stacks.flatMap(s=>s.plates),false);
+  }
+
+  function pulse(mesh){ mesh.scale.set(1.06,1.06,1.06); setTimeout(()=> mesh.scale.set(1,1,1),120); }
+
+  // Dolly (ease camera toward target Y)
+  let targetY = 110;
+  function setTargetY(y){ targetY = y; }
+  function lerp(a,b,t){ return a*(1-t)+b*t; }
+
+  renderer.domElement.addEventListener('pointerdown', (e)=>{
+    const hits=pick(e); if(!hits.length) return;
+    const m=hits[0].object;
+    selectK(m.userData.k, m);
+    if(navigator.vibrate) navigator.vibrate(10);
+  });
+
+  function selectK(k, mesh=null){
+    k=Math.max(1,Math.min(32,k));
+    ks.value=k; updateReader(k);
+    stacks.forEach(st=>{ const idx=Math.min(st.plates.length-1, k-1); pulse(st.plates[idx]); });
+    if(mesh){
+      halo.position.set(mesh.parent.position.x, mesh.position.y+0.2, mesh.parent.position.z);
+      halo.visible=true;
+      setTargetY( Math.max(60, mesh.position.y + 70) );
+    } else {
+      halo.visible=false;
+      setTargetY(110);
+    }
+  }
+
+  ks.addEventListener('input', ()=> selectK(parseInt(ks.value,10)));
+
+  // Auto-fit
+  function autoFit(){
+    const Wpx = Math.min(innerWidth, 980);
+    const margin = 30, usable = Wpx - margin*2;
+    const base = Math.max(70, Math.floor(usable/8));
+    stacks[0].group.position.x = -3*base;
+    stacks[1].group.position.x = -1*base;
+    stacks[2].group.position.x =  1*base;
+    stacks[3].group.position.x =  3*base;
+    camera.position.z = Math.max(210, base*6.6);
+  }
+  autoFit();
+  document.getElementById('fit').addEventListener('click', ()=>{ autoFit(); if(navigator.vibrate) navigator.vibrate(8); });
+
+  addEventListener('resize', ()=>{
+    camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth,innerHeight); autoFit();
+  });
+
+  // Views: double‑tap toggles iso/front
+  let tap=0,last=0,view=0;
+  renderer.domElement.addEventListener('pointerdown', (e)=>{
+    const now=performance.now(); tap = (now-last<280)? tap+1 : 1; last=now;
+    if(tap===2){
+      view=(view+1)%2;
+      if(view===0){ camera.position.set(0,110,260); }
+      else{ camera.position.set(130,100,220); }
+      camera.lookAt(0,60,0);
+      tap=0;
+    }
+  }, {capture:true});
+
+  // Animate
+  (function animate(){
+    requestAnimationFrame(animate);
+    // gentle camera dolly
+    camera.position.y = lerp(camera.position.y, targetY, 0.06);
+    renderer.render(scene,camera);
+  })();
+
+  // Boot
+  updateReader(1);
+})();
+</script>
+</body>
+</html>

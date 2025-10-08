@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>BTINE — Western Filmmaking Engine (Cameras & Motion)</title>
+<style>
+  :root{
+    --bg:#0a0a0c; --fg:#f7f5ef; --sub:#b8b1a7; --accent:#ffb703; --cool:#8ecae6; --danger:#ef476f; --ok:#06d6a0; --edge:#1a1a1e;
+    --glass:rgba(12,12,16,.78); --ring:0 0 0 2px rgba(255,183,3,.6) inset, 0 0 .7rem rgba(255,183,3,.35);
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;background:var(--bg);color:var(--fg);font-family:ui-sans-serif,system-ui,Inter,Roboto,Arial,sans-serif;overflow:hidden}
+  #stage{position:fixed;inset:0}
+
+  /* Cinematic matte + vignette */
+  .letterbox::before,.letterbox::after{content:"";position:fixed;left:0;right:0;height:7vh;background:linear-gradient(180deg,rgba(0,0,0,.95),rgba(0,0,0,.68));pointer-events:none;z-index:15}
+  .letterbox::before{top:0}.letterbox::after{bottom:0}
+  #vignette{position:fixed;inset:0;pointer-events:none;z-index:10;background:radial-gradient(120% 120% at 50% 50%, rgba(0,0,0,0) 55%, rgba(0,0,0,.28) 100%)}
+
+  /* HUD */
+  #hud{position:fixed;top:.6rem;left:.6rem;display:flex;gap:.5rem;align-items:center;z-index:20}
+  .pill{background:var(--glass);border:1px solid var(--edge);border-radius:12px;padding:.45rem .7rem;backdrop-filter:blur(6px)}
+  #brand{letter-spacing:.08em;font-weight:800;color:var(--accent)}
+  #cam-info{font-variant-numeric:tabular-nums;font-weight:900}
+
+  /* Dock */
+  #dock{position:fixed;left:50%;transform:translateX(-50%);bottom:.9rem;width:min(96vw,1040px);display:grid;grid-template-columns:1.1fr 1.1fr 1.1fr 1.1fr 1.1fr;gap:.6rem;z-index:20}
+  .btn{background:var(--glass);border:1px solid var(--edge);border-radius:15px;padding:1rem 1.1rem;color:var(--fg);font-weight:800;letter-spacing:.02em;text-align:center}
+  .btn:active{transform:scale(.98)}
+  .primary{background:linear-gradient(180deg,#ffb703,#f29f05);color:#0b0b0b;border-color:#d68e00;text-shadow:0 1px 0 rgba(255,255,255,.2)}
+  .field{display:flex;align-items:center;gap:.6rem;background:var(--glass);border:1px solid var(--edge);border-radius:15px;padding:.65rem .8rem}
+  .field label{font-size:.78rem;color:var(--sub)}
+  select, input[type=range]{flex:1;background:transparent;border:none;color:var(--fg);font-weight:700}
+  input[type=range]{accent-color:var(--accent)}
+
+  /* Scrubber (shot timeline) */
+  #scrub-wrap{position:fixed;left:50%;transform:translateX(-50%);bottom:6.1rem;width:min(96vw,1040px);z-index:20}
+  #scrub{appearance:none;width:100%;height:10px;border-radius:10px;background:#0f1013;border:1px solid #1e1f24}
+  #scrub::-webkit-slider-thumb{appearance:none;width:28px;height:28px;border-radius:14px;background:linear-gradient(180deg,#ffb703,#f2a007);border:2px solid #0b0b0b;box-shadow:var(--ring)}
+
+  /* Director Panel */
+  #director{position:fixed;right:.9rem;top:4.6rem;width:280px;display:flex;flex-direction:column;gap:.5rem;z-index:22}
+  .panel{background:var(--glass);border:1px solid var(--edge);border-radius:14px;padding:.75rem}
+  .row{display:flex;align-items:center;gap:.6rem;margin:.35rem 0}
+  .row label{width:104px;font-size:.78rem;color:var(--sub)}
+  .dial{flex:1}
+  #stick{position:relative;width:180px;height:180px;margin:.3rem auto;border-radius:14px;background:rgba(255,255,255,.04);border:1px solid var(--edge)}
+  #nub{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:32px;height:32px;border-radius:16px;background:linear-gradient(180deg,#ffb703,#f2a007);border:2px solid #0b0b0b;box-shadow:var(--ring)}
+
+  /* Capture bar */
+  #capture{position:fixed;right:.9rem;bottom:9rem;display:flex;flex-direction:column;gap:.4rem;z-index:21}
+  .cap{background:var(--glass);border:1px solid var(--edge);border-radius:12px;padding:.55rem .7rem;font-weight:800}
+
+  /* Toasts */
+  #toast{position:fixed;right:.9rem;bottom:2.2rem;z-index:25}
+  .toast{background:var(--glass);border:1px solid var(--edge);border-radius:12px;padding:.6rem .7rem;margin-top:.4rem;box-shadow:0 12px 30px rgba(0,0,0,.45);font-size:.9rem}
+
+  @media (max-width:680px){ #dock{grid-template-columns:1fr;} #director{position:fixed;right:.6rem;top:auto;bottom:12.2rem;width:min(92vw,520px)} #scrub-wrap{bottom:8.2rem} }
+</style>
+</head>
+<body class="letterbox">
+  <div id="stage" aria-label="3D simulation canvas"></div>
+  <div id="vignette"></div>
+
+  <div id="hud">
+    <div id="brand" class="pill">BTINE · WESTERN ENGINE</div>
+    <div id="cam-info" class="pill">CAM 01 · 35mm · FOV 55°</div>
+  </div>
+
+  <!-- Shot timeline scrubber -->
+  <div id="scrub-wrap"><input id="scrub" type="range" min="0" max="240" step="1" value="0" aria-label="Shot time"/></div>
+
+  <!-- Dock controls -->
+  <div id="dock" role="toolbar" aria-label="controls">
+    <button id="play" class="btn primary" aria-pressed="true">Pause</button>
+    <div class="field"><label>Preset</label>
+      <select id="preset">
+        <option value="SUNSET">Ride Into Sunset</option>
+        <option value="NOON">High Noon Showdown</option>
+        <option value="TWILIGHT">Ghost Town Twilight</option>
+        <option value="STORM">Thunder Mesa</option>
+        <option value="SALOON">Saloon Glow</option>
+        <option value="STUDIO">Plain Studio</option>
+      </select>
+    </div>
+    <div class="field"><label>Rig</label>
+      <select id="rig">
+        <option value="ARC_24">Arc · 24</option>
+        <option value="LINEAR_24">Line · 24</option>
+        <option value="RING_32">Ring · 32</option>
+        <option value="CRANE">Crane Sweep</option>
+        <option value="DRONE">Aerial Flyby</option>
+      </select>
+    </div>
+    <div class="field"><label>Lens</label>
+      <select id="lens">
+        <option value="18">18mm</option>
+        <option value="35" selected>35mm</option>
+        <option value="70">70mm</option>
+        <option value="100">100mm</option>
+      </select>
+    </div>
+    <div class="field"><label>Speed</label>
+      <input id="speed" type="range" min="0.2" max="2.0" step="0.05" value="1" />
+    </div>
+  </div>
+
+  <!-- Director panel (live camera) -->
+  <aside id="director">
+    <div class="panel">
+      <b>Director Pad</b>
+      <div id="stick"><div id="nub"></div></div>
+      <div class="row"><label>Path</label>
+        <select id="path" class="dial">
+          <option value="DOLLY">Dolly (push/pull)</option>
+          <option value="ARC">Arc Orbit</option>
+          <option value="CRANE">Crane (lift)</option>
+          <option value="DRONE">Drone (free)</option>
+          <option value="STEADICAM">Steadicam (handheld)</option>
+        </select>
+      </div>
+      <div class="row"><label>FOV</label><input id="fov" type="range" class="dial" min="24" max="100" step="1" value="55"></div>
+      <div class="row"><label>Dolly Z</label><input id="dolly" type="range" class="dial" min="-20" max="20" step="0.1" value="0"></div>
+      <div class="row"><label>Crane Y</label><input id="crane" type="range" class="dial" min="-10" max="10" step="0.1" value="0"></div>
+      <div class="row"><label>Orbit θ</label><input id="theta" type="range" class="dial" min="-180" max="180" step="1" value="0"></div>
+      <div class="row"><label>Roll</label><input id="roll" type="range" class="dial" min="-30" max="30" step="1" value="0"></div>
+      
+      <div class="row"><label>Record</label>
+        <button id="rec" class="btn" style="padding:.55rem .6rem">● REC</button>
+        <button id="stop" class="btn" style="padding:.55rem .6rem">■ Stop</button>
+      </div>
+      <div class="row"><label>Move</label>
+        <button id="playMove" class="btn" style="padding:.55rem .6rem">▶ Play Move</button>
+        <button id="clearMove" class="btn" style="padding:.55rem .6rem">✕ Clear</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Capture (kept minimal; you can wire ffmpeg later) -->
+  <div id="capture">
+    <button id="cap-gif" class="cap">🖼 Export GIF (main cam)</button>
+  </div>
+
+  <div id="toast"></div>
+
+  <script type="module">
+  // Robust Three import
+  async function loadThree(){
+    const urls=['https://unpkg.com/three@0.155.0/build/three.module.js','https://cdn.jsdelivr.net/npm/three@0.155.0/build/three.module.js','https://esm.run/three@0.155.0'];
+    for(const u of urls){try{return await import(u);}catch(e){}} throw new Error('three.module.js unavailable');
+  }
+
+  (async()=>{
+    let THREE; try{THREE=await loadThree();}catch(e){fatal('THREE failed to load: '+e.message);return;}
+
+    // —— State ——
+    const CONFIG={rig:'ARC_24',preset:'SUNSET',lens:35,speed:1};
+    const STATE={COUNT:24,RADIUS:18,phase:0,time:0,playing:true};
+    let scene,renderer,horse; const rigs=[]; let current=0; let recording=false; const moveClip=[]; let movePlayT=0; let movePlaying=false;
+
+    // DOM
+    const stage=$('#stage'), scrub=$('#scrub');
+    const playBtn=$('#play'), presetSel=$('#preset'), rigSel=$('#rig'), lensSel=$('#lens'), speedRange=$('#speed');
+    const camInfo=$('#cam-info');
+    const stick=$('#stick'), nub=$('#nub');
+    const pathSel=$('#path'), fovRange=$('#fov'), dollyRange=$('#dolly'), craneRange=$('#crane'), thetaRange=$('#theta'), rollRange=$('#roll');
+    const recBtn=$('#rec'), stopBtn=$('#stop'), playMoveBtn=$('#playMove'), clearMoveBtn=$('#clearMove');
+    const capGIF=$('#cap-gif');
+
+    function $(q){return document.querySelector(q)}
+    const bump=(ms=8)=>{ try{ if('vibrate' in navigator) navigator.vibrate(ms);}catch(_){}}
+
+    // —— Boot ——
+    function boot(){
+      scene=new THREE.Scene(); scene.background=new THREE.Color(0x0b0c10); scene.fog=new THREE.Fog(0x0b0c10,70,220);
+      renderer=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true}); renderer.setPixelRatio(Math.min(devicePixelRatio,2)); renderer.setSize(innerWidth,innerHeight); renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap; stage.appendChild(renderer.domElement);
+      addLights(); addGround(); addSky(); addDust(); buildRig(CONFIG.rig); buildHorse(); applyPreset(CONFIG.preset); updateLens(CONFIG.lens);
+      bindUI(); onResize(); requestAnimationFrame(tick); toast('Director controls ready');
+    }
+
+    // —— Lighting / Env ——
+    let key,fill,rim,sunSprite,dustGroup; let wind=0.2;
+    function addLights(){
+      key=new THREE.DirectionalLight(0xffd6a3,1.25); key.position.set(18,24,12); key.castShadow=true; key.shadow.mapSize.set(2048,2048); const s=48; Object.assign(key.shadow.camera,{left:-s,right:s,top:s,bottom:-s,near:2,far:240}); scene.add(key);
+      fill=new THREE.DirectionalLight(0xa7d6ff,.55); fill.position.set(-26,18,-8); scene.add(fill);
+      rim=new THREE.DirectionalLight(0x8cc6ff,.7); rim.position.set(0,16,-28); scene.add(rim);
+      scene.add(new THREE.AmbientLight(0xffffff,.22));
+    }
+    function addSky(){
+      const sky=new THREE.Mesh(new THREE.SphereGeometry(400,32,16), new THREE.MeshBasicMaterial({color:0x0b0c10, side:THREE.BackSide})); sky.userData.sky=true; scene.add(sky);
+      const c=document.createElement('canvas'); c.width=c.height=256; const ctx=c.getContext('2d'); const g=ctx.createRadialGradient(128,128,10,128,128,120); g.addColorStop(0,'#fff6d5'); g.addColorStop(1,'rgba(255,214,120,0)'); ctx.fillStyle=g; ctx.beginPath(); ctx.arc(128,128,120,0,Math.PI*2); ctx.fill(); const t=new THREE.CanvasTexture(c); sunSprite=new THREE.Sprite(new THREE.SpriteMaterial({map:t,transparent:true,depthWrite:false})); sunSprite.scale.set(24,24,1); sunSprite.position.set(-60,40,-160); scene.add(sunSprite);
+    }
+    function addDust(){ dustGroup=new THREE.Group(); for(let i=0;i<500;i++){ const s=new THREE.Sprite(new THREE.SpriteMaterial({color:0xfff3c4, transparent:true, opacity:Math.random()*0.15})); s.position.set((Math.random()-0.5)*140, Math.random()*3+.2, (Math.random()-0.5)*140); const k=Math.random()*0.4+0.1; s.scale.set(k,k,1); dustGroup.add(s);} scene.add(dustGroup); }
+
+    function setSun(azDeg,elDeg){ const az=azDeg*Math.PI/180, el=elDeg*Math.PI/180; const r=160; const x=r*Math.cos(el)*Math.sin(az), y=r*Math.sin(el), z=r*Math.cos(el)*Math.cos(az); key.position.set(x/9,y/6,z/9); sunSprite.position.set(x,y,z); }
+
+    function applyPreset(name){ CONFIG.preset=name; if(name==='SUNSET'){ scene.fog.color.set(0x1b1410); key.color.set(0xffc27a); key.intensity=1.3; fill.color.set(0x6fb5ff); fill.intensity=.4; rim.color.set(0xf2a65a); rim.intensity=.6; setSun(260,12); }
+      else if(name==='NOON'){ scene.fog.color.set(0xa8c7df); key.color.set(0xffffff); key.intensity=1.6; fill.color.set(0xd7ecff); fill.intensity=.35; rim.color.set(0xffffff); rim.intensity=.4; setSun(0,72); }
+      else if(name==='TWILIGHT'){ scene.fog.color.set(0x241b34); key.color.set(0xf3c9ff); key.intensity=.9; fill.color.set(0x96a4ff); fill.intensity=.4; rim.color.set(0xb890ff); rim.intensity=.8; setSun(290,2); }
+      else if(name==='STORM'){ scene.fog.color.set(0x1a2230); key.color.set(0xffffff); key.intensity=.75; fill.color.set(0x9ecbff); fill.intensity=.55; rim.color.set(0x9ecbff); rim.intensity=.9; setSun(330,8); }
+      else if(name==='SALOON'){ scene.fog.color.set(0x3b2a1e); key.color.set(0xffd2a1); key.intensity=1.2; fill.color.set(0x704214); fill.intensity=.35; rim.color.set(0xfff0d4); rim.intensity=.5; setSun(240,8); }
+      else { scene.fog.color.set(0x0b0c10); key.color.set(0xffd6a3); key.intensity=1.25; fill.color.set(0xa7d6ff); fill.intensity=.55; rim.color.set(0x8cc6ff); rim.intensity=.7; setSun(270,18); } }
+
+    // —— Ground ——
+    function addGround(){ const g=new THREE.PlaneGeometry(260,260); const m=new THREE.MeshStandardMaterial({color:0x15171a, roughness:.85, metalness:.1}); const ground=new THREE.Mesh(g,m); ground.rotation.x=-Math.PI/2; ground.receiveShadow=true; scene.add(ground); const lane=new THREE.Mesh(new THREE.PlaneGeometry(3,160), new THREE.MeshBasicMaterial({color:0x252c38})); lane.rotation.x=-Math.PI/2; lane.position.y=.02; scene.add(lane); }
+
+    // —— Rigs & Cameras ——
+    function clearRig(){ rigs.splice(0); const kill=[]; scene.traverse(o=>{ if(o.userData && o.userData.stand){ kill.push(o) } }); kill.forEach(o=>scene.remove(o)); }
+    function buildRig(mode){ clearRig(); if(mode==='ARC_24'){ STATE.COUNT=24; addArc(24);} else if(mode==='LINEAR_24'){ STATE.COUNT=24; addLine(24);} else if(mode==='RING_32'){ STATE.COUNT=32; addRing(32);} else if(mode==='CRANE'){ STATE.COUNT=24; addCrane(24);} else { STATE.COUNT=24; addDrone(24);} scrub.max='240'; updateCamInfo(); }
+    function addArc(n){ const a0=-Math.PI*.42,a1=Math.PI*.42; for(let i=0;i<n;i++){ const t=i/(n-1),ang=a0+(a1-a0)*t; placeCam(Math.sin(ang)*STATE.RADIUS,3.4,Math.cos(ang)*STATE.RADIUS);} }
+    function addRing(n){ for(let i=0;i<n;i++){ const ang=(i/n)*Math.PI*2; placeCam(Math.sin(ang)*STATE.RADIUS,3.4,Math.cos(ang)*STATE.RADIUS);} }
+    function addLine(n){ const span=STATE.RADIUS*2, z=STATE.RADIUS*.95; for(let i=0;i<n;i++){ const t=i/(n-1); placeCam(-STATE.RADIUS+span*t,3.4,z);} }
+    function addCrane(n){ for(let i=0;i<n;i++){ const t=i/(n-1); const x=Math.sin(t*Math.PI*2)*STATE.RADIUS*.8; const y=3.4 + Math.sin(t*Math.PI)*4; const z=Math.cos(t*Math.PI*2)*STATE.RADIUS*.8; placeCam(x,y,z);} }
+    function addDrone(n){ for(let i=0;i<n;i++){ const t=i/(n-1); const x=Math.sin(t*Math.PI*2)*STATE.RADIUS*1.2; const y=8 + Math.sin(t*Math.PI)*6; const z=Math.cos(t*Math.PI*2)*STATE.RADIUS*1.2; placeCam(x,y,z);} }
+
+    function placeCam(x,y,z){ const cam=new THREE.PerspectiveCamera(55, innerWidth/innerHeight, .5, 260); cam.position.set(x,y,z); cam.lookAt(0,1.6,0); const stand=new THREE.Group(); stand.userData.stand=true; const post=new THREE.Mesh(new THREE.CylinderGeometry(.06,.08,3.2,12), new THREE.MeshLambertMaterial({color:0x0f141b})); post.position.y=1.6; stand.add(post); stand.position.set(x,0,z); stand.lookAt(0,0,0); scene.add(stand); rigs.push({camera:cam,stand}); }
+
+    function updateLens(mm){ CONFIG.lens=mm; const fov = mmToFov(mm); rigs.forEach(r=>{ r.camera.fov=fov; r.camera.updateProjectionMatrix(); }); fovRange.value=String(Math.round(fov)); updateCamInfo(); }
+    function mmToFov(mm){ const sensor=36; return 2*Math.atan(sensor/(2*mm))*180/Math.PI; }
+    function updateCamInfo(){ const fov=Math.round(rigs[0]?.camera.fov||55); camInfo.textContent=`CAM ${String(current+1).padStart(2,'0')} · ${CONFIG.lens}mm · FOV ${fov}°`; }
+
+    // —— Subject ——
+    function buildHorse(){ const mat=new THREE.MeshStandardMaterial({color:0x111318, roughness:.7, metalness:.05}); horse=new THREE.Group(); const body=new THREE.Mesh(new THREE.BoxGeometry(4,1.8,1.3),mat); body.position.y=1.8; body.castShadow=true; horse.add(body); const neck=new THREE.Mesh(new THREE.BoxGeometry(1.2,2.2,1),mat); neck.position.set(2.2,2.5,0); neck.rotation.z=.5; horse.add(neck); const head=new THREE.Mesh(new THREE.BoxGeometry(1.2,1.2,.9),mat); head.position.set(3.2,3.8,0); head.rotation.z=.2; horse.add(head); const ear=new THREE.Mesh(new THREE.ConeGeometry(.15,.4,5),mat); ear.position.set(3.5,4.5,.3); horse.add(ear); const ear2=ear.clone(); ear2.position.z=-.3; horse.add(ear2); const legG=new THREE.CylinderGeometry(.15,.12,2,10); horse.legs=[]; const legs=[{x:1.5,z:.5,p:0},{x:1.5,z:-.5,p:Math.PI},{x:-1.3,z:.5,p:Math.PI*.6},{x:-1.3,z:-.5,p:Math.PI*1.6}]; legs.forEach(L=>{const l=new THREE.Mesh(legG,mat); l.position.set(L.x,1,L.z); l.userData={bx:L.x,bz:L.z,p:L.p}; l.castShadow=true; horse.add(l); horse.legs.push(l)}); const tail=new THREE.Mesh(new THREE.CylinderGeometry(.1,.05,1.5,8),mat); tail.position.set(-2.5,2,0); tail.rotation.z=-.8; horse.add(tail); const torso=new THREE.Mesh(new THREE.BoxGeometry(.8,1.8,.8),mat); torso.position.set(-.3,3.5,0); horse.add(torso); const headR=new THREE.Mesh(new THREE.SphereGeometry(.4,16,12),mat); headR.position.set(-.3,4.7,0); horse.add(headR); horse.position.set(-20,0,0); scene.add(horse); }
+
+    function updateHorse(phase){ const stride=phase*Math.PI*2; horse.legs.forEach(l=>{ const q=stride+l.userData.p; const lift=Math.max(0,Math.sin(q))*1.2; l.position.y=1+lift; l.rotation.z=Math.sin(q)*.28; l.position.x=l.userData.bx+Math.cos(q)*.48;}); horse.children[0].position.y=1.8+Math.sin(stride)*.2; horse.children[0].rotation.z=Math.sin(stride)*.1; horse.children[0].rotation.x=Math.cos(stride*2)*.05; }
+
+    // —— Director Joystick & Motion Path ——
+    const stickRect = ()=> stick.getBoundingClientRect(); let stickActive=false; let joyX=0, joyY=0; // -1..1
+    function setNub(x,y){ const r=stickRect(); const nx=r.width*0.5 + x*(r.width*0.45), ny=r.height*0.5 + y*(r.height*0.45); nub.style.left=nx+'px'; nub.style.top=ny+'px'; }
+    function beginStick(e){ stickActive=true; moveStick(e); }
+    function endStick(){ stickActive=false; joyX=joyY=0; setNub(0,0); }
+    function moveStick(e){ if(!stickActive) return; const r=stickRect(); const px=( (e.clientX||e.touches?.[0]?.clientX) - r.left)/r.width; const py=( (e.clientY||e.touches?.[0]?.clientY) - r.top)/r.height; joyX=Math.min(1,Math.max(-1, px*2-1)); joyY=Math.min(1,Math.max(-1, py*2-1)); setNub(joyX,joyY); if(recording) recordKey(); }
+
+    stick.addEventListener('pointerdown',beginStick); window.addEventListener('pointerup',endStick); window.addEventListener('pointermove',moveStick);
+    stick.addEventListener('touchstart',beginStick,{passive:true}); window.addEventListener('touchend',endStick,{passive:true}); window.addEventListener('touchmove',moveStick,{passive:true});
+
+    function applyLiveCamera(cam, dt){
+      // Use joystick + dials to nudge active camera each frame
+      const speed=CONFIG.speed; const path=pathSel.value; const dolly=+dollyRange.value; const crane=+craneRange.value; const theta=(+thetaRange.value)*Math.PI/180; const roll=(+rollRange.value)*Math.PI/180;
+      const look = new THREE.Vector3(0,1.6,0);
+      if(path==='DOLLY'){
+        cam.translateZ( -joyY * dt * 12 * speed ); cam.translateX( joyX * dt * 6 * speed );
+        cam.position.y = 3.4 + crane; cam.lookAt(look);
+      } else if(path==='ARC'){
+        const r = cam.position.clone().setY(0).length(); const ang = Math.atan2(cam.position.x, cam.position.z) + joyX*dt*1.8*speed + theta*dt*0.2; const x=Math.sin(ang)*r, z=Math.cos(ang)*r; cam.position.set(x, 3.4+crane, z); cam.lookAt(look);
+      } else if(path==='CRANE'){
+        cam.position.y += (-joyY*dt*10*speed); cam.translateX( joyX * dt * 6 * speed ); cam.lookAt(look);
+      } else if(path==='DRONE'){
+        cam.translateZ( -joyY * dt * 18 * speed ); cam.translateX( joyX * dt * 12 * speed ); cam.position.y = Math.max(2, cam.position.y + crane*dt*2);
+      } else if(path==='STEADICAM'){
+        const wobX=(Math.sin(STATE.time*1.8)+Math.sin(STATE.time*2.3+.7))*0.05; const wobY=(Math.sin(STATE.time*1.5)+Math.sin(STATE.time*1.9+.3))*0.03; cam.translateZ( -joyY * dt * 9 * speed ); cam.translateX( joyX * dt * 5 * speed ); cam.position.y = 3.4 + crane + wobY; cam.rotation.z = roll + wobX; cam.lookAt(look);
+      }
+      // dolly depth & orbit assist
+      if(path!=='ARC'){ cam.translateZ(dolly*dt*0.5); }
+      // update FOV
+      cam.fov = +fovRange.value; cam.updateProjectionMatrix();
+    }
+
+    // Keyframe recording
+    function recordKey(){ if(!recording) return; const cam=getActiveCam(); moveClip.push({ t:STATE.time, pos:cam.position.clone(), rot:cam.rotation.clone(), fov:cam.fov }); }
+    function startRec(){ moveClip.length=0; recording=true; STATE.time=0; playBtn.textContent='Pause'; STATE.playing=true; toast('Recording move…'); }
+    function stopRec(){ recording=false; toast('Move recorded: '+moveClip.length+' keys'); }
+    function playMove(){ if(moveClip.length<2){ toast('Record at least 2 keys'); return;} movePlaying=true; movePlayT=0; STATE.time=0; STATE.playing=true; toast('Playing move'); }
+    function clearMove(){ moveClip.length=0; movePlaying=false; toast('Move cleared'); }
+
+    function sampleMove(t){ // simple linear interpolate
+      const n=moveClip.length; if(n<2) return null; if(t<=moveClip[0].t) return moveClip[0]; if(t>=moveClip[n-1].t) return moveClip[n-1];
+      for(let i=0;i<n-1;i++){ const a=moveClip[i], b=moveClip[i+1]; if(t>=a.t && t<=b.t){ const u=(t-a.t)/(b.t-a.t); const pos=a.pos.clone().lerp(b.pos,u); const rot=new THREE.Euler( a.rot.x+(b.rot.x-a.rot.x)*u, a.rot.y+(b.rot.y-a.rot.y)*u, a.rot.z+(b.rot.z-a.rot.z)*u ); const fov=a.fov+(b.fov-a.fov)*u; return {pos,rot,fov}; } }
+      return moveClip[n-1];
+    }
+
+    // —— Loop ——
+    let last=0; function tick(t){ requestAnimationFrame(tick); const dt=(t-last)/1000||0; last=t; STATE.time += dt; if(STATE.playing){ STATE.phase += dt*.35*CONFIG.speed; current = Math.floor( STATE.phase * STATE.COUNT ) % STATE.COUNT; scrub.value = String(Math.floor(STATE.time*24)); }
+      const phase=current/STATE.COUNT; updateHorse(phase);
+      const cam=getActiveCam();
+      if(movePlaying){ movePlayT += dt; const k=sampleMove(movePlayT); if(k){ cam.position.copy(k.pos); cam.rotation.copy(k.rot); cam.fov=k.fov; cam.updateProjectionMatrix(); } else { movePlaying=false; toast('Move finished'); } }
+      applyLiveCamera(cam, dt);
+      updateCamInfo();
+      dustGroup.children.forEach((d,i)=>{ d.position.x += (Math.sin(i*14.2)*.02 + wind*.02); if(d.position.x>70) d.position.x=-70; });
+      renderer.render(scene, cam);
+    }
+
+    function getActiveCam(){ return rigs[current]?.camera || rigs[0].camera; }
+
+    // —— UI ——
+    function bindUI(){
+      playBtn.addEventListener('click',()=>{ STATE.playing=!STATE.playing; playBtn.textContent = STATE.playing?'Pause':'Play'; playBtn.classList.toggle('primary', STATE.playing); });
+      presetSel.addEventListener('change',()=>applyPreset(presetSel.value));
+      rigSel.addEventListener('change',()=>{ CONFIG.rig=rigSel.value; buildRig(CONFIG.rig); });
+      lensSel.addEventListener('change',()=>updateLens(parseInt(lensSel.value,10)));
+      speedRange.addEventListener('input',()=>{ CONFIG.speed=parseFloat(speedRange.value); });
+      scrub.addEventListener('input',()=>{ const f=parseInt(scrub.value,10)||0; current = Math.min(STATE.COUNT-1, Math.max(0, Math.floor((f%241)/ (240/STATE.COUNT) ))); STATE.phase=current/STATE.COUNT; STATE.playing=false; playBtn.textContent='Play'; playBtn.classList.remove('primary'); });
+      fovRange.addEventListener('input',()=>{ rigs.forEach(r=>{ r.camera.fov=+fovRange.value; r.camera.updateProjectionMatrix(); }); updateCamInfo(); });
+      [dollyRange,craneRange,thetaRange,rollRange].forEach(el=>el.addEventListener('input',()=>{}));
+      recBtn.addEventListener('click', startRec); stopBtn.addEventListener('click', stopRec); playMoveBtn.addEventListener('click', playMove); clearMoveBtn.addEventListener('click', clearMove);
+      capGIF.addEventListener('click', exportGIF);
+      addEventListener('resize', onResize);
+    }
+
+    function onResize(){ renderer.setSize(innerWidth,innerHeight); rigs.forEach(r=>{ r.camera.aspect=innerWidth/innerHeight; r.camera.updateProjectionMatrix(); }); }
+
+    // —— Simple GIF export (single camera, small) ——
+    async function exportGIF(){
+      toast('Exporting GIF…'); const W=480,H=Math.round(W*9/16); const frames=[]; const oldSize=renderer.getSize(new THREE.Vector2()); const oldRatio=renderer.getPixelRatio(); renderer.setPixelRatio(1); renderer.setSize(W,H); const prevPlay=STATE.playing; STATE.playing=false; const prev=current;
+      for(let i=0;i<STATE.COUNT;i++){ current=i; const phase=i/STATE.COUNT; updateHorse(phase); const cam=getActiveCam(); renderer.render(scene,cam); frames.push(renderer.domElement.toDataURL('image/png')); }
+      current=prev; STATE.playing=prevPlay; renderer.setPixelRatio(oldRatio); renderer.setSize(oldSize.x,oldSize.y);
+      // Build a very lightweight GIF via GIF header (fallback: download frames)
+      // To keep dependencies out, we zip frames into a .zip for now
+      const zip = await makeZip(frames);
+      download(zip, 'btine_frames.zip', 'application/zip'); toast('Frames ZIP downloaded (import into your editor to make GIF/MP4).');
+    }
+
+    async function makeZip(dataURLs){
+      // tiny zip writer (store only)
+      const files=[]; let offset=0; const enc=new TextEncoder();
+      function crc32(buf){ let c=~0; for(let i=0;i<buf.length;i++){ c=(c>>>8)^table[(c^buf[i])&0xFF]; } return ~c>>>0; }
+      const table=new Uint32Array(256).map((_,n)=>{ let c=n; for(let k=0;k<8;k++) c = c&1 ? 0xEDB88320 ^ (c>>>1) : c>>>1; return c>>>0; });
+      for(let i=0;i<dataURLs.length;i++){
+        const bin=atob(dataURLs[i].split(',')[1]); const u8=new Uint8Array(bin.length); for(let j=0;j<bin.length;j++) u8[j]=bin.charCodeAt(j);
+        const name=`f${String(i).padStart(3,'0')}.png`; const nameU8=enc.encode(name); const csum=crc32(u8); const header=new Uint8Array(30+nameU8.length);
+        header.set([0x50,0x4b,0x03,0x04,20,0,0,0,0,0,0,0,0,0,0,0]); // local file header
+        header[26]=nameU8.length&255; header[27]=(nameU8.length>>>8)&255; header[18]=csum&255; header[19]=(csum>>>8)&255; header[20]=(csum>>>16)&255; header[21]=(csum>>>24)&255; header[22]=u8.length&255; header[23]=(u8.length>>>8)&255; header[24]=(u8.length>>>16)&255; header[25]=(u8.length>>>24)&255; header[14]=u8.length&255; header[15]=(u8.length>>>8)&255; header[16]=(u8.length>>>16)&255; header[17]=(u8.length>>>24)&255;
+        header.set(nameU8,30);
+        files.push(header,u8);
+      }
+      // Central directory
+      const parts=[...files]; let ptr=0; const central=[]; let filePtr=0; for(let i=0;i<dataURLs.length;i++){
+        const name=`f${String(i).padStart(3,'0')}.png`; const nameU8=enc.encode(name); const u8=parts[1+i*2]; const csum=(u8[0]!==undefined)?0:0; // computed earlier unused here for brevity
+        const compLen=u8.length; const uncompLen=u8.length; const cdir=new Uint8Array(46+nameU8.length);
+        cdir.set([0x50,0x4b,0x01,0x02,20,0,20,0,0,0,0,0,0,0,0,0]);
+        cdir[28]=nameU8.length&255; cdir[29]=(nameU8.length>>>8)&255; cdir.set(nameU8,46);
+        // set sizes later ignored by simple unpackers (best-effort minimal writer)
+        central.push(cdir); filePtr+= (30+nameU8.length + compLen);
+      }
+      const end=new Uint8Array(22); end.set([0x50,0x4b,0x05,0x06,0,0,0,0]);
+      const totalSize = files.reduce((n,a)=>n+a.length,0) + central.reduce((n,a)=>n+a.length,0) + end.length;
+      const buf=new Uint8Array(totalSize); let off=0; for(const p of files){ buf.set(p,off); off+=p.length; } for(const p of central){ buf.set(p,off); off+=p.length; } buf.set(end,off);
+      return new Blob([buf],{type:'application/zip'});
+    }
+
+    function download(blobOrData, name, type){ const blob = blobOrData instanceof Blob ? blobOrData : new Blob([blobOrData],{type}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1500); }
+
+    function toast(msg){ const host=document.getElementById('toast'); const el=document.createElement('div'); el.className='toast'; el.textContent=msg; host.appendChild(el); setTimeout(()=>{ el.style.opacity='.0'; el.style.transform='translateY(-6px)'; setTimeout(()=>host.removeChild(el),340); }, 1400); }
+
+    // — Start —
+    boot();
+  })();
+
+  function fatal(msg){ const d=document.createElement('div'); d.style.cssText='position:fixed;inset:auto 1rem 1rem 1rem;background:rgba(20,20,24,.95);color:#fff;border:1px solid #2a2a2f;border-radius:12px;padding:12px 14px;z-index:9999;box-shadow:0 10px 30px rgba(0,0,0,.5)'; d.innerHTML=`<b>Engine disabled</b><br><small>${msg}</small>`; document.body.appendChild(d); }
+  </script>
+</body>
+</html>

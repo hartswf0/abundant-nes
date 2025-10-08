@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Bullet Time Camera Array — Mobile Unthinkable</title>
+<style>
+  :root{
+    --bg:#000; --ink:#ecfff6; --ui:#00ffb0; --ui-2:#26ffc9; --warn:#ff4b72; --ok:#43ff87; --shadow:rgba(0,255,176,0.22);
+    --glass:rgba(6,12,10,0.38); --glass-strong:rgba(8,18,14,0.55); --stroke:rgba(0,255,176,0.6);
+    --radius:16px; --touch:44px; --focus:0 0 0 2px rgba(0,255,176,0.7);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:radial-gradient(1200px 800px at 80% -20%, #06261c 0%, #000 60%);color:var(--ink);font-family:system-ui,Segoe UI,Inter,Roboto,Arial,sans-serif;}
+  #stage{position:fixed;inset:0;overflow:hidden}
+  canvas{display:block}
+
+  /* ===== Glass tokens ===== */
+  .glass{background:var(--glass); backdrop-filter:blur(14px) saturate(140%); -webkit-backdrop-filter:blur(14px) saturate(140%); box-shadow:0 10px 28px var(--shadow), inset 0 0 0 1px rgba(255,255,255,0.04), inset 0 0 0 1.5px var(--glass-strong)}
+  .stroke{border:1.5px solid var(--stroke); border-radius:var(--radius)}
+
+  /* ===== HUD (edge anchored, glass) ===== */
+  .hud{position:fixed;top:8px;left:8px;right:8px;display:flex;gap:8px;align-items:center;z-index:30;pointer-events:none}
+  .chip{min-height:var(--touch);padding:0 14px;border-radius:12px;color:var(--ink);display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;box-shadow:0 8px 24px var(--shadow);pointer-events:auto}
+  .chip .big{font-size:18px}
+  .chip .mono{font-family:"Courier New",monospace}
+
+  /* ===== Mini-map ===== */
+  #ring{position:fixed;top:8px;right:8px;width:132px;height:132px;border-radius:50%;z-index:20}
+  #ring .inner{width:100%;height:100%;border-radius:50%}
+  #ring canvas{width:100%;height:100%;}
+
+  /* ===== Edge Dock (glass) ===== */
+  .dock{position:fixed;left:8px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:8px;z-index:35}
+  .dock .pill{min-height:40px;min-width:40px;display:flex;align-items:center;justify-content:center;border-radius:12px;font-weight:800}
+  .dock .pill[aria-pressed="true"], .dock .pill.active{background:linear-gradient(180deg, rgba(0,255,176,0.9), rgba(0,255,176,0.6));color:#00160e}
+
+  /* ===== Bottom Sheet (glass, collapsible, float/full modes) ===== */
+  .sheet{position:fixed;left:0;right:0;bottom:0;z-index:40;padding:10px 10px calc(10px + env(safe-area-inset-bottom));
+         transform:translateY(calc(100% - 44px));transition:transform .25s ease, opacity .25s ease, left .2s ease, right .2s ease;will-change:transform}
+  .sheet.open{transform:translateY(0)}
+  .sheet.float{left:auto; right:12px; bottom:12px; width:min(92vw,460px); transform:none; border-radius:18px}
+  .sheet.float .grab{cursor:grab}
+  .sheet.full{inset:10px 10px calc(10px + env(safe-area-inset-bottom)) 10px; transform:none; border-radius:18px}
+  .grab{height:28px;display:flex;align-items:center;justify-content:center}
+  .grab .bar{width:56px;height:6px;border-radius:6px;background:linear-gradient(90deg, rgba(0,255,176,0.9), rgba(0,255,176,0.6))}
+  .controls{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px}
+  .btn{height:var(--touch);border-radius:12px;font-weight:800}
+  .btn[aria-pressed="true"], .btn.active{background:linear-gradient(180deg, rgba(0,255,176,0.9), rgba(0,255,176,0.6));color:#00150e}
+  .row{display:flex;align-items:center;gap:10px;margin:6px 4px}
+  .row label{font-size:12px;opacity:.92;width:140px}
+  input[type=range], select{flex:1;height:38px;-webkit-appearance:none;border-radius:12px;color:var(--ink);padding:6px 10px}
+  input[type=range]{background:linear-gradient(180deg, rgba(0,0,0,0.35), rgba(0,0,0,0.2));}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:26px;height:26px;border-radius:50%;background:linear-gradient(180deg, #00ffb0, #26ffc9);box-shadow:0 0 0 4px rgba(0,0,0,0.35)}
+
+  /* ===== Timeline ===== */
+  #timeline{position:relative;height:42px;margin:4px}
+  #progress{position:absolute;top:50%;left:0;height:3px;background:var(--ui);box-shadow:0 0 10px var(--ui);transform:translateY(-50%);width:0}
+  .tick{position:absolute;top:6px;width:2px;height:14px;background:#00c68e}
+  .marker{position:absolute;bottom:6px;width:10px;height:10px;border:2px solid var(--ui);border-radius:50%;background:#054}
+  .marker.active{width:16px;height:16px;background:var(--ui);box-shadow:0 0 16px var(--ui)}
+
+  /* ===== Debug Drawer ===== */
+  details.debug{position:fixed;right:8px;bottom:calc(8px + env(safe-area-inset-bottom));max-width:min(86vw,560px);z-index:50}
+  details.debug>summary{cursor:pointer;list-style:none;min-height:var(--touch);display:flex;align-items:center;gap:10px;padding:0 14px;border-radius:12px;font-weight:800}
+  .dbg{margin-top:8px;padding:10px;border-radius:12px}
+  .kv{display:grid;grid-template-columns:auto 1fr;gap:6px 10px;font-family:"Courier New",monospace;font-size:12px}
+  .log{max-height:120px;overflow:auto;border-top:1px solid #0a5;margin-top:8px;padding-top:6px;font-family:"Courier New",monospace;font-size:12px}
+  #wave{width:100%;height:64px;border:1px dashed #0a5;border-radius:10px;margin-top:6px}
+  .tests{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+  .tests .mini{border-radius:10px;padding:8px 10px;font-weight:800}
+
+  /* Path pills */
+  .paths{position:fixed;left:8px;top:64px;display:flex;flex-direction:column;gap:8px;z-index:25;max-height:45vh;overflow:auto}
+  .pill{min-height:36px;display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:20px;font-weight:700}
+  .pill.active{background:linear-gradient(180deg, rgba(0,255,176,0.9), rgba(0,255,176,0.6));color:#00130b}
+
+  @media (max-width:480px){
+    .controls{grid-template-columns:repeat(2,1fr)}
+    .paths{top:auto;bottom:210px;flex-direction:row;max-width:96vw;max-height:none}
+  }
+  :focus-visible{outline:none;box-shadow:var(--focus)}
+
+  /* ===== Hide/Reveal mechanics ===== */
+  .ui-hidden .hud, .ui-hidden .dock, .ui-hidden #ring, .ui-hidden .paths, .ui-hidden .debug, .ui-hidden .sheet{opacity:0;pointer-events:none;}
+  #revealEdge{position:fixed;left:0;top:0;bottom:0;width:10px;z-index:5}
+
+  /* ===== Modal ===== */
+  #modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.6);backdrop-filter:blur(10px);z-index:60}
+  .modal-card{width:min(92vw,720px);max-height:80vh;border-radius:16px;padding:12px;display:flex;flex-direction:column;gap:8px}
+  .modal-card header{display:flex;align-items:center;justify-content:space-between;font-weight:800}
+  .modal-card textarea{width:100%;height:48vh;border-radius:10px;background:rgba(0,0,0,0.6);color:var(--ink);padding:10px;font-family:"Courier New",monospace}
+  .modal-actions{display:flex;gap:8px;flex-wrap:wrap}
+  .toast{position:fixed;left:50%;bottom:96px;transform:translateX(-50%);padding:10px 14px;border-radius:12px;font-weight:800;z-index:70;display:none}
+</style>
+</head>
+<body>
+  <div id="stage"></div>
+  <div id="revealEdge"></div>
+
+  <!-- HUD -->
+  <div class="hud">
+    <div class="chip glass stroke"><span>Cam</span><span id="camNo" class="big mono">01</span></div>
+    <div class="chip glass stroke"><span id="pathName">STRAIGHT</span></div>
+    <button id="helpBtn" class="chip glass stroke">❓ Help</button>
+  </div>
+
+  <!-- Mini-map -->
+  <div id="ring" class="glass stroke"><canvas id="ringCanvas" width="300" height="300" aria-label="Mini-map"></canvas></div>
+
+  <!-- Edge Dock -->
+  <div class="dock">
+    <button id="dockPlay" class="pill glass stroke" aria-pressed="true">⏯</button>
+    <button id="dockDir" class="pill glass stroke">⇄</button>
+    <button id="dockViz" class="pill glass stroke" aria-pressed="true">📷</button>
+    <button id="dockAudio" class="pill glass stroke" aria-pressed="true">🔊</button>
+    <button id="dockPanel" class="pill glass stroke" title="Open controls">☰</button>
+    <button id="dockHide" class="pill glass stroke" title="Hide UI">👁</button>
+    <button id="dockFS" class="pill glass stroke" title="Fullscreen">⤢</button>
+    <button id="dockMode" class="pill glass stroke" title="Sheet/Float/Full">⎘</button>
+  </div>
+
+  <!-- Path Pills -->
+  <div id="paths" class="paths"></div>
+
+  <!-- Debug Drawer -->
+  <details class="debug glass stroke" id="debugDrawer">
+    <summary>🔬 Debug & State</summary>
+    <div class="dbg glass stroke">
+      <div class="kv" id="kv"></div>
+      <canvas id="wave"></canvas>
+      <div class="tests">
+        <button id="testCopy" class="mini glass stroke">▶ Clipboard Test</button>
+        <button id="testAudio" class="mini glass stroke">▶ Audio Test</button>
+        <button id="testVibe" class="mini glass stroke">▶ Vibrate Test</button>
+        <button id="testPaths" class="mini glass stroke">▶ Path Tests</button>
+        <button id="testLight" class="mini glass stroke">▶ Light Sweep</button>
+        <button id="savePreset" class="mini glass stroke">💾 Save Preset</button>
+        <button id="loadPreset" class="mini glass stroke">📂 Load Preset</button>
+      </div>
+      <div class="log" id="log"></div>
+    </div>
+  </details>
+
+  <!-- Bottom Sheet / Floating Panel / Full Panel -->
+  <div id="sheet" class="sheet glass stroke" aria-label="Controls">
+    <div class="grab"><div class="bar"></div></div>
+    <div class="controls">
+      <button id="play" class="btn glass stroke" aria-pressed="true">⏸︎ Pause</button>
+      <button id="dir" class="btn glass stroke">▶︎ Fwd</button>
+      <button id="viz" class="btn glass stroke" aria-pressed="true">📷 Rigs</button>
+      <button id="audio" class="btn glass stroke" aria-pressed="true">🔊 Audio</button>
+    </div>
+
+    <div class="row"><label for="look">Look Preset</label>
+      <select id="look" class="glass stroke">
+        <option value="neon" selected>Neon Noir</option>
+        <option value="cool">Cool Filmic</option>
+        <option value="warm">Warm Stage</option>
+        <option value="noir">Monochrome</option>
+      </select>
+    </div>
+    <div class="row"><label for="exposure">Exposure <span id="expVal">1.00</span></label><input id="exposure" class="glass stroke" type="range" min="0.4" max="2.0" step="0.05" value="1.0"/></div>
+    <div class="row"><label for="amb">Ambient <span id="ambVal">0.55</span></label><input id="amb" class="glass stroke" type="range" min="0" max="1.2" step="0.05" value="0.55"/></div>
+    <div class="row"><label for="key">Key Light <span id="keyVal">1.30</span></label><input id="key" class="glass stroke" type="range" min="0" max="2" step="0.05" value="1.30"/></div>
+    <div class="row"><label for="fill">Fill Light <span id="fillVal">0.50</span></label><input id="fill" class="glass stroke" type="range" min="0" max="1.5" step="0.05" value="0.50"/></div>
+    <div class="row"><label for="rim">Rim Light <span id="rimVal">0.60</span></label><input id="rim" class="glass stroke" type="range" min="0" max="2" step="0.05" value="0.60"/></div>
+
+    <div class="row"><label for="speed">Cam Speed <span id="speedVal">1.0×</span></label><input id="speed" class="glass stroke" type="range" min="0.1" max="8" step="0.1" value="1"/></div>
+    <div class="row"><label for="cams">Cameras <span id="camsVal">48</span></label><input id="cams" class="glass stroke" type="range" min="12" max="96" step="1" value="48"/></div>
+    <div class="row"><label for="radius">Radius <span id="radVal">25</span></label><input id="radius" class="glass stroke" type="range" min="8" max="80" step="1" value="25"/></div>
+    <div class="row"><label for="centerX">Center X <span id="cxVal">0</span></label><input id="centerX" class="glass stroke" type="range" min="-60" max="60" step="1" value="0"/></div>
+    <div class="row"><label for="centerZ">Center Z <span id="czVal">0</span></label><input id="centerZ" class="glass stroke" type="range" min="-60" max="60" step="1" value="0"/></div>
+    <div class="row"><label for="subjectMode">Subject</label>
+      <select id="subjectMode" class="glass stroke">
+        <option value="linear">Linear</option>
+        <option value="circle" selected>Circle</option>
+        <option value="figure8">Figure‑8</option>
+        <option value="lissajous">Lissajous</option>
+      </select>
+    </div>
+    <div class="row"><label for="subjectSpeed">Subject Speed <span id="ssVal">1.0×</span></label><input id="subjectSpeed" class="glass stroke" type="range" min="0" max="3" step="0.05" value="1"/></div>
+
+    <div id="timeline" class="glass stroke"><div id="progress"></div></div>
+  </div>
+
+  <!-- Modal -->
+  <div id="modal" class="glass">
+    <div class="modal-card glass stroke">
+      <header>
+        <div id="modalTitle">Bret Victor Template</div>
+        <button id="modalClose" class="mini glass stroke" aria-label="Close">✕</button>
+      </header>
+      <div id="modalDesc" class="kv" style="gap:8px 12px">
+        <div>Tip</div><div>If clipboard is blocked (HTTP, sandbox, or permissions), select and copy from the text below or use Download.</div>
+      </div>
+      <textarea id="modalText" spellcheck="false"></textarea>
+      <div class="modal-actions">
+        <button id="modalCopy" class="mini glass stroke">Copy</button>
+        <button id="modalSelect" class="mini glass stroke">Select All</button>
+        <button id="modalDownload" class="mini glass stroke">Download .txt</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast glass stroke" role="status" aria-live="polite"></div>
+
+  <template id="bvTemplate">(trimmed for brevity — unchanged)</template>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script>
+  // ======= Core State =======
+  let scene, renderer, rigs = [], cams = [], subject, playing = true, dir = 1, speed = 1.0;
+  let CAM_COUNT = 48, RADIUS = 25, current = 0, lastNow = 0, visited = new Set([0]), fps = 0;
+  let showRigs = true, audioOn = true, audioCtx = null; 
+  let CX = 0, CZ = 0; // center offsets
+  let subjectMode = 'circle', subjectSpeed = 1.0, subjectPhase = 0;
+  let panelMode = 'sheet'; // 'sheet' | 'float' | 'full'
+
+  // Lighting state
+  let amb, key, fill, rim; const look = { preset:'neon', exposure:1.0, amb:0.55, key:1.3, fill:0.5, rim:0.6 };
+
+  // DOM refs
+  const logEl = document.getElementById('log');
+  const kvEl = document.getElementById('kv');
+  const ringCanvas = document.getElementById('ringCanvas');
+  const waveCanvas = document.getElementById('wave');
+  const toast = document.getElementById('toast');
+  const sheet = document.getElementById('sheet');
+
+  // ======= Clipboard helpers =======
+  async function safeCopy(text){ try{ if(window.isSecureContext && navigator.clipboard && typeof navigator.clipboard.writeText==='function'){ await navigator.clipboard.writeText(text); return {ok:true, method:'navigator.clipboard'}; } }catch(e){}
+    try{ const ta=document.createElement('textarea'); ta.value=text; ta.setAttribute('readonly',''); ta.style.position='fixed'; ta.style.left='-9999px'; document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, ta.value.length); const success=document.execCommand('copy'); document.body.removeChild(ta); if(success) return {ok:true, method:'execCommand'}; }catch(e){}
+    return {ok:false}; }
+
+  // ======= Scene Setup =======
+  function init(){
+    scene = new THREE.Scene(); scene.fog = new THREE.Fog(0x000000, 80, 240);
+    renderer = new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 1.6));
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = look.exposure;
+    document.getElementById('stage').appendChild(renderer.domElement);
+
+    // Lights
+    amb = new THREE.AmbientLight(0xffffff, look.amb); scene.add(amb);
+    key = new THREE.DirectionalLight(0xfff4d2, look.key); key.position.set(28, 40, 24); scene.add(key);
+    fill = new THREE.DirectionalLight(0x66aaff, look.fill); fill.position.set(-24, 18, -18); scene.add(fill);
+    rim = new THREE.DirectionalLight(0x00ffb0, look.rim); rim.position.set(0, 12, -30); scene.add(rim);
+
+    // Ground & subject
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(360,360), new THREE.MeshStandardMaterial({color:0x040404, roughness:0.9, metalness:0.12}));
+    ground.rotation.x = -Math.PI/2; ground.receiveShadow=true; scene.add(ground);
+
+    subject = new THREE.Group();
+    const mat = new THREE.MeshStandardMaterial({color:0x0e0e0e, metalness:0.55, roughness:0.35, emissive:0x001b11, emissiveIntensity:0.25});
+    const body = new THREE.Mesh(new THREE.BoxGeometry(5.4,2.3,1.8),mat); body.position.y=2.4; subject.add(body);
+    const neck = new THREE.Mesh(new THREE.BoxGeometry(1.5,3,1.3),mat); neck.position.set(3,3.2,0); neck.rotation.z = 0.5; subject.add(neck);
+    const head = new THREE.Mesh(new THREE.BoxGeometry(1.5,1.5,1.2),mat); head.position.set(4.2,5,0); head.rotation.z = 0.2; subject.add(head);
+    const legG = new THREE.CylinderGeometry(0.22,0.19,2.7);
+    subject.legs = [];
+    [ {x:2.1,z:0.7,p:0}, {x:2.1,z:-0.7,p:Math.PI}, {x:-1.9,z:0.7,p:Math.PI*0.6}, {x:-1.9,z:-0.7,p:Math.PI*1.6} ].forEach(d=>{ const leg=new THREE.Mesh(legG,mat); leg.position.set(d.x,1.35,d.z); leg.userData={bx:d.x, ph:d.p}; subject.add(leg); subject.legs.push(leg); });
+    scene.add(subject);
+
+    buildPaths(); rebuildCameras(); addHandlers(); requestAnimationFrame(tick);
+  }
+
+  // ======= Cameras =======
+  const PATHS = {
+    straight:{name:'STRAIGHT', cam:(i,n)=>{const t=i/(n-1);return P(CX-40+ t*80, 5, CZ+20, CX-40+t*80,2,CZ+0)}},
+    arc180:{name:'180° ARC', cam:(i,n)=>{const a=Math.PI*(i/(n-1))-Math.PI/2; return P(CX+Math.cos(a)*RADIUS,7,CZ+Math.sin(a)*RADIUS, CX,2,CZ)}},
+    orbit360:{name:'360° ORBIT', cam:(i,n)=>{const a=(i/n)*Math.PI*2; return P(CX+Math.cos(a)*RADIUS,8,CZ+Math.sin(a)*RADIUS, CX,2.5,CZ)}},
+    closeup:{name:'CLOSEUP ARC', cam:(i,n)=>{const a=Math.PI*(i/(n-1))-Math.PI/2; const r=Math.max(12,RADIUS*0.5); return P(CX+Math.cos(a)*r,3.5,CZ+Math.sin(a)*r, CX,2,CZ)}},
+    overhead:{name:'OVERHEAD', cam:(i,n)=>{const t=i/(n-1); return P(CX-30+t*60, 25, CZ, CX-30+t*60,0,CZ)}},
+    spiral:{name:'SPIRAL UP', cam:(i,n)=>{const a=(i/n)*Math.PI*5; const r=18+(i/n)*12; const h=3+(i/n)*15; return P(CX+Math.cos(a)*r, h, CZ+Math.sin(a)*r, CX,2,CZ)}},
+    ellipse:{name:'ELLIPSE', cam:(i,n)=>{const a=(i/n)*Math.PI*2; return P(CX+Math.cos(a)*RADIUS*1.4,7,CZ+Math.sin(a)*RADIUS*0.7, CX,2,CZ)}},
+    stadium:{name:'STADIUM', cam:(i,n)=>{const t=i/n; const w=RADIUS*1.5,h=RADIUS*0.8; const phase=t*2*Math.PI; const x = (Math.cos(phase)>0?w:-w); const y = Math.sin(phase)*h; return P(CX+x,7,CZ+y, CX,2,CZ)}},
+    rail_dual:{name:'DUAL RAIL', cam:(i,n)=>{const half=Math.floor(n/2); if(i<half){ const t=i/(half-1); return P(CX-40+ t*80,6,CZ+RADIUS, CX-40+t*80,2,CZ); } else { const t=(i-half)/(half-1); return P(CX+40- t*80,6,CZ-RADIUS, CX+40-t*80,2,CZ); }}},
+    random_ring:{name:'RING SCATTER', cam:(i,n)=>{const a=(i/n)*Math.PI*2 + noise(i)*0.3; const r=RADIUS*(0.85+0.3*noise(i+99)); return P(CX+Math.cos(a)*r,6+noise(i+7)*2, CZ+Math.sin(a)*r, CX,2,CZ)}},
+    dome:{name:'DOME HEMI', cam:(i,n)=>{const u=i/(n-1); const a=u*Math.PI; const r=RADIUS; const x=CX + r*Math.cos(a); const z=CZ + r*Math.sin(a); const y=6 + 12*Math.sin(u*Math.PI); return P(x,y,z, CX,2,CZ)}}
+  };
+  function P(x,y,z, lx,ly,lz){ return {pos:new THREE.Vector3(x,y,z), look:new THREE.Vector3(lx,ly,lz)} }
+  function noise(k){ return Math.sin(k*12.9898)*43758.5453 % 1 - 0.5 }
+  let pathKey = 'straight';
+
+  function rebuildCameras(){
+    rigs.forEach(r=>scene.remove(r)); rigs=[]; cams=[];
+    const Pth = PATHS[pathKey];
+    for(let i=0;i<CAM_COUNT;i++){
+      const cfg = Pth.cam(i, CAM_COUNT);
+      const cam = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.5, 600);
+      cam.position.copy(cfg.pos); cam.lookAt(cfg.look); cams.push(cam);
+      const rig = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.5,0.4,0.6), new THREE.MeshStandardMaterial({color:0xffffff, emissive:0x00ffb0, emissiveIntensity:0.5, metalness:0.85, roughness:0.22}));
+      const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.18,0.18,0.25), new THREE.MeshStandardMaterial({color:0x00ffb0, emissive:0x00ffb0, emissiveIntensity:0.85})); lens.rotation.x=Math.PI/2; lens.position.z=0.4; rig.add(body); rig.add(lens); rig.position.copy(cfg.pos); rig.lookAt(cfg.look); rig.visible = showRigs; scene.add(rig); rigs.push(rig);
+    }
+    drawRing(); buildTimeline(); updateHUD();
+  }
+
+  // ======= Subject Motion =======
+  const SUBJECTS = {
+    linear:(p)=>({x: CX-35 + p*70, z: CZ, r:0}),
+    circle:(p)=>{const a=p*2*Math.PI; return {x: CX+Math.cos(a)*Math.max(8,RADIUS*0.6), z: CZ+Math.sin(a)*Math.max(8,RADIUS*0.6), r:a} },
+    figure8:(p)=>{const a=p*2*Math.PI; const r=Math.max(8,RADIUS*0.55); return {x: CX + Math.sin(a)*r, z: CZ + Math.sin(a)*Math.cos(a)*r, r:a/2} },
+    lissajous:(p)=>{const a=p*2*Math.PI; const r=Math.max(8,RADIUS*0.6); return {x: CX + Math.sin(2*a)*r, z: CZ + Math.sin(3*a+Math.PI/3)*r*0.8, r:a/3} },
+  };
+
+  // ======= UI =======
+  function addHandlers(){
+    const dockPlay = document.getElementById('dockPlay');
+    const dockDir = document.getElementById('dockDir');
+    const dockViz = document.getElementById('dockViz');
+    const dockAudio = document.getElementById('dockAudio');
+    const dockPanel = document.getElementById('dockPanel');
+    const dockHide = document.getElementById('dockHide');
+    const dockFS = document.getElementById('dockFS');
+    const dockMode = document.getElementById('dockMode');
+
+    dockPlay.onclick = ()=>{ playing=!playing; dockPlay.setAttribute('aria-pressed', String(playing)); };
+    dockDir.onclick = ()=>{ dir*=-1; dockDir.classList.toggle('active', dir<0); };
+    dockViz.onclick = ()=>{ showRigs=!showRigs; rigs.forEach(r=>r.visible=showRigs); dockViz.setAttribute('aria-pressed', String(showRigs)); };
+    dockAudio.onclick = ()=>{ audioOn=!audioOn; if(audioOn && !audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)(); dockAudio.setAttribute('aria-pressed', String(audioOn)); };
+    dockPanel.onclick = ()=> sheet.classList.add('open');
+
+    dockHide.onclick = ()=> toggleUIHidden();
+
+    dockFS.onclick = ()=> toggleFullscreen();
+
+    dockMode.onclick = ()=>{
+      const modes=['sheet','float','full'];
+      panelMode = modes[(modes.indexOf(panelMode)+1)%modes.length];
+      sheet.classList.remove('float','full');
+      if(panelMode==='float') sheet.classList.add('float');
+      else if(panelMode==='full') sheet.classList.add('full');
+      sheet.classList.add('open');
+    };
+
+    // Floating drag for panel in float mode
+    let dragging=false, sx=0, sy=0, start={x:0,y:0};
+    const grab = sheet.querySelector('.grab');
+    grab.addEventListener('pointerdown', e=>{ if(!sheet.classList.contains('float')){ // open/close when not float
+        const open = sheet.classList.contains('open'); if(!open) sheet.classList.add('open'); else sheet.classList.remove('open'); return; }
+      dragging=true; sx=e.clientX; sy=e.clientY; start={x:sheet.offsetLeft, y:sheet.offsetTop}; grab.setPointerCapture(e.pointerId);
+    });
+    grab.addEventListener('pointermove', e=>{ if(!dragging||!sheet.classList.contains('float')) return; const dx=e.clientX-sx; const dy=e.clientY-sy; sheet.style.left=(start.x+dx)+'px'; sheet.style.top=(start.y+dy)+'px'; sheet.style.right='auto'; sheet.style.bottom='auto'; });
+    grab.addEventListener('pointerup', ()=>{ dragging=false; });
+
+    // Edge reveal when UI hidden
+    document.getElementById('revealEdge').addEventListener('pointerdown', ()=>{ document.body.classList.remove('ui-hidden'); });
+
+    // Transport in sheet
+    const playBtn = document.getElementById('play');
+    const dirBtn = document.getElementById('dir');
+    const vizBtn = document.getElementById('viz');
+    const audioBtn = document.getElementById('audio');
+    playBtn.onclick = ()=>{ playing=!playing; playBtn.textContent = playing? '⏸︎ Pause':'▶︎ Play'; playBtn.setAttribute('aria-pressed', String(playing)); };
+    dirBtn.onclick = ()=>{ dir *= -1; dirBtn.textContent = dir<0 ? '◀︎ Rev' : '▶︎ Fwd'; dirBtn.classList.toggle('active', dir<0); };
+    vizBtn.onclick = ()=>{ showRigs=!showRigs; rigs.forEach(r=>r.visible=showRigs); vizBtn.setAttribute('aria-pressed', String(showRigs)); };
+    audioBtn.onclick = ()=>{ audioOn=!audioOn; if(audioOn && !audioCtx){ audioCtx = new (window.AudioContext||window.webkitAudioContext)(); } audioBtn.setAttribute('aria-pressed', String(audioOn)); };
+
+    // Lighting controls
+    const lookSel = document.getElementById('look'); const expR = document.getElementById('exposure'); const ambR=document.getElementById('amb'); const keyR=document.getElementById('key'); const fillR=document.getElementById('fill'); const rimR=document.getElementById('rim');
+    const expVal = document.getElementById('expVal'); const ambVal=document.getElementById('ambVal'); const keyVal=document.getElementById('keyVal'); const fillVal=document.getElementById('fillVal'); const rimVal=document.getElementById('rimVal');
+    lookSel.onchange = ()=>{ look.preset = lookSel.value; applyLookPreset(); };
+    expR.oninput = ()=>{ look.exposure = Number(expR.value); expVal.textContent = look.exposure.toFixed(2); applyLighting(); };
+    ambR.oninput = ()=>{ look.amb = Number(ambR.value); ambVal.textContent = look.amb.toFixed(2); applyLighting(); };
+    keyR.oninput = ()=>{ look.key = Number(keyR.value); keyVal.textContent = look.key.toFixed(2); applyLighting(); };
+    fillR.oninput = ()=>{ look.fill = Number(fillR.value); fillVal.textContent = look.fill.toFixed(2); applyLighting(); };
+    rimR.oninput = ()=>{ look.rim = Number(rimR.value); rimVal.textContent = look.rim.toFixed(2); applyLighting(); };
+
+    // Camera/subject controls
+    const speedR = document.getElementById('speed'); const camsR = document.getElementById('cams'); const radiusR = document.getElementById('radius'); const cxR = document.getElementById('centerX'); const czR = document.getElementById('centerZ'); const smSel=document.getElementById('subjectMode'); const ssR=document.getElementById('subjectSpeed');
+    const speedVal = document.getElementById('speedVal'); const camsVal=document.getElementById('camsVal'); const radVal=document.getElementById('radVal'); const cxVal=document.getElementById('cxVal'); const czVal=document.getElementById('czVal'); const ssVal=document.getElementById('ssVal');
+    speedR.oninput = ()=>{ speed = Number(speedR.value); speedVal.textContent = speed.toFixed(1)+'×'; };
+    camsR.onchange = ()=>{ CAM_COUNT = Number(camsR.value); camsVal.textContent = CAM_COUNT; current = Math.min(current, CAM_COUNT-1); visited = new Set([current]); rebuildCameras(); };
+    radiusR.oninput = ()=>{ RADIUS = Number(radiusR.value); radVal.textContent = RADIUS; rebuildCameras(); };
+    cxR.oninput = ()=>{ CX = Number(cxR.value); cxVal.textContent = CX; rebuildCameras(); };
+    czR.oninput = ()=>{ CZ = Number(czR.value); czVal.textContent = CZ; rebuildCameras(); };
+    smSel.onchange = ()=>{ subjectMode = smSel.value; };
+    ssR.oninput = ()=>{ subjectSpeed = Number(ssR.value); ssVal.textContent = subjectSpeed.toFixed(2)+'×'; };
+
+    // Timeline
+    const tl = document.getElementById('timeline'); let scrub=false;
+    const getIdx = (x)=> Math.max(0, Math.min(CAM_COUNT-1, Math.round((x - tl.getBoundingClientRect().left) / tl.clientWidth * (CAM_COUNT-1))));
+    const toIdx = (i)=>{ current=i; visited.add(i); updateHUD(); };
+    tl.addEventListener('pointerdown', e=>{ scrub=true; toIdx(getIdx(e.clientX)); });
+    window.addEventListener('pointermove', e=>{ if(scrub) toIdx(getIdx(e.clientX)); });
+    window.addEventListener('pointerup', ()=>{ scrub=false; });
+
+    // Help modal
+    document.getElementById('helpBtn').onclick = async ()=>{ const txt = document.getElementById('bvTemplate').content.textContent.trim(); const res = await safeCopy(txt); if(res.ok){ showToast('Template copied ('+res.method+').'); } else { openPromptModal(txt); } };
+
+    // Tests
+    document.getElementById('testCopy').onclick = async ()=>{ const demo='Clipboard self-test @ '+new Date().toISOString(); const res=await safeCopy(demo); showToast(res.ok?'Clipboard OK':'Clipboard blocked'); };
+    document.getElementById('testAudio').onclick = ()=>{ if(!audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)(); beep(880,0.05); };
+    document.getElementById('testVibe').onclick = ()=>{ if(navigator.vibrate) navigator.vibrate(15); };
+    document.getElementById('testPaths').onclick = runPathTests;
+    document.getElementById('testLight').onclick = lightSweep;
+
+    window.addEventListener('resize', onResize);
+  }
+
+  function toggleUIHidden(){ document.body.classList.toggle('ui-hidden'); }
+
+  async function toggleFullscreen(){
+    try{
+      if(!document.fullscreenElement){
+        const el = document.documentElement;
+        (el.requestFullscreen||el.webkitRequestFullscreen||el.msRequestFullscreen).call(el);
+      }else{
+        (document.exitFullscreen||document.webkitExitFullscreen||document.msExitFullscreen).call(document);
+      }
+    }catch(e){ showToast('Fullscreen blocked'); }
+  }
+
+  function applyLookPreset(){
+    const p = look.preset;
+    if(p==='cool'){
+      key.color.set(0xddefff); fill.color.set(0x6fb8ff); rim.color.set(0x7fffd4); document.body.style.background='radial-gradient(1200px 800px at 20% -20%, #0a1730, #000 60%)'; renderer.toneMappingExposure = look.exposure*1.05;
+    }else if(p==='warm'){
+      key.color.set(0xffe0b2); fill.color.set(0xffb088); rim.color.set(0xff6a33); document.body.style.background='radial-gradient(1200px 800px at 80% -20%, #2a1300, #000 60%)'; renderer.toneMappingExposure = look.exposure*1.1;
+    }else if(p==='noir'){
+      key.color.set(0xffffff); fill.color.set(0x777777); rim.color.set(0xffffff); document.body.style.filter='grayscale(0.9) contrast(1.15)'; document.body.style.background='radial-gradient(1200px 800px at 50% -20%, #0b0b0b, #000 60%)'; renderer.toneMappingExposure = look.exposure*0.95;
+    }else{
+      key.color.set(0xfff4d2); fill.color.set(0x66aaff); rim.color.set(0x00ffb0); document.body.style.filter='none'; document.body.style.background='radial-gradient(1200px 800px at 80% -20%, #06261c, #000 60%)'; renderer.toneMappingExposure = look.exposure;
+    }
+    applyLighting();
+  }
+  function applyLighting(){ amb.intensity = look.amb; key.intensity = look.key; fill.intensity = look.fill; rim.intensity = look.rim; renderer.toneMappingExposure = look.exposure; }
+
+  function onResize(){ cams.forEach(c=>{ c.aspect = innerWidth/innerHeight; c.updateProjectionMatrix(); }); renderer.setSize(innerWidth, innerHeight); }
+
+  // ===== Timeline & Ring =====
+  function buildTimeline(){ const tl = document.getElementById('timeline'); tl.querySelectorAll('.tick,.marker').forEach(n=>n.remove()); for(let i=0;i<CAM_COUNT;i++){ if(i%6===0 || i===CAM_COUNT-1){ const t=document.createElement('div'); t.className='tick glass'; t.style.left=(i/(CAM_COUNT-1))*100+'%'; tl.appendChild(t);} const m=document.createElement('div'); m.className='marker glass stroke'; m.style.left=(i/(CAM_COUNT-1))*100+'%'; m.onclick=()=>{ current=i; visited.add(i); updateHUD(); }; tl.appendChild(m);} }
+  function updateTimeline(){ const tl=document.getElementById('timeline'); const progress=document.getElementById('progress'); const ms=tl.querySelectorAll('.marker'); ms.forEach((m,i)=>m.classList.toggle('active', i===current)); progress.style.width=((current+1)/CAM_COUNT*100)+'%'; }
+  function drawRing(){ const ctx=ringCanvas.getContext('2d'); const w=ringCanvas.width, h=ringCanvas.height; const cx=w/2, cy=h/2; ctx.clearRect(0,0,w,h); const Pth=PATHS[pathKey]; const hp=getSubjectPos(subjectPhase); const hx=cx+((hp.x-CX)/60)*(w*0.42); const hy=cy+((hp.z-CZ)/60)*(h*0.42); for(let i=0;i<CAM_COUNT;i++){ const cfg=Pth.cam(i,CAM_COUNT); const x=cx+((cfg.pos.x-CX)/60)*(w*0.42); const y=cy+((cfg.pos.z-CZ)/60)*(h*0.42); ctx.beginPath(); ctx.arc(x,y, i===current?9:5, 0, Math.PI*2); ctx.fillStyle = i===current? '#00ffb0' : (visited.has(i)? '#0a5':'#032'); ctx.fill(); if(i===current){ ctx.lineWidth=3; ctx.strokeStyle='#00ffb0'; ctx.stroke(); } } const ccfg=Pth.cam(current,CAM_COUNT); const cx2=cx+((ccfg.pos.x-CX)/60)*(w*0.42); const cy2=cy+((ccfg.pos.z-CZ)/60)*(h*0.42); ctx.beginPath(); ctx.moveTo(cx2,cy2); ctx.lineTo(hx,hy); ctx.lineWidth=2; ctx.strokeStyle='rgba(0,255,176,0.75)'; ctx.stroke(); ctx.beginPath(); ctx.arc(hx,hy,7,0,Math.PI*2); ctx.fillStyle='#ff3355'; ctx.fill(); }
+
+  // ===== Subject & Waveform =====
+  function getSubjectPos(p){ const fn=SUBJECTS[subjectMode]||SUBJECTS.circle; return fn((p%1+1)%1); }
+  function updateSubject(dt){ subjectPhase=(subjectPhase + dt*0.2*subjectSpeed)%1; const pos=getSubjectPos(subjectPhase); subject.position.set(pos.x,0,pos.z); subject.rotation.y=pos.r||0; const stride=subjectPhase*Math.PI*14; subject.legs.forEach(leg=>{ const lp=stride+leg.userData.ph; const lift=Math.max(0,Math.sin(lp))*1.8; leg.position.y=1.35+lift; const swing=Math.cos(lp)*0.75; leg.position.x=leg.userData.bx+swing; leg.rotation.z=Math.sin(lp)*0.45; }); const ctx=waveCanvas.getContext('2d'); const w=waveCanvas.width=waveCanvas.clientWidth; const h=waveCanvas.height=waveCanvas.clientHeight; ctx.clearRect(0,0,w,h); ctx.strokeStyle='#0a5'; ctx.lineWidth=2; ctx.beginPath(); for(let x=0;x<w;x++){ const t=(x/w)*Math.PI*2; const y=Math.sin(t + stride%(Math.PI*2)); const yy=(h/2)+y*(h/2-6); if(x===0) ctx.moveTo(0,yy); else ctx.lineTo(x,yy);} ctx.stroke(); }
+
+  // ===== HUD & Loop =====
+  function setKV(entries){ kvEl && (kvEl.innerHTML = entries.map(([k,v])=>`<div>${k}</div><div>${v}</div>`).join('')); }
+  function updateHUD(){ document.getElementById('camNo').textContent=String(current+1).padStart(2,'0'); document.getElementById('pathName').textContent=PATHS[pathKey].name; drawRing(); updateTimeline(); setKV([["currentCam", current],["visited", visited.size+"/"+CAM_COUNT],["camSpeed", speed.toFixed(2)],["dir", dir<0?'REV':'FWD'],["fps", fps.toFixed(0)],["path", pathKey],["radius", RADIUS],["center", `${CX}, ${CZ}`],["subject", subjectMode+' @ '+subjectSpeed.toFixed(2)+'×'],["look", look.preset+' exp '+look.exposure.toFixed(2)]]); }
+  function tick(now=0){ requestAnimationFrame(tick); const dt=Math.min((now-lastNow)/1000,0.1); lastNow=now; fps=1/Math.max(dt,0.0001); if(playing){ const step=speed*dt*dir; tick.acc=(tick.acc||0)+step; const stride=0.06; while(Math.abs(tick.acc)>=stride){ tick.acc-=Math.sign(tick.acc)*stride; current=(current+Math.sign(dir)+CAM_COUNT)%CAM_COUNT; visited.add(current);} } updateSubject(dt); updateHUD(); renderer.render(scene, cams[current]||cams[0]); }
+
+  // ===== Tests =====
+  function runPathTests(){ let pass=true; const issues=[]; for(const k of Object.keys(PATHS)){ const N=CAM_COUNT; const fn=PATHS[k].cam; if(typeof fn!=="function"){ pass=false; issues.push(`Path ${k}: cam is not a function`); continue; } for(let i=0;i<N;i+=Math.max(1,Math.floor(N/7))){ try{ const c=fn(i,N); const ok=c && c.pos && isFinite(c.pos.x)&&isFinite(c.pos.y)&&isFinite(c.pos.z)&&c.look && isFinite(c.look.x); if(!ok){ pass=false; issues.push(`Path ${k}: invalid vector at i=${i}`); break; } }catch(e){ pass=false; issues.push(`Path ${k}: threw at i=${i} → ${e.message}`); break; } } } if(!pass) console.log(issues.join('\n')); }
+  function lightSweep(){ const seq=['neon','cool','warm','noir']; let i=0; const id=setInterval(()=>{ look.preset=seq[i%seq.length]; applyLookPreset(); i++; if(i>7) clearInterval(id); }, 900); }
+
+  // ===== Helpers =====
+  function buildPaths(){ const wrap=document.getElementById('paths'); wrap.innerHTML=''; Object.keys(PATHS).forEach(k=>{ const b=document.createElement('button'); b.className='pill glass stroke'+(k===pathKey?' active':''); b.textContent=PATHS[k].name; b.onclick=()=>{ pathKey=k; current=0; visited=new Set([0]); rebuildCameras(); updateHUD(); }; wrap.appendChild(b); }); }
+  function buildTimeline(){ const tl=document.getElementById('timeline'); tl.querySelectorAll('.tick,.marker').forEach(n=>n.remove()); for(let i=0;i<CAM_COUNT;i++){ if(i%6===0||i===CAM_COUNT-1){ const t=document.createElement('div'); t.className='tick'; t.style.left=(i/(CAM_COUNT-1))*100+'%'; tl.appendChild(t);} const m=document.createElement('div'); m.className='marker glass stroke'; m.style.left=(i/(CAM_COUNT-1))*100+'%'; m.onclick=()=>{ current=i; visited.add(i); updateHUD(); }; tl.appendChild(m);} }
+  function onResize(){ cams.forEach(c=>{ c.aspect=innerWidth/innerHeight; c.updateProjectionMatrix(); }); renderer.setSize(innerWidth, innerHeight); }
+
+  // ===== Modal helpers =====
+  function openPromptModal(text){ const modal=document.getElementById('modal'); const ta=document.getElementById('modalText'); ta.value=text; modal.style.display='flex'; setTimeout(()=>{ ta.focus(); ta.select(); }, 50); }
+
+  // ===== Init =====
+  init();
+  </script>
+</body>
+    const w = ringCanvas.width, h = ringCanvas.height; const cx=w/2, cy=h/2; ctx.clearRect(0,0,w,h);
+    const Pth = PATHS[pathKey];
+    // subject (red)
+    const hp = getSubjectPos(subjectPhase);
+    const hx=cx + ((hp.x - CX)/60)*(w*0.42); const hy=cy + ((hp.z - CZ)/60)*(h*0.42);
+    // cameras
+    for(let i=0;i<CAM_COUNT;i++){
+      const cfg = Pth.cam(i, CAM_COUNT); const x=cx + ((cfg.pos.x - CX)/60)*(w*0.42); const y=cy + ((cfg.pos.z - CZ)/60)*(h*0.42);
+      ctx.beginPath(); ctx.arc(x,y, i===current?9:5, 0, Math.PI*2); ctx.fillStyle = i===current? '#00ff88' : (visited.has(i)? '#0a5':'#032'); ctx.fill(); if(i===current){ ctx.lineWidth=3; ctx.strokeStyle='#00ff88'; ctx.stroke(); }
+    }
+    // link
+    const ccfg = Pth.cam(current, CAM_COUNT); const cx2=cx+((ccfg.pos.x - CX)/60)*(w*0.42); const cy2=cy+((ccfg.pos.z - CZ)/60)*(h*0.42);
+    ctx.beginPath(); ctx.moveTo(cx2,cy2); ctx.lineTo(hx,hy); ctx.lineWidth=2; ctx.strokeStyle='rgba(0,255,136,0.7)'; ctx.stroke();
+    ctx.beginPath(); ctx.arc(hx,hy,7,0,Math.PI*2); ctx.fillStyle='#ff3355'; ctx.fill();
+  }
+
+  // ======= Subject Motion & Waveform =======
+  function getSubjectPos(p){
+    const fn = SUBJECTS[subjectMode] || SUBJECTS.circle;
+    return fn((p%1+1)%1);
+  }
+  function updateSubject(dt){
+    subjectPhase = (subjectPhase + dt * 0.2 * subjectSpeed) % 1;
+    const pos = getSubjectPos(subjectPhase);
+    subject.position.set(pos.x, 0, pos.z); subject.rotation.y = pos.r || 0;
+    const stride = subjectPhase * Math.PI * 14;
+    subject.legs.forEach(leg=>{ const lp = stride + leg.userData.ph; const lift = Math.max(0, Math.sin(lp))*1.8; leg.position.y = 1.35 + lift; const swing = Math.cos(lp)*0.75; leg.position.x = leg.userData.bx + swing; leg.rotation.z = Math.sin(lp)*0.45; });
+    const ctx = waveCanvas.getContext('2d'); const w=waveCanvas.width = waveCanvas.clientWidth; const h=waveCanvas.height = waveCanvas.clientHeight;
+    ctx.clearRect(0,0,w,h); ctx.strokeStyle='#0a5'; ctx.lineWidth=2; ctx.beginPath();
+    for(let x=0;x<w;x++){
+      const t = (x/w)*Math.PI*2; const y = Math.sin(t + stride% (Math.PI*2)); const yy = (h/2) + y*(h/2 - 6); if(x===0) ctx.moveTo(0,yy); else ctx.lineTo(x,yy);
+    }
+    ctx.stroke();
+  }
+
+  // ======= HUD & Loop =======
+  function updateHUD(){
+    document.getElementById('camNo').textContent = String(current+1).padStart(2,'0');
+    document.getElementById('pathName').textContent = PATHS[pathKey].name;
+    drawRing(); updateTimeline();
+    setKV([
+      ['currentCam', current], ['visited', visited.size + '/' + CAM_COUNT], ['camSpeed', speed.toFixed(2)], ['dir', dir<0?'REV':'FWD'], ['fps', fps.toFixed(0)], ['path', pathKey], ['radius', RADIUS], ['center', `${CX}, ${CZ}`], ['subject', subjectMode+' @ '+subjectSpeed.toFixed(2)+'×'], ['look', look.preset+' exp '+look.exposure.toFixed(2)]
+    ]);
+  }
+  function tick(now=0){
+    requestAnimationFrame(tick);
+    const dt = Math.min((now-lastNow)/1000, 0.1); lastNow = now; fps = 1/Math.max(dt, 0.0001);
+    if(playing){
