@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Echoes & Algorithms — Soundtrack Engine</title>
+<style>
+  :root{
+    --bg:#0b0c10; --ink:#e6e6e6; --muted:#9aa0a6; --accent:#7df9ff; --accent2:#ffd166; --ok:#4ade80; --bad:#f87171;
+  }
+  html,body{height:100%;}
+  body{margin:0;background:radial-gradient(120vmax 120vmax at 50% 120%, #111 20%, #0b0c10 60%, #050608 100%);
+       color:var(--ink);font:16px/1.5 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+       -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;}
+  .app{display:grid;grid-template-rows:auto 1fr auto;min-height:100vh;}
+  header{position:sticky;top:0;backdrop-filter:saturate(140%) blur(6px);background:#0b0c10cc;border-bottom:1px solid #1f2937;
+    padding:12px env(safe-area-inset-right) 12px env(safe-area-inset-left);} 
+  header h1{margin:0;font-size:18px;letter-spacing:.04em;display:flex;align-items:center;gap:.6rem;}
+  header h1 .dot{width:.6rem;height:.6rem;border-radius:999px;background:var(--accent);box-shadow:0 0 12px var(--accent);} 
+  header nav{margin-top:8px;display:flex;gap:8px;flex-wrap:wrap}
+  button,select,input[type=range]{
+    appearance:none;border:1px solid #283241;background:#0e1117;color:var(--ink);border-radius:14px;padding:10px 14px;
+    font:600 14px/1 ui-sans-serif, system-ui;letter-spacing:.02em;box-shadow:inset 0 0 0 1px #0004;transition:transform .06s ease, background .2s;
+  }
+  button:active{transform:translateY(1px)}
+  button.primary{background:linear-gradient(180deg, #12202b, #0b141b);border-color:#213041}
+  button[aria-pressed="true"], button.primary[aria-pressed="true"]{outline:2px solid var(--accent)}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .grow{flex:1}
+  main{position:relative;overflow:hidden}
+  #viz{position:absolute;inset:0;display:block;width:100%;height:100%}
+  .glass{position:absolute;inset:auto 12px 12px 12px;padding:10px 12px;border:1px solid #1f2937;
+    background:#0b0c10cc;backdrop-filter:saturate(140%) blur(6px);border-radius:16px;max-width:850px}
+  .glass h2{margin:0 0 4px 0;font-size:16px}
+  .glass p{margin:0;color:var(--muted)}
+  .tag{display:inline-flex;align-items:center;gap:6px;border:1px solid #203040;background:#0b1016;border-radius:999px;padding:6px 10px;font-size:12px;color:#b3c1d1}
+  footer{padding:10px env(safe-area-inset-right) calc(8px + env(safe-area-inset-bottom)) env(safe-area-inset-left);display:grid;gap:10px;border-top:1px solid #1f2937;background:#0b0c10cc;backdrop-filter:saturate(140%) blur(6px)}
+  .meter{height:6px;border-radius:999px;background:#111827;border:1px solid #1f2937;overflow:hidden}
+  .meter>i{display:block;height:100%;background:linear-gradient(90deg, #1fb9d0, #7df9ff);width:0%}
+  .scene-tabs{display:flex;overflow:auto;gap:8px;padding:2px}
+  .scene-tabs button{white-space:nowrap}
+  .sr{position:absolute;left:-9999px}
+  @media (min-width:760px){header{padding:14px 18px} .glass{left:18px;right:auto;bottom:18px;width:min(46ch, 54vw)} footer{grid-template-columns:1fr auto}}
+</style>
+</head>
+<body>
+<div class="app" role="application" aria-label="Echoes and Algorithms soundtrack engine">
+  <header>
+    <h1><span class="dot" aria-hidden="true"></span> Echoes & Algorithms — Soundtrack Engine</h1>
+    <nav class="row" aria-label="transport">
+      <button id="btnStart" class="primary" aria-pressed="false" aria-label="Start or pause (space)">Start</button>
+      <button id="btnPrev" aria-label="Previous scene (←)">◀︎ Prev</button>
+      <button id="btnNext" aria-label="Next scene (→)">Next ▶︎</button>
+      <label class="tag">Auto <input id="autoPlay" type="checkbox" aria-label="Auto advance scenes"/></label>
+      <label class="tag">Voice <select id="voiceSel" aria-label="Choose TTS voice"></select></label>
+      <label class="tag">Theme <select id="themeSel" aria-label="Theme">
+        <option value="dark" selected>Dark</option>
+        <option value="light">Light</option>
+      </select></label>
+      <div class="grow"></div>
+      <label class="tag">Master <input id="vol" type="range" min="0" max="1" step="0.001" value="0.85"/></label>
+    </nav>
+    <div class="scene-tabs" id="sceneTabs" role="tablist" aria-label="Scenes"></div>
+  </header>
+  <main>
+    <canvas id="viz" aria-hidden="true"></canvas>
+    <section class="glass" id="caption" aria-live="polite">
+      <h2 id="sceneTitle">—</h2>
+      <p id="sceneDesc">An experimental, mobile-first soundtrack engine using Web Audio + speech synthesis. Tap anywhere and drag to modulate.
+      </p>
+    </section>
+  </main>
+  <footer>
+    <div class="meter" aria-hidden="true"><i id="meterFill"></i></div>
+    <div class="row">
+      <small id="status">Idle · Audio off</small>
+      <div class="grow"></div>
+      <small>Tap/drag to shape filters • Space/Enter to Start/Stop • ←/→ to navigate</small>
+    </div>
+  </footer>
+</div>
+<script>
+(() => {
+  // ---------- Utility ----------
+  const $ = sel => document.querySelector(sel);
+  const $el = (tag, attrs={}) => Object.assign(document.createElement(tag), attrs);
+  const clamp=(v,min,max)=>Math.min(max,Math.max(min,v));
+
+  // ---------- Audio Graph ----------
+  let actx, master, analyser, meterData, convolver, dry, filterA, filterB, noiseNode, lfo, compressor;
+  let running=false, current=0, auto=false, sceneStartedAt=0, sceneTimer=null, ttsSpeaking=false;
+  const meterFill = $('#meterFill');
+
+  function ensureAudio(){
+    if(actx) return;
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+
+    master = actx.createGain(); master.gain.value = +$('#vol').value; master.connect(actx.destination);
+    compressor = new DynamicsCompressorNode(actx,{attack:0.005, release:0.15, ratio:6, threshold:-12, knee:3});
+    compressor.connect(master);
+
+    dry = actx.createGain(); dry.gain.value = 0.9; dry.connect(compressor);
+
+    // Simple synthetic IR for a soft room
+    convolver = actx.createConvolver(); convolver.buffer = makeImpulseResponse(1.8, 0.6);
+    const wet = actx.createGain(); wet.gain.value = 0.25; convolver.connect(wet).connect(compressor);
+
+    // Shared filters shaped by pointer
+    filterA = new BiquadFilterNode(actx,{type:'bandpass', frequency:800, Q:1});
+    filterB = new BiquadFilterNode(actx,{type:'highshelf', frequency:2400, gain:3});
+
+    // analyser for viz
+    analyser = actx.createAnalyser(); analyser.fftSize = 1024; meterData = new Uint8Array(analyser.frequencyBinCount);
+
+    // noise bed (for urban/rain/room tone)
+    noiseNode = makeNoiseSource();
+
+    // LFO for gentle motion
+    lfo = actx.createOscillator(); lfo.frequency.value = 0.1; const lfoGain = new GainNode(actx,{gain:50});
+    lfo.connect(lfoGain);
+    lfo.start();
+
+    // Patch shared chain
+    // Many scene synths will connect to filterA -> filterB -> [dry+wet]
+    filterA.connect(filterB); filterB.connect(dry); filterB.connect(convolver);
+    // Also feed analyser for viz
+    const tap = new GainNode(actx,{gain:1}); filterB.connect(tap); tap.connect(analyser);
+
+    // Respond to volume
+    $('#vol').addEventListener('input', e=> master.gain.value = +e.target.value);
+  }
+
+  function makeImpulseResponse(seconds=1.5, decay=0.5){
+    const rate = 48000, len = Math.floor(seconds*rate); const buf = actx.createBuffer(2,len,rate);
+    for(let ch=0; ch<2; ch++){
+      const data = buf.getChannelData(ch);
+      for(let i=0;i<len;i++){
+        const t = i/len; data[i] = (Math.random()*2-1) * Math.pow(1-t, decay*3);
+      }
+    }
+    return buf;
+  }
+
+  function makeNoiseSource(){
+    const bufSize = 2**15; const buf = actx.createBuffer(1, bufSize, actx.sampleRate);
+    const data = buf.getChannelData(0);
+    for(let i=0;i<buf.length;i++) data[i] = Math.random()*2-1;
+    const src = actx.createBufferSource(); src.buffer = buf; src.loop = true;
+    const nGain = new GainNode(actx,{gain:0});
+    const nBPF = new BiquadFilterNode(actx,{type:'bandpass', frequency:500, Q:0.6});
+    src.connect(nBPF).connect(nGain).connect(filterA);
+    src.start();
+    return {src, gain:nGain, bpf:nBPF};
+  }
+
+  function pluck(freq=220, t0=actx.currentTime, dur=1.2){
+    // Karplus-Strong style lite (noise burst through lowpass with feedback)
+    const noise = actx.createBufferSource();
+    const nbuf = actx.createBuffer(1, 512, actx.sampleRate);
+    const d = nbuf.getChannelData(0); for(let i=0;i<d.length;i++) d[i] = Math.random()*2-1;
+    noise.buffer = nbuf;
+    const bp = new BiquadFilterNode(actx,{type:'bandpass',frequency:freq, Q:6});
+    const env = new GainNode(actx,{gain:0});
+    noise.connect(bp).connect(env).connect(filterA);
+    env.gain.setValueAtTime(0, t0);
+    env.gain.linearRampToValueAtTime(0.9, t0+0.01);
+    env.gain.exponentialRampToValueAtTime(0.0001, t0+dur);
+    noise.start(t0); noise.stop(t0+0.05);
+  }
+
+  function sineBell(freq=440, t0=actx.currentTime, dur=2){
+    const o = actx.createOscillator(); o.type='sine'; o.frequency.setValueAtTime(freq,t0);
+    const g = new GainNode(actx,{gain:0}); o.connect(g).connect(filterA);
+    g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(0.6, t0+0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0+dur);
+    o.start(t0); o.stop(t0+dur+0.05);
+  }
+
+  function fmVoice(freq=140, t0=actx.currentTime, dur=1.8){
+    const car = new OscillatorNode(actx,'sine');
+    const mod = new OscillatorNode(actx,'sine'); mod.frequency.value = freq*2.01;
+    const modGain = new GainNode(actx,{gain:freq*0.9}); mod.connect(modGain); modGain.connect(car.frequency);
+    const g = new GainNode(actx,{gain:0}); car.connect(g).connect(filterA);
+    g.gain.setValueAtTime(0,t0); g.gain.linearRampToValueAtTime(0.5,t0+0.03); g.gain.exponentialRampToValueAtTime(0.0001,t0+dur);
+    car.start(t0); mod.start(t0); car.stop(t0+dur); mod.stop(t0+dur);
+  }
+
+  // ---------- Scenes ----------
+  const scenes = [
+    {
+      id:'prologue',
+      title:'Prologue — Quiet That Isn\'t',
+      desc:'A near-silent chamber: low room-tone, soft reverb, a breath. Drag to sweep a band-pass as your ear. TTS frames the thesis.',
+      dur:22,
+      tts:[
+        'Silence is a presence. Listening is how space becomes time.',
+        'We will tune attention across human and machine voices.'
+      ],
+      play(){
+        // gentle room tone
+        noiseNode.gain.gain.cancelScheduledValues(actx.currentTime);
+        noiseNode.gain.gain.linearRampToValueAtTime(0.02, actx.currentTime+0.5);
+        noiseNode.bpf.frequency.setTargetAtTime(350, actx.currentTime, 1.2);
+        sineBell(660, actx.currentTime+8, 3.5);
+        sineBell(495, actx.currentTime+12, 2.5);
+      }
+    },
+    {
+      id:'hifi',
+      title:'Hi‑Fi / Lo‑Fi / Algo‑Fi',
+      desc:'Schafer through three layers: clear bells (hi‑fi), dense traffic noise (lo‑fi), and curated pings (algorithmic).',
+      dur:28,
+      tts:[
+        'Hi fi spaces reveal distance. Lo fi erases it. Algorithms now script attention.'
+      ],
+      play(){
+        // hi‑fi: sparse bells
+        for(let i=0;i<5;i++) sineBell(440*Math.pow(2, i%2?0: -0.25), actx.currentTime + 0.8*i, 1.6);
+        // lo‑fi: raise noise + widen band
+        noiseNode.bpf.frequency.setTargetAtTime(800, actx.currentTime+6, 1.5);
+        noiseNode.gain.gain.linearRampToValueAtTime(0.18, actx.currentTime+8);
+        // algo‑fi: recommendation pings
+        for(let k=0;k<9;k++) pluck(220 + (Math.random()*440), actx.currentTime + 12 + k*1.4, 1.0+Math.random());
+      }
+    },
+    {
+      id:'protocol-silence',
+      title:'Protocol Silence',
+      desc:'Cage with network rules: a counted mute, then a single artifact appears. Watch the meter: silence has shape.',
+      dur:20,
+      tts:[ 'Silence is not acoustic. It is a change of mind.' ],
+      play(){
+        // pull down almost to zero, keep analyser alive
+        noiseNode.gain.gain.setTargetAtTime(0.005, actx.currentTime, 0.8);
+        // one glitch as protocol artifact
+        fmVoice(90, actx.currentTime+12, 0.4);
+      }
+    },
+    {
+      id:'uncanny',
+      title:'Uncanny Valley of Voice',
+      desc:'A near human timbre via FM tones. TTS overlays a line; pitched echoes reply like almost-voices.',
+      dur:26,
+      tts:[ 'Between mimic and human, we feel recognition thresholds.' ],
+      play(){
+        for(let i=0;i<8;i++) fmVoice(120 + i*12, actx.currentTime + i*1.6, 1.4);
+        for(let j=0;j<6;j++) sineBell(300 + j*33, actx.currentTime + 2.2 + j*1.2, 1.8);
+      }
+    },
+    {
+      id:'evolution',
+      title:'Evolutionary Echoes',
+      desc:'Crickets to chorus: filtered noise chirps and staggered plucks form a small biome without a conductor.',
+      dur:24,
+      tts:[ 'Biodiversity emerges from coordination without control.' ],
+      play(){
+        noiseNode.bpf.frequency.setTargetAtTime(3200, actx.currentTime, 1.0);
+        noiseNode.gain.gain.linearRampToValueAtTime(0.08, actx.currentTime+1);
+        for(let i=0;i<24;i++) setTimeout(()=>pluck(400+Math.random()*1200, actx.currentTime, 0.8+Math.random()*0.6), i*250);
+      }
+    },
+    {
+      id:'audile',
+      title:'Computational Audile Technique',
+      desc:'Machine listening listens back. Quantized bells learn your pointer: move to teach the filter.',
+      dur:24,
+      tts:[ 'Algorithms hear patterns, then feed them back as preference.' ],
+      play(){
+        let t = actx.currentTime;
+        for(let i=0;i<12;i++){ sineBell(220*Math.pow(2,(i%7)/12), t+i*0.9, 1.2); }
+      }
+    },
+    {
+      id:'architectures',
+      title:'Architectures of Acoustics',
+      desc:'Rooms script behavior. We swell the reverb and shift materials: tile, stairwell, padded studio.',
+      dur:26,
+      tts:[ 'Space composes conduct. Acoustics are social design.' ],
+      play(){
+        // tile → long tail → dry studio
+        convolver.buffer = makeImpulseResponse(2.4, 0.35);
+        setTimeout(()=>{convolver.buffer = makeImpulseResponse(4.5, 0.25)}, 9000);
+        setTimeout(()=>{convolver.buffer = makeImpulseResponse(0.9, 0.7)}, 17000);
+        for(let i=0;i<10;i++) sineBell(180+ i*40, actx.currentTime + 0.7*i, 1.6);
+      }
+    },
+    {
+      id:'ethics',
+      title:'Ethics of Artificial Attention',
+      desc:'Soft pulses lure; ads break the spell. A bright triad interrupts with louder dynamics, then fades.',
+      dur:24,
+      tts:[ 'Who benefits from your listening? Design for dignity.' ],
+      play(){
+        for(let i=0;i<12;i++) fmVoice(80 + (i%3)*9, actx.currentTime + i*1.1, 0.9);
+        // ad‑like interrupt
+        setTimeout(()=>{ sineBell(523.25); sineBell(659.25); sineBell(783.99); }, 8000);
+      }
+    },
+    {
+      id:'coda',
+      title:'Coda — Critical Listening',
+      desc:'Return to breath. You decide the mix: drag to cut noise, lift voices. Agency as practice.',
+      dur:22,
+      tts:[ 'Critical listening is composition of attention. Compose differently.' ],
+      play(){
+        noiseNode.bpf.frequency.setTargetAtTime(500, actx.currentTime, 1.0);
+        noiseNode.gain.gain.linearRampToValueAtTime(0.03, actx.currentTime+1);
+        sineBell(660, actx.currentTime+10, 2.6);
+      }
+    }
+  ];
+
+  // ---------- Transport ----------
+  function updateCaption(){
+    const s = scenes[current];
+    $('#sceneTitle').textContent = s.title;
+    $('#sceneDesc').textContent = s.desc;
+  }
+
+  function speakLines(lines){
+    if(!('speechSynthesis' in window)) return Promise.resolve();
+    const voiceName = $('#voiceSel').value;
+    return new Promise(resolve=>{
+      let i=0; ttsSpeaking = true;
+      const next=()=>{
+        if(i>=lines.length){ ttsSpeaking=false; resolve(); return; }
+        const u = new SpeechSynthesisUtterance(lines[i]);
+        if(voiceName){ u.voice = speechSynthesis.getVoices().find(v=>v.name===voiceName)||null; }
+        u.rate = 0.95; u.pitch = 1.0; u.volume = clamp(master?.gain?.value||0.85,0,1);
+        u.onend = ()=>{ i++; setTimeout(next, 250); };
+        speechSynthesis.speak(u);
+      };
+      next();
+    });
+  }
+
+  function stopAll(){
+    if(!actx) return; running=false; $('#btnStart').setAttribute('aria-pressed','false');
+    if(sceneTimer) clearTimeout(sceneTimer);
+    status('Paused');
+  }
+
+  async function playScene(index=current){
+    ensureAudio(); if(!actx) return;
+    current = clamp(index, 0, scenes.length-1);
+    updateCaption(); highlightTab();
+    if(actx.state==='suspended') await actx.resume();
+
+    sceneStartedAt = actx.currentTime;
+    scenes[current].play();
+    const pending = scenes[current].tts?.length ? speakLines(scenes[current].tts) : Promise.resolve();
+    running=true; $('#btnStart').setAttribute('aria-pressed','true');
+    const dur = scenes[current].dur;
+    if(sceneTimer) clearTimeout(sceneTimer);
+    sceneTimer = setTimeout(async ()=>{
+      if(auto){ await nextScene(); } else { running=false; $('#btnStart').setAttribute('aria-pressed','false'); status('Ready'); }
+    }, dur*1000);
+    status('Playing');
+    pending.finally(()=>{/* no-op; speech just overlays */});
+  }
+
+  async function nextScene(){ current = (current+1)%scenes.length; await playScene(current); }
+  async function prevScene(){ current = (current-1+scenes.length)%scenes.length; await playScene(current); }
+
+  // ---------- Input / Interaction ----------
+  function status(text){ $('#status').textContent = `${text} · Scene ${current+1}/${scenes.length}`; }
+  $('#btnStart').addEventListener('click', async()=>{
+    ensureAudio();
+    if(!running){ await playScene(current); } else { stopAll(); }
+  });
+  $('#btnNext').addEventListener('click', ()=> nextScene());
+  $('#btnPrev').addEventListener('click', ()=> prevScene());
+  $('#autoPlay').addEventListener('change', e=>{ auto = e.target.checked; });
+  $('#themeSel').addEventListener('change', e=>{
+    const v=e.target.value; if(v==='light'){ document.documentElement.style.setProperty('--bg','#f6f7fb'); document.body.style.background='#f6f7fb'; document.documentElement.style.setProperty('--ink','#111'); } else { document.location.reload(); }
+  });
+
+  // pointer → filter modulation
+  let dragging=false; let lastX=0,lastY=0;
+  function modFromPointer(ev){
+    if(!actx) return; const rect = $('#viz').getBoundingClientRect();
+    const x = (ev.touches?ev.touches[0].clientX:ev.clientX) - rect.left;
+    const y = (ev.touches?ev.touches[0].clientY:ev.clientY) - rect.top;
+    const nx = clamp(x/rect.width,0,1); const ny = clamp(y/rect.height,0,1);
+    const freq = 120 * Math.pow(2, nx*5.4); // ~120–7000 Hz
+    const q = 0.3 + ny*8.0;
+    filterA.frequency.setTargetAtTime(freq, actx.currentTime, 0.08);
+    filterA.Q.setTargetAtTime(q, actx.currentTime, 0.12);
+    filterB.gain.setTargetAtTime((nx-0.5)*10, actx.currentTime, 0.15);
+    lastX=nx; lastY=ny;
+  }
+  $('#viz').addEventListener('pointerdown', e=>{ dragging=true; modFromPointer(e); $('#viz').setPointerCapture(e.pointerId); });
+  $('#viz').addEventListener('pointermove', e=>{ if(dragging) modFromPointer(e); });
+  $('#viz').addEventListener('pointerup', e=>{ dragging=false; });
+  $('#viz').addEventListener('touchstart', modFromPointer, {passive:true});
+  $('#viz').addEventListener('touchmove', modFromPointer, {passive:true});
+
+  // keys
+  window.addEventListener('keydown', e=>{
+    if(e.key===' '||e.key==='Enter'){ e.preventDefault(); $('#btnStart').click(); }
+    if(e.key==='ArrowRight'){ e.preventDefault(); $('#btnNext').click(); }
+    if(e.key==='ArrowLeft'){ e.preventDefault(); $('#btnPrev').click(); }
+  });
+
+  // ---------- Visuals ----------
+  const canvas = $('#viz'); const ctx = canvas.getContext('2d');
+  function resize(){ const dpr = Math.min(2, window.devicePixelRatio||1); canvas.width = Math.floor(canvas.clientWidth*dpr); canvas.height = Math.floor(canvas.clientHeight*dpr); ctx.setTransform(dpr,0,0,dpr,0,0); }
+  window.addEventListener('resize', resize, {passive:true});
+  const particles = Array.from({length:180}, (_,i)=>({x:Math.random(), y:Math.random(), z:Math.random(), v:(Math.random()*0.6+0.2)}));
+
+  function draw(){
+    requestAnimationFrame(draw);
+    if(!canvas.width) resize();
+    // background gradient motion
+    const g = ctx.createLinearGradient(0,0, canvas.width, canvas.height);
+    g.addColorStop(0, '#0b0c10'); g.addColorStop(1, '#0a1220');
+    ctx.fillStyle = g; ctx.fillRect(0,0, canvas.width, canvas.height);
+
+    if(analyser){ analyser.getByteFrequencyData(meterData); }
+    // meter level
+    const level = meterData ? meterData.slice(0,32).reduce((a,b)=>a+b,0)/ (32*255) : 0;
+    meterFill.style.width = `${(level*100).toFixed(1)}%`;
+
+    // particle field responds to level and pointer memory
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    ctx.globalCompositeOperation = 'lighter';
+    particles.forEach(p=>{
+      p.y += (0.002 + p.z*0.003 + level*0.01) * p.v; if(p.y>1) p.y=0;
+      const x = (p.x + Math.sin((p.y*10)+(lastX*6))*0.002) * w;
+      const y = p.y * h;
+      const r = 1 + p.z*3 + level*6;
+      const hue = 190 + (lastX*60);
+      ctx.fillStyle = `hsla(${hue}, 90%, ${50 + (level*20)}%, ${0.08 + p.z*0.12})`;
+      ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
+    });
+
+    // spectral veil
+    if(meterData){
+      const bars = 64; const bw = w/bars;
+      for(let i=0;i<bars;i++){
+        const v = meterData[i]/255; const bh = v*h*0.25; const x = i*bw; const y = h-bh;
+        ctx.fillStyle = `rgba(125, 249, 255, ${0.05+v*0.08})`;
+        ctx.fillRect(x,y,bw-1,bh);
+      }
+    }
+    ctx.globalCompositeOperation = 'source-over';
+  }
+  requestAnimationFrame(draw);
+
+  // ---------- Voices ----------
+  function loadVoices(){
+    if(!('speechSynthesis' in window)) return;
+    const vs = speechSynthesis.getVoices();
+    const sel = $('#voiceSel'); sel.innerHTML='';
+    vs.filter(v=>/en-|en_|English|US|UK/i.test(v.name)).forEach(v=> sel.appendChild($el('option',{value:v.name, textContent:v.name})));
+    if(!sel.value && vs[0]) sel.value = vs[0].name;
+  }
+  if('speechSynthesis' in window){ speechSynthesis.onvoiceschanged = loadVoices; loadVoices(); }
+
+  // ---------- Scene Tabs ----------
+  function buildTabs(){
+    const tabs = $('#sceneTabs'); tabs.innerHTML='';
+    scenes.forEach((s,i)=>{
+      const b = $el('button', {textContent:`${i+1}. ${s.title}`, role:'tab'});
+      b.addEventListener('click', ()=>{ current=i; playScene(i); });
+      tabs.appendChild(b);
+    });
+    highlightTab();
+  }
+  function highlightTab(){
+    [...$('#sceneTabs').children].forEach((b,i)=>{
+      b.setAttribute('aria-selected', String(i===current));
+      b.style.outline = i===current ? `2px solid var(--accent)` : 'none';
+    });
+  }
+
+  // ---------- Init ----------
+  buildTabs(); updateCaption(); resize();
+  status('Ready');
+})();
+</script>
+</body>
+</html>

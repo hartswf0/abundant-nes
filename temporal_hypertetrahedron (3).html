@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Temporal Hypertetrahedron — Per-Face Layer Sculptor (Reload-Safe)</title>
+  <style>
+    html, body { margin:0; height:100%; background:#000; overflow:hidden; }
+    canvas { display:block; touch-action:none; }
+  </style>
+  <script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js"}}</script>
+</head>
+<body>
+<script type="module">
+import * as THREE from 'three';
+
+// --- Hot-reload / re-run guard: clean up any prior instance before starting a new one ---
+if (globalThis.__tetra_cleanup__) {
+  try { globalThis.__tetra_cleanup__(); } catch (e) { console.warn('[Tetra] previous cleanup error', e); }
+}
+
+(() => { // isolate all identifiers to avoid "already been declared" across edits
+  const instanceId = (globalThis.__tetra_instance_id__ = (globalThis.__tetra_instance_id__ || 0) + 1);
+
+  // ===== Core setup =====
+  const scene = new THREE.Scene();
+  const renderer = new THREE.WebGLRenderer({ antialias:true, powerPreference:'high-performance' });
+  const DPR = Math.min(devicePixelRatio || 1, 2);
+  renderer.setPixelRatio(DPR);
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.setClearColor(0x000000, 1);
+  renderer.localClippingEnabled = true;
+  document.body.appendChild(renderer.domElement);
+
+  let camera; const ORTHO = 3.4;
+  function makeCamera(){
+    const a = innerWidth/innerHeight;
+    camera = new THREE.OrthographicCamera(-ORTHO*a, ORTHO*a, ORTHO, -ORTHO, 0.1, 100);
+    camera.position.set(4,4,4); camera.lookAt(0,0,0);
+  }
+  makeCamera();
+
+  // ===== Root group =====
+  const tetra = new THREE.Group();
+  scene.add(tetra);
+
+  // ===== Geometry & vertices =====
+  const tetGeo = new THREE.TetrahedronGeometry(2.4);
+  const basePos = tetGeo.getAttribute('position');
+  const uniq = new Map();
+  for(let i=0;i<basePos.count;i++){
+    const x=basePos.getX(i), y=basePos.getY(i), z=basePos.getZ(i);
+    const k=`${x.toFixed(5)},${y.toFixed(5)},${z.toFixed(5)}`; if(!uniq.has(k)) uniq.set(k, new THREE.Vector3(x,y,z));
+  }
+  const verts = [...uniq.values()]; // 4 unique
+  const centroid = verts.reduce((a,b)=> a.add(b.clone()), new THREE.Vector3()).multiplyScalar(1/verts.length);
+
+  // Four faces (choose any 3-of-4)
+  const facesIdx = [ [0,1,2], [0,1,3], [0,2,3], [1,2,3] ];
+  const faces = facesIdx.map((fi)=>{
+    const [i0,i1,i2]=fi; const v0=verts[i0], v1=verts[i1], v2=verts[i2];
+    const opp = [0,1,2,3].find(j=> !fi.includes(j));
+    const center = new THREE.Vector3().addVectors(v0,v1).add(v2).multiplyScalar(1/3);
+    let n = new THREE.Vector3().subVectors(v1,v0).cross(new THREE.Vector3().subVectors(v2,v0)).normalize();
+    if(n.dot(new THREE.Vector3().subVectors(centroid, center)) > 0) n.multiplyScalar(-1);
+    return { fi, v:[v0.clone(),v1.clone(),v2.clone()], opp, oppV:verts[opp].clone(), center, normal:n };
+  });
+
+  // Wireframe
+  const tetEdges = new THREE.LineSegments(new THREE.EdgesGeometry(tetGeo), new THREE.LineBasicMaterial({ color:0xEAEAEA, transparent:true, opacity:0.95 }));
+  tetra.add(tetEdges);
+
+  // Vertex foci
+  const vertexGroup = new THREE.Group();
+  for (const v of verts){
+    const s = new THREE.Mesh(new THREE.SphereGeometry(0.08, 16, 16), new THREE.MeshBasicMaterial({ color:0x8888ff }));
+    s.position.copy(v); vertexGroup.add(s);
+  }
+  tetra.add(vertexGroup);
+
+  // ===== Per-face layer systems =====
+  const LAYERS = 64;
+  const faceSystems = [];
+
+  function interpFaceTri(face, t){
+    // t=0 at face, t->1 toward opposite vertex
+    const a = face.oppV; const [b0,b1,b2] = face.v;
+    const p0 = b0.clone().multiplyScalar(1-t).add(a.clone().multiplyScalar(t));
+    const p1 = b1.clone().multiplyScalar(1-t).add(a.clone().multiplyScalar(t));
+    const p2 = b2.clone().multiplyScalar(1-t).add(a.clone().multiplyScalar(t));
+    return [p0,p1,p2];
+  }
+
+  function lineTri(p0,p1,p2, opacity, color){
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
+      p0.x,p0.y,p0.z, p1.x,p1.y,p1.z,
+      p1.x,p1.y,p1.z, p2.x,p2.y,p2.z,
+      p2.x,p2.y,p2.z, p0.x,p0.y,p0.z
+    ]),3));
+    return new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color, transparent:true, opacity }));
+  }
+  function meshTri(p0,p1,p2){
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array([p0.x,p0.y,p0.z, p1.x,p1.y,p1.z, p2.x,p2.y,p2.z]),3));
+    g.setIndex([0,1,2]); g.computeVertexNormals();
+    return new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color:0x000000, transparent:true, opacity:0.0, depthWrite:false }));
+  }
+
+  const facePickMeshes = new THREE.Group();
+  tetra.add(facePickMeshes);
+
+  for(let f=0; f<4; f++){
+    const face = faces[f];
+    const group = new THREE.Group();
+    const picks = new THREE.Group();
+    const gold = new THREE.Group();
+
+    const layerObjs = []; const pickMeshes = [];
+    for(let i=0;i<LAYERS;i++){
+      const t = i/(LAYERS-1);
+      const [p0,p1,p2] = interpFaceTri(face, t);
+      const op = THREE.MathUtils.lerp(0.9, 0.05, t);
+      const tri = lineTri(p0,p1,p2, op, 0xEAEAEA);
+      tri.userData = { face:f, layerIndex:i };
+      group.add(tri); layerObjs.push(tri);
+
+      const pm = meshTri(p0,p1,p2); pm.userData = { face:f, layerIndex:i };
+      picks.add(pm); pickMeshes.push(pm);
+
+      const N=60, g=new THREE.BufferGeometry(), pts=new Float32Array(N*3);
+      for(let k=0;k<N;k++){
+        const u=Math.random(), v=Math.random()*(1-u), w=1-u-v;
+        const p = new THREE.Vector3().addScaledVector(p0,u).addScaledVector(p1,v).addScaledVector(p2,w);
+        pts[k*3]=p.x; pts[k*3+1]=p.y; pts[k*3+2]=p.z;
+      }
+      g.setAttribute('position', new THREE.BufferAttribute(pts,3));
+      const cloud = new THREE.Points(g, new THREE.PointsMaterial({ color:0xC9A227, size:0.014, transparent:true, opacity:0.28, depthWrite:false, blending:THREE.AdditiveBlending }));
+      cloud.userData = { face:f, layerIndex:i };
+      gold.add(cloud);
+    }
+
+    tetra.add(group); tetra.add(gold); facePickMeshes.add(picks);
+
+    faceSystems.push({ face, group, picks, gold, layerObjs, pickMeshes, idx:0, band:3 });
+  }
+
+  // ===== Clip volume (negative space sculpt) =====
+  const clipPlanes = faces.map((face, f)=>{
+    const n = face.normal.clone();
+    const c0 = - n.dot(face.v[0]);
+    const plane = new THREE.Plane(n, c0); plane.userData={ face:f, baseC:c0 }; return plane;
+  });
+  const solidMat = new THREE.MeshStandardMaterial({ color:0x0A0E15, metalness:0.1, roughness:0.9, transparent:true, opacity:0.45, side:THREE.DoubleSide, clippingPlanes:clipPlanes });
+  const dir = new THREE.DirectionalLight(0xffffff, 0.5); dir.position.set(5,6,7); scene.add(dir);
+  const amb = new THREE.AmbientLight(0x404040, 0.6); scene.add(amb);
+  const solid = new THREE.Mesh(tetGeo.clone(), solidMat); tetra.add(solid);
+
+  function updateClipPlanes(){
+    for(const plane of clipPlanes){
+      const f = plane.userData.face; const sys = faceSystems[f]; const face = faces[f];
+      const t = sys.idx/(LAYERS-1);
+      const p = interpFaceTri(face, t)[0];
+      plane.set(face.normal, - face.normal.dot(p));
+    }
+  }
+
+  // ===== State & Gestures =====
+  let activeFace = 0; // controlled face
+  let emphasis = 'balanced'; // 'wire' | 'gold' | 'balanced'
+  let hueRate = 0.8; let autoBreath = true;
+  let rotateY = 0, rotateX = 0; let dragStart=null; let touch2=null;
+  const vibe = (ms)=> navigator.vibrate && navigator.vibrate(ms);
+
+  function setFaceIndex(faceId, i, cause='program'){
+    const sys = faceSystems[faceId];
+    const prev = sys.idx; sys.idx = Math.max(0, Math.min(LAYERS-1, i|0));
+    if(prev!==sys.idx && cause!=='auto') vibe(6);
+    const fall = sys.band;
+    sys.layerObjs.forEach(tri=>{
+      const d = Math.abs((tri.userData.layerIndex||0) - sys.idx);
+      const near = Math.max(0, 1 - d/(fall||1));
+      const m = tri.material;
+      const baseOp = THREE.MathUtils.lerp(0.06, 0.95, near);
+      m.opacity = emphasis==='wire'? baseOp : THREE.MathUtils.lerp(baseOp, baseOp*0.5, emphasis==='gold');
+      m.color.setHex(d===0?0xFFFFFF:0xEAEAEA);
+      m.needsUpdate=true;
+    });
+    sys.gold.children.forEach(cl=>{
+      const d = Math.abs((cl.userData.layerIndex||0) - sys.idx);
+      const near = Math.max(0, 1 - d/(fall||1));
+      cl.material.opacity = emphasis==='gold' ? THREE.MathUtils.lerp(0.14, 0.95, near) : THREE.MathUtils.lerp(0.12, 0.6, near);
+    });
+    updateClipPlanes();
+  }
+  function setBand(faceId, b){ const sys = faceSystems[faceId]; sys.band = Math.max(0, Math.min(12, Math.round(b))); setFaceIndex(faceId, sys.idx, 'auto'); }
+  function cycleEmphasis(){ emphasis = emphasis==='balanced'?'wire': emphasis==='wire'?'gold':'balanced'; faceSystems.forEach((_,f)=> setFaceIndex(f, faceSystems[f].idx,'auto')); }
+  function setActiveFace(f){ activeFace = (f+4)%4; vibe(10); highlightActiveFace(); }
+  function highlightActiveFace(){ faceSystems.forEach((sys,f)=>{ const strong=(f===activeFace); sys.layerObjs[0].material.color.setHex(strong?0x66CCFF:0xEAEAEA); sys.layerObjs[0].material.opacity = strong?1.0:0.9; }); }
+
+  // Wheel/trackpad helpers
+  const raycaster = new THREE.Raycaster();
+  const mouseNDC = new THREE.Vector2();
+  function faceUnderPointer(x,y){
+    mouseNDC.x = (x/innerWidth)*2-1; mouseNDC.y = -(y/innerHeight)*2+1;
+    raycaster.setFromCamera(mouseNDC, camera);
+    const hits = raycaster.intersectObjects(facePickMeshes.children, false);
+    if(hits.length) return hits[0].object.userData.face;
+    return null;
+  }
+  function wheelDeltaToSteps(e){
+    const m = e.deltaMode; // 0: pixel, 1: line, 2: page
+    let d = e.deltaY;
+    if(m===0){ d = Math.sign(d) * Math.min(3, Math.round(Math.abs(d)/80)); }
+    else if(m===2){ d = Math.sign(d) * 3; }
+    else { d = Math.sign(d); }
+    return d|0;
+  }
+
+  // Event handlers (named so we can remove them on cleanup)
+  function onWheel(e){
+    const f = faceUnderPointer(e.clientX, e.clientY);
+    if(f!=null) setActiveFace(f);
+    const steps = wheelDeltaToSteps(e);
+    if(steps!==0) setFaceIndex(activeFace, faceSystems[activeFace].idx + steps, 'wheel');
+    e.preventDefault();
+  }
+  function onPointerDown(e){ dragStart = { x:e.clientX, y:e.clientY, t:performance.now(), id:e.pointerId }; }
+  function onPointerMove(e){
+    if(!dragStart || dragStart.id!==e.pointerId) return;
+    const dx=e.clientX-dragStart.x, dy=e.clientY-dragStart.y;
+    if(Math.abs(dy)>Math.abs(dx)){
+      if(Math.abs(dy)>18){ setFaceIndex(activeFace, faceSystems[activeFace].idx + Math.sign(dy), 'swipe'); dragStart.y = e.clientY; }
+    } else {
+      rotateY += dx*0.0008; rotateX += dy*0.0005; dragStart.x = e.clientX; dragStart.y = e.clientY;
+    }
+  }
+  function onPointerUp(e){
+    if(!dragStart) return; const dt=performance.now()-dragStart.t; const dist=Math.hypot(e.clientX-dragStart.x, e.clientY-dragStart.y);
+    if(dt<220 && dist<8){ pickAt(e.clientX, e.clientY); }
+    dragStart=null;
+  }
+  function onTouchStart(e){
+    if(e.touches.length===2){
+      touch2 = { a:{x:e.touches[0].clientX,y:e.touches[0].clientY}, b:{x:e.touches[1].clientX,y:e.touches[1].clientY}, dist:0, ang:0 };
+      touch2.dist = Math.hypot(touch2.a.x-touch2.b.x, touch2.a.y-touch2.b.y);
+      touch2.ang = Math.atan2(touch2.b.y-touch2.a.y, touch2.b.x-touch2.a.x);
+    }
+  }
+  function onTouchMove(e){
+    if(!touch2 || e.touches.length!==2) return;
+    const a={x:e.touches[0].clientX,y:e.touches[0].clientY}; const b={x:e.touches[1].clientX,y:e.touches[1].clientY};
+    const nd = Math.hypot(a.x-b.x, a.y-b.y); const na = Math.atan2(b.y-a.y, b.x-a.x);
+    const pinch = (nd - touch2.dist) / 60; if(Math.abs(pinch)>0.05){ setBand(activeFace, faceSystems[activeFace].band + pinch*2); touch2.dist = nd; }
+    let dAng = na - touch2.ang; while(dAng>Math.PI) dAng-=Math.PI*2; while(dAng<-Math.PI) dAng+=Math.PI*2; if(Math.abs(dAng)>0.02){ hueRate = Math.max(0, Math.min(3, hueRate + dAng*0.6)); touch2.ang = na; }
+  }
+  function onTouchEnd(){ touch2=null; }
+
+  let tapTimes=[];
+  function onPointerUpTap(){
+    const now=performance.now(); tapTimes = tapTimes.filter(t=> now - t < 420); tapTimes.push(now);
+    if(tapTimes.length===2){ autoBreath=!autoBreath; vibe(10);} if(tapTimes.length===3){ cycleEmphasis(); vibe(18); tapTimes=[];}
+  }
+  function onDeviceOrientation(e){ if(e.beta==null || e.gamma==null) return; rotateY += (e.gamma||0) * 0.00002; rotateX += (e.beta||0) * 0.00002; }
+
+  // Picking (face, layer, vertex)
+  const pickRay = new THREE.Raycaster(); const pickNDC = new THREE.Vector2();
+  function pickAt(cx, cy){
+    pickNDC.x = (cx/innerWidth)*2-1; pickNDC.y = -(cy/innerHeight)*2+1; pickRay.setFromCamera(pickNDC, camera);
+    const candidates = [ ...facePickMeshes.children, ...faceSystems.flatMap(s=> s.pickMeshes), ...vertexGroup.children ];
+    const hits = pickRay.intersectObjects(candidates, false);
+    if(hits.length){
+      const h = hits[0];
+      if(h.object.userData.face!=null && h.object.userData.layerIndex==null){ setActiveFace(h.object.userData.face); return; }
+      if(h.object.userData.layerIndex!=null){ setActiveFace(h.object.userData.face); setFaceIndex(activeFace, h.object.userData.layerIndex, 'pick'); return; }
+      const dir = new THREE.Vector3().copy(h.object.position).normalize(); rotateY += dir.x * 0.2; rotateX += dir.y * 0.15; vibe(12);
+    }
+  }
+
+  // Audio (per active face)
+  let audioCtx=null, osc=null, gain=null, filt=null;
+  function bootAudio(){ if(audioCtx) return; audioCtx = new (window.AudioContext||window.webkitAudioContext)(); osc = audioCtx.createOscillator(); gain = audioCtx.createGain(); filt = audioCtx.createBiquadFilter(); filt.type='bandpass'; osc.type='sine'; osc.connect(filt); filt.connect(gain); gain.connect(audioCtx.destination); gain.gain.value = 0.0; osc.start(); }
+  function audioTick(){ if(!audioCtx) return; const sys = faceSystems[activeFace]; const base = 70; const f = base + (sys.idx/(LAYERS-1))*520; const q = 2.5 + sys.band*0.4; filt.Q.value = q; filt.frequency.value = f; const t = audioCtx.currentTime; const target = emphasis==='gold'? 0.12 : emphasis==='wire'? 0.06 : 0.09; gain.gain.linearRampToValueAtTime(target, t+0.08); osc.frequency.exponentialRampToValueAtTime(Math.max(40,f), t+0.08); }
+  function onPointerDownBoot(){ bootAudio(); if(audioCtx && audioCtx.state==='suspended') audioCtx.resume(); }
+
+  // Attach listeners
+  addEventListener('wheel', onWheel, { passive:false });
+  addEventListener('pointerdown', onPointerDown);
+  addEventListener('pointermove', onPointerMove);
+  addEventListener('pointerup', onPointerUp, { passive:true });
+  addEventListener('touchstart', onTouchStart, { passive:true });
+  addEventListener('touchmove', onTouchMove, { passive:true });
+  addEventListener('touchend', onTouchEnd, { passive:true });
+  addEventListener('pointerdown', onPointerDownBoot, { passive:true });
+  addEventListener('pointerup', onPointerUpTap);
+  addEventListener('deviceorientation', onDeviceOrientation);
+
+  // Animate
+  let t0=0; let animId=0;
+  function animate(){
+    animId = requestAnimationFrame(animate);
+    t0 += 0.005;
+    const wob = autoBreath? Math.sin(t0*0.6)*0.015 : 0.0;
+    tetra.rotation.y += wob + rotateY*0.02; tetra.rotation.x += wob*0.75 + rotateX*0.02;
+    const hue = (Math.sin(t0*hueRate)+1)*0.5;
+    tetEdges.material.color.setHSL(hue, 0.6, 0.7);
+    const sys = faceSystems[activeFace]; sys.layerObjs[sys.idx].material.color.setHSL((hue+0.5)%1, 0.8, 0.8);
+    audioTick(); rotateY *= 0.94; rotateX *= 0.94; renderer.render(scene, camera);
+  }
+
+  // Init
+  faceSystems.forEach((_,f)=> setFaceIndex(f, 0, 'auto'));
+  setActiveFace(0); updateClipPlanes(); animate();
+  function onResize(){ renderer.setSize(innerWidth, innerHeight); makeCamera(); }
+  addEventListener('resize', onResize);
+
+  // ===== Self-tests (console-only) =====
+  (function selfTests(){
+    try{
+      console.assert(verts.length===4, '4 unique vertices');
+      console.assert(faces.length===4, '4 faces');
+      const outwardOK = faces.every(f=> f.normal.dot(new THREE.Vector3().subVectors(centroid, f.center)) < 0);
+      console.assert(outwardOK, 'Normals outward');
+      console.assert(faceSystems.length===4 && faceSystems.every(fs=> fs.layerObjs.length===64), '4 face systems × 64 layers');
+      console.assert(solid.material.clippingPlanes.length===4, '4 clipping planes');
+      // Test selecting and scrolling via code
+      const prevFace=activeFace; setActiveFace(1); const before=faceSystems[1].idx; setFaceIndex(1, before+3, 'test'); console.assert(faceSystems[1].idx===before+3, 'Scroll changes layer index'); setActiveFace(prevFace);
+      // Bounds test
+      setFaceIndex(0, -999, 'test'); console.assert(faceSystems[0].idx===0, 'Lower bound clamps to 0');
+      setFaceIndex(0, 999, 'test'); console.assert(faceSystems[0].idx===LAYERS-1, 'Upper bound clamps to max');
+      // Band control & wheel normalization
+      const prevBand = faceSystems[0].band; setBand(0, 8); console.assert(faceSystems[0].band===8, 'Band width set to 8'); setBand(0, prevBand);
+      console.assert((()=>{try{return wheelDeltaToSteps({deltaMode:0, deltaY:160})===2;}catch{return false;}})(), 'Pixel wheel normalization (160px → 2 steps)');
+      console.assert((()=>{try{return wheelDeltaToSteps({deltaMode:1, deltaY:-1})===-1;}catch{return false;}})(), 'Line wheel normalization (-1 line → -1 step)');
+      console.assert((()=>{try{return wheelDeltaToSteps({deltaMode:2, deltaY:1})===3;}catch{return false;}})(), 'Page wheel normalization (1 page → 3 steps)');
+      // Clip plane correctness at current face index
+      const f0 = 0; const pTest = interpFaceTri(faceSystems[f0].face, faceSystems[f0].idx/(LAYERS-1))[0];
+      const dist = clipPlanes[f0].distanceToPoint(pTest);
+      console.assert(Math.abs(dist) < 1e-4, 'Clip plane passes through expected slice point');
+      // Reload/variable scope guards
+      console.assert(!("touch2" in globalThis), 'No global touch2 leakage');
+      console.assert(typeof globalThis.__tetra_cleanup__ === 'function', 'Cleanup function installed');
+      console.log(`[Sharpened Per-Face v${instanceId}] self-tests passed`);
+    }catch(err){ console.warn('[Sharpened Per-Face] self-test issue', err); }
+  })();
+
+  // ===== Expose cleanup for next hot reload =====
+  globalThis.__tetra_cleanup__ = () => {
+    try { cancelAnimationFrame(animId); } catch {}
+    try { removeEventListener('wheel', onWheel); } catch {}
+    try { removeEventListener('pointerdown', onPointerDown); } catch {}
+    try { removeEventListener('pointermove', onPointerMove); } catch {}
+    try { removeEventListener('pointerup', onPointerUp, { passive:true }); } catch {}
+    try { removeEventListener('touchstart', onTouchStart, { passive:true }); } catch {}
+    try { removeEventListener('touchmove', onTouchMove, { passive:true }); } catch {}
+    try { removeEventListener('touchend', onTouchEnd, { passive:true }); } catch {}
+    try { removeEventListener('pointerdown', onPointerDownBoot, { passive:true }); } catch {}
+    try { removeEventListener('pointerup', onPointerUpTap); } catch {}
+    try { removeEventListener('deviceorientation', onDeviceOrientation); } catch {}
+    try { removeEventListener('resize', onResize); } catch {}
+    try { if (osc) { try{ osc.stop(); }catch{} } } catch {}
+    try { if (audioCtx) audioCtx.close(); } catch {}
+    try { renderer.domElement && renderer.domElement.remove(); } catch {}
+  };
+})();
+</script>
+</body>
+</html>

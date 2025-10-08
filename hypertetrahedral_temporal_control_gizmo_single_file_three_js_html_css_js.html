@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+  <title>Hypertetrahedral Temporal Control Gizmo</title>
+  <style>
+    :root {
+      --bg: #0b0e13;
+      --fg: #c9d7ff;
+      --accent: #7aa2ff;
+    }
+    html, body { height: 100%; margin: 0; background: var(--bg); color: var(--fg); }
+    canvas { display: block; touch-action: none; }
+    /* Minimal HUD dots (no text) */
+    .hud { position: fixed; inset: 0; pointer-events: none; }
+    .ring { position: absolute; width: 10px; height: 10px; border-radius: 50%; outline: 2px solid #5ea1ff55; box-shadow: 0 0 12px #5ea1ff55; transform: translate(-50%, -50%); opacity: 0; transition: opacity .2s ease; }
+    .scope { position: fixed; right: env(safe-area-inset-right, 8px); bottom: calc(8px + env(safe-area-inset-bottom, 8px)); width: 180px; height: 70px; border-radius: 12px; background: #0d1220aa; backdrop-filter: blur(6px); outline: 1px solid #27407a; box-shadow: 0 8px 24px #00000066; }
+    .scope canvas { width: 100%; height: 100%; }
+    .btns { position: fixed; left: env(safe-area-inset-left, 8px); bottom: calc(8px + env(safe-area-inset-bottom, 8px)); display: flex; gap: 8px; }
+    .btn { width: 36px; height: 36px; border-radius: 10px; background: #0d1220cc; outline: 1px solid #27407a; box-shadow: inset 0 0 0 1px #0b1733; display: grid; place-items: center; pointer-events: auto; }
+    .btn svg { width: 18px; height: 18px; fill: #9bb7ff; opacity: .8; }
+    .btn:active { filter: brightness(1.2); }
+  </style>
+
+  <!-- Fix: add an import map so example addons (OrbitControls) can resolve the bare "three" specifier in-browser. -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.1/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.1/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="hud" class="hud">
+    <div id="ring" class="ring"></div>
+    <div class="scope"><canvas id="osc"></canvas></div>
+    <div class="btns">
+      <div class="btn" id="playPause" title="Play/Pause" aria-label="Play/Pause">
+        <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+      </div>
+      <div class="btn" id="rec" title="Snapshot" aria-label="Snapshot">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/></svg>
+      </div>
+      <div class="btn" id="load" title="Load" aria-label="Load">
+        <svg viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 19h16"/></svg>
+      </div>
+      <input id="file" type="file" accept="application/json" hidden />
+    </div>
+  </div>
+  
+  <script type="module">
+    // ===== Three.js core (via import map)
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    
+    // --- Self-tests (acts as lightweight test cases) ---
+    (function selfTests(){
+      const tests = [];
+      tests.push(['THREE imported', !!THREE && !!THREE.Vector3]);
+      tests.push(['OrbitControls imported', typeof OrbitControls === 'function']);
+      const allPass = tests.every(([, ok]) => ok);
+      if (!allPass) {
+        console.group('%cSelf-Tests FAILED','color:#fff;background:#b00020;padding:2px 6px;border-radius:4px');
+        for (const [name, ok] of tests) console.log(name+':', ok? 'PASS':'FAIL');
+        console.groupEnd();
+      } else {
+        console.group('%cSelf-Tests PASS','color:#0a0;background:#c8f7c5;padding:2px 6px;border-radius:4px');
+        for (const [name] of tests) console.log(name+': PASS');
+        console.groupEnd();
+      }
+    })();
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setAnimationLoop(animate);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    document.body.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue('--bg'));
+
+    const camera = new THREE.PerspectiveCamera(50, innerWidth/innerHeight, 0.01, 100);
+    camera.position.set(0.9, 0.9, 1.6);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.enablePan = false;
+
+    // Lights
+    const key = new THREE.DirectionalLight(0xffffff, 1.0); key.position.set(2, 3, 4);
+    const fill = new THREE.DirectionalLight(0x88aaff, 0.4); fill.position.set(-3, -2, 1);
+    const rim = new THREE.PointLight(0x3a79ff, 1.2, 6); rim.position.set(0, 1.6, -1.2);
+    scene.add(key, fill, rim);
+
+    // Tetrahedron core
+    const radius = 0.6;
+    const detail = 0; // keep faces flat
+    const tetraGeo = new THREE.TetrahedronGeometry(radius, detail);
+
+    // Separate materials per face to animate emissive/opacity independently
+    const faceMaterials = [];
+    const faceMesh = new THREE.Mesh();
+    {
+      const geo = tetraGeo.clone();
+      geo.clearGroups();
+      // Build groups for each face
+      const triCount = geo.index ? geo.index.count/3 : geo.attributes.position.count/3;
+      for (let i=0;i<triCount;i++) {
+        const mat = new THREE.MeshStandardMaterial({ color: 0x14213a, metalness: 0.2, roughness: 0.45, emissive: 0x2a6cff, emissiveIntensity: 0.0, transparent: true, opacity: 0.95 });
+        faceMaterials.push(mat);
+        geo.addGroup(i*3, 3, i);
+      }
+      faceMesh.geometry = geo;
+      faceMesh.material = faceMaterials;
+      scene.add(faceMesh);
+
+      // Test: ensure tetra has 4 faces
+      console.assert(triCount === 4, 'Expected 4 triangular faces, got', triCount);
+    }
+
+    // Edges (with animated dash)
+    const edges = new THREE.LineSegments(new THREE.EdgesGeometry(tetraGeo), new THREE.LineDashedMaterial({ color: 0x7aa2ff, dashSize: 0.05, gapSize: 0.03 }));
+    edges.computeLineDistances();
+    scene.add(edges);
+
+    // Vertices (little glowing spheres)
+    const vGeo = new THREE.SphereGeometry(0.03, 16, 16);
+    const vMat = new THREE.MeshStandardMaterial({ color: 0x9bb7ff, emissive: 0x4f7cff, emissiveIntensity: 0.2, roughness: 0.2, metalness: 0.0 });
+    const vertexMeshes = [];
+    const vPositions = tetraGeo.getAttribute('position');
+    const verts = [];
+    // unique vertices from tetra geometry (4)
+    for (let i=0;i<vPositions.count;i+=3) {
+      const p = new THREE.Vector3().fromBufferAttribute(vPositions, i);
+      verts.push(p);
+    }
+    // dedupe to 4 vertices
+    function uniqueByStr(points) {
+      const map = new Map();
+      points.forEach(p=>{ map.set(p.toArray().map(n=>n.toFixed(5)).join(','), p.clone()); });
+      return [...map.values()];
+    }
+    const uniq = uniqueByStr(verts);
+    uniq.forEach(p => { const m = new THREE.Mesh(vGeo, vMat.clone()); m.position.copy(p); scene.add(m); vertexMeshes.push(m); });
+
+    // Internal temporal state (per face/edge/vertex)
+    const state = {
+      t: 0,
+      playing: true,
+      faces: faceMaterials.map(()=>({ warp: 0.0, complexity: 0.0 })),
+      edges: { dashOffset: 0.0, energy: 0.0 },
+      vertices: vertexMeshes.map(()=>({ pulse: 0.0 })),
+      trail: [], // for HUD mini-map
+    };
+
+    // Raycaster for picking
+    const ray = new THREE.Raycaster();
+    const pointer = new THREE.Vector2();
+    let dragging = null; // { type: 'face'|'vertex'|'edge', index, startWarp }
+    let lastHit = null;
+
+    function setPointerFromEvent(e) {
+      const x = (e.touches? e.touches[0].clientX : e.clientX) / innerWidth * 2 - 1;
+      const y = - ( (e.touches? e.touches[0].clientY : e.clientY) / innerHeight ) * 2 + 1;
+      pointer.set(x, y);
+    }
+
+    function vibrate(ms=12) { if (navigator.vibrate) navigator.vibrate(ms); }
+
+    function pick(intersectEdges=false) {
+      ray.setFromCamera(pointer, camera);
+      const faceHits = ray.intersectObject(faceMesh, false);
+      let hit = faceHits[0] ? { type: 'face', index: faceHits[0].faceIndex/1|0, point: faceHits[0].point } : null;
+      if (!hit && !intersectEdges) {
+        const vHits = ray.intersectObjects(vertexMeshes, false);
+        if (vHits[0]) hit = { type: 'vertex', index: vertexMeshes.indexOf(vHits[0].object), point: vHits[0].point };
+      }
+      return hit;
+    }
+
+    // Visual feedback ring
+    const ring = document.getElementById('ring');
+    function showRing(screenX, screenY) {
+      ring.style.left = screenX + 'px';
+      ring.style.top = screenY + 'px';
+      ring.style.opacity = 1;
+      clearTimeout(showRing._t);
+      showRing._t = setTimeout(()=> ring.style.opacity = 0, 200);
+    }
+
+    // Input handlers (tap/drag to warp; hold to scrub)
+    let holdTimer = null;
+    function onDown(e) {
+      setPointerFromEvent(e);
+      const hit = pick();
+      if (hit) {
+        lastHit = hit;
+        const sx = e.touches? e.touches[0].clientX : e.clientX;
+        const sy = e.touches? e.touches[0].clientY : e.clientY;
+        showRing(sx, sy);
+        vibrate(10);
+        if (hit.type === 'face') {
+          dragging = { type: 'face', index: hit.index, startWarp: state.faces[hit.index].warp };
+        } else if (hit.type === 'vertex') {
+          dragging = { type: 'vertex', index: hit.index, startWarp: state.vertices[hit.index].pulse };
+        }
+        
+        // press-and-hold enters scrub mode (toggles playing)
+        holdTimer = setTimeout(()=>{
+          state.playing = !state.playing;
+          vibrate(30);
+        }, 420);
+      }
+    }
+
+    function onMove(e) {
+      if (!dragging) return;
+      e.preventDefault();
+      const clientX = e.touches? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches? e.touches[0].clientY : e.clientY;
+      const nx = (clientX / innerWidth) * 2 - 1;
+      const ny = - (clientY / innerHeight) * 2 + 1;
+      const delta = Math.hypot(nx - pointer.x, ny - pointer.y);
+      const sign = Math.sign(nx - pointer.x || 1);
+      if (dragging.type === 'face') {
+        const idx = dragging.index;
+        state.faces[idx].warp = THREE.MathUtils.clamp(dragging.startWarp + sign * delta * 3.2, -2.5, 2.5);
+        state.faces[idx].complexity = THREE.MathUtils.smoothstep(Math.abs(state.faces[idx].warp), 0, 2.5);
+      } else if (dragging.type === 'vertex') {
+        const idx = dragging.index;
+        state.vertices[idx].pulse = THREE.MathUtils.clamp(dragging.startWarp + sign * delta * 4.0, -3.0, 3.0);
+      }
+      state.edges.energy = 0.25 + 0.75 * avgFaceComplexity();
+      state.trail.push([clientX, clientY, Date.now()]);
+    }
+
+    function onUp() {
+      dragging = null;
+      clearTimeout(holdTimer);
+      holdTimer = null;
+    }
+
+    renderer.domElement.addEventListener('pointerdown', onDown, { passive: true });
+    window.addEventListener('pointermove', onMove, { passive: false });
+    window.addEventListener('pointerup', onUp, { passive: true });
+    window.addEventListener('pointercancel', onUp, { passive: true });
+
+    // Audio (WebAudio) minimal spatial tones tied to vertices
+    let AC; let masterGain; const vertexOsc = [];
+    function initAudio() {
+      if (AC) return;
+      AC = new (window.AudioContext || window.webkitAudioContext)();
+      masterGain = AC.createGain(); masterGain.gain.value = 0.05; masterGain.connect(AC.destination);
+      // one oscillator per vertex
+      vertexMeshes.forEach((vm, i) => {
+        const osc = AC.createOscillator(); osc.type = 'sine'; osc.frequency.value = 220 + i*60;
+        const gain = AC.createGain(); gain.gain.value = 0.0;
+        const panner = AC.createStereoPanner ? AC.createStereoPanner() : AC.createGain();
+        if (panner.pan) panner.pan.value = (i-1.5)/1.5; // crude spatialization
+        osc.connect(gain).connect(panner).connect(masterGain);
+        osc.start();
+        vertexOsc.push({ osc, gain, panner });
+      });
+    }
+
+    // Minimal oscilloscope HUD
+    const oscCanvas = document.getElementById('osc');
+    const octx = oscCanvas.getContext('2d');
+    function drawScope() {
+      const w = oscCanvas.width = oscCanvas.clientWidth * devicePixelRatio;
+      const h = oscCanvas.height = oscCanvas.clientHeight * devicePixelRatio;
+      octx.clearRect(0,0,w,h);
+      octx.globalAlpha = 0.9;
+      octx.fillStyle = '#0b1022'; octx.fillRect(0,0,w,h);
+      octx.strokeStyle = '#6ea0ff'; octx.lineWidth = 2; octx.beginPath();
+      const N = 120; const now = performance.now()*0.001;
+      for (let i=0;i<N;i++){
+        const x = i/(N-1)*w;
+        const y = h*0.5 + Math.sin(now*2 + i*0.2) * 12 * (0.2 + avgFaceComplexity());
+        if (i===0) octx.moveTo(x,y); else octx.lineTo(x,y);
+      }
+      octx.stroke();
+      // trails
+      const ttl = 800; const tnow = Date.now();
+      state.trail = state.trail.filter(([, , t]) => tnow - t < ttl);
+      octx.strokeStyle = '#a6c4ff66'; octx.lineWidth = 1; octx.beginPath();
+      state.trail.forEach(([x,y],i)=>{ const sx = x/innerWidth*w, sy = y/innerHeight*h; if(i===0) octx.moveTo(sx,sy); else octx.lineTo(sx,sy); });
+      octx.stroke();
+    }
+
+    function avgFaceComplexity(){ return state.faces.reduce((a,f)=>a+f.complexity,0)/state.faces.length; }
+
+    // Snapshot/Load of state
+    function snapshot() {
+      const data = {
+        faces: state.faces.map(f=>({ warp:f.warp })),
+        vertices: state.vertices.map(v=>({ pulse:v.pulse })),
+        playing: state.playing,
+      };
+      const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'hypertetrahedron_state.json';
+      document.body.appendChild(a); a.click(); a.remove();
+    }
+
+    // Buttons
+    const playBtn = document.getElementById('playPause');
+    const recBtn  = document.getElementById('rec');
+    const loadBtn = document.getElementById('load');
+    const fileInp = document.getElementById('file');
+
+    playBtn.addEventListener('click', ()=>{ state.playing = !state.playing; vibrate(15); initAudio(); if (AC && AC.state==='suspended') AC.resume(); });
+    recBtn.addEventListener('click', ()=>{ snapshot(); vibrate(20); });
+    loadBtn.addEventListener('click', ()=> fileInp.click());
+    fileInp.addEventListener('change', async (e)=>{
+      const file = e.target.files[0]; if(!file) return;
+      const txt = await file.text();
+      try {
+        const data = JSON.parse(txt);
+        data.faces?.forEach((f,i)=>{ if(state.faces[i]) state.faces[i].warp = f.warp||0; });
+        data.vertices?.forEach((v,i)=>{ if(state.vertices[i]) state.vertices[i].pulse = v.pulse||0; });
+        if (typeof data.playing === 'boolean') state.playing = data.playing;
+        vibrate(30);
+      } catch(err){ console.warn('Invalid file', err); }
+    });
+
+    // Animate
+    function animate(){
+      const dt = 0.016; // deterministic frame step; mobile-friendly
+      state.t += (state.playing? dt : 0);
+
+      // Faces: emissive intensity = complexity modulated by time & warp
+      faceMaterials.forEach((m, i)=>{
+        const f = state.faces[i];
+        const beat = Math.sin(state.t* (1.5 + Math.abs(f.warp))) * 0.5 + 0.5;
+        m.emissiveIntensity = 0.05 + f.complexity * (0.2 + 0.8*beat);
+        m.opacity = 0.85 + 0.15*Math.sin(state.t*0.8 + i);
+      });
+
+      // Edges: dash offset scrolls with total complexity
+      edges.material.dashOffset -= dt * (0.5 + state.edges.energy);
+      edges.material.needsUpdate = true;
+
+      // Vertices: scale & audio with pulse
+      vertexMeshes.forEach((vm, i)=>{
+        const v = state.vertices[i];
+        const s = 1 + 0.6*Math.sin(state.t*2 + v.pulse);
+        vm.scale.setScalar(THREE.MathUtils.lerp(vm.scale.x, 0.9 + 0.12*s, 0.2));
+        if (vertexOsc[i]) vertexOsc[i].gain.gain.value = 0.02 + 0.08*Math.max(0, Math.sin(state.t*2 + v.pulse));
+      });
+
+      // Slow autonomous rotation when idle
+      faceMesh.rotation.y += 0.12*dt; faceMesh.rotation.x += 0.07*dt;
+      edges.rotation.copy(faceMesh.rotation);
+      vertexMeshes.forEach(v=> v.rotation.copy(faceMesh.rotation));
+
+      // Rim light bobs with complexity
+      rim.intensity = 0.6 + 0.9*avgFaceComplexity();
+
+      controls.update();
+      renderer.render(scene, camera);
+      drawScope();
+    }
+
+    // Kickstart audio on first gesture (mobile policy)
+    window.addEventListener('pointerdown', ()=>{ initAudio(); if (AC && AC.state==='suspended') AC.resume(); }, { once: true, passive: true });
+
+    // Responsive
+    window.addEventListener('resize', ()=>{
+      camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+
+    // Accessibility: reduced motion
+    const mq = matchMedia('(prefers-reduced-motion: reduce)');
+    mq.addEventListener?.('change', ()=>{ if(mq.matches){ state.playing=false; } });
+    if (mq.matches) state.playing = false;
+
+  </script>
+</body>
+</html>

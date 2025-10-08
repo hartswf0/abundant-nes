@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Hypnosis Clock Odometer</title>
+<style>
+  :root{
+    --bg:#0b0f14;          /* night */
+    --ink:#e6f0ff;         /* ink */
+    --muted:#7e8aa0;       /* muted text */
+    --accent:#8fd3ff;      /* cool glow */
+    --accent-2:#ffc98f;    /* warm glow */
+    --ring:#1a2433;        /* card */
+    --good:#00c27a;
+    --warn:#ffae00;
+    --bad:#ff4d4d;
+    --shadow: 0 6px 40px rgba(0,0,0,.45), inset 0 0 40px rgba(255,255,255,.02);
+  }
+  [data-theme="dawn"]{
+    --bg:#f7f5ef; --ink:#111314; --muted:#4a5057; --accent:#2e74ff; --accent-2:#d46200; --ring:#e7e2d6;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; background:radial-gradient(120% 120% at 50% -10%, rgba(255,255,255,.06), transparent 55%), var(--bg);
+    color:var(--ink); font: 500 16px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Inter, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
+    -webkit-tap-highlight-color: transparent;
+  }
+  .wrap{max-width:880px; margin:0 auto; padding:calc(env(safe-area-inset-top,0) + 12px) 12px 24px}
+  header{display:flex; align-items:center; gap:12px; justify-content:space-between; margin-bottom:10px}
+  h1{font-size:18px; letter-spacing:.06em; text-transform:uppercase; margin:0; opacity:.9}
+  .pill{display:inline-flex; align-items:center; gap:8px; padding:8px 12px; border-radius:999px; background:var(--ring); box-shadow:var(--shadow)}
+  .grid{display:grid; grid-template-columns:1fr; gap:12px}
+  .panel{background:linear-gradient(180deg, rgba(255,255,255,.03), rgba(0,0,0,.03)), var(--ring); border-radius:18px; box-shadow:var(--shadow); padding:12px}
+  .controls{display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px}
+  button, .toggle{
+    appearance:none; border:0; border-radius:14px; padding:12px; font-weight:700; letter-spacing:.02em; background:linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.00));
+    color:var(--ink); outline-offset:3px; box-shadow:var(--shadow); cursor:pointer; min-height:44px
+  }
+  button:active{transform:translateY(1px)}
+  .row{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
+  .grow{flex:1}
+  label{font-size:13px; color:var(--muted)}
+  input[type="range"]{width:100%}
+  .meta{display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:13px; color:var(--muted)}
+  .progress{height:10px; width:100%; background:rgba(255,255,255,.08); border-radius:999px; overflow:hidden}
+  .bar{height:100%; width:0%; background:linear-gradient(90deg, var(--accent), var(--accent-2)); box-shadow:0 0 18px currentColor}
+  .switch{display:inline-grid; grid-auto-flow:column; gap:6px; align-items:center}
+  .switch input{display:none}
+  .switch .toggle{padding:8px 12px}
+  .legend{display:flex; align-items:center; gap:10px; flex-wrap:wrap; font-size:12px; color:var(--muted)}
+  .sr-only{position:absolute!important; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0}
+  canvas{width:100%; height:min(70vh, 520px); display:block; border-radius:18px; background:radial-gradient(80% 80% at 50% 30%, rgba(143,211,255,.06), transparent), radial-gradient(120% 120% at 50% 120%, rgba(255,201,143,.06), transparent)}
+  .badge{font-variant-numeric:tabular-nums; padding:.2em .5em; border-radius:.6em; background:rgba(255,255,255,.08)}
+  .help{font-size:12px; color:var(--muted)}
+  .kbd{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; padding:.15em .4em; border-radius:.35em; background:rgba(255,255,255,.1)}
+  @media (min-width:700px){
+    .grid{grid-template-columns:1.2fr .8fr}
+  }
+</style>
+</head>
+<body>
+  <div class="wrap" id="app" data-theme="night">
+    <header>
+      <h1 aria-live="polite">Hypnosis Clock Odometer</h1>
+      <div class="pill" role="status" aria-live="polite"><span id="statusDot" aria-hidden="true">●</span><span id="statusLabel">Idle</span></div>
+    </header>
+
+    <div class="grid" role="region" aria-label="Clock and Controls">
+      <section class="panel" aria-label="Canvas display">
+        <canvas id="stage" width="1400" height="900" aria-label="Odometer display and pendulum" role="img"></canvas>
+        <p class="legend" aria-live="polite">
+          <span>Current: <span id="readout" class="badge">0000000</span></span>
+          <span>Goal: <span class="badge">1000000</span></span>
+        </p>
+      </section>
+
+      <section class="panel" aria-label="Controls">
+        <div class="controls" role="group" aria-label="Playback">
+          <button id="startBtn" aria-pressed="false" aria-keyshortcuts="s space" title="Start (Space)">Start</button>
+          <button id="pauseBtn" aria-keyshortcuts="p" title="Pause (P)">Pause</button>
+          <button id="resetBtn" aria-keyshortcuts="r" title="Reset (R)">Reset</button>
+        </div>
+
+        <div class="row" style="margin-top:10px">
+          <div class="grow">
+            <label for="rate">Speech Rate <span id="rateVal" class="badge">1.00×</span></label>
+            <input id="rate" type="range" min="0.5" max="2" step="0.05" value="1" aria-valuemin="0.5" aria-valuemax="2" aria-valuenow="1" aria-label="Speech rate" />
+          </div>
+          <div class="switch" role="group" aria-label="Loop and Theme">
+            <label class="toggle" id="loopLabel"><input type="checkbox" id="loop" />Loop</label>
+            <button id="themeBtn" class="toggle" title="Toggle theme (T)">Theme</button>
+          </div>
+        </div>
+
+        <div class="meta" style="margin-top:10px">
+          <div class="progress" aria-label="Progress to one million" role="progressbar" aria-valuemin="0" aria-valuemax="1000000" aria-valuenow="0" id="progress" >
+            <div class="bar" id="bar"></div>
+          </div>
+        </div>
+
+        <p class="help" style="margin-top:8px">
+          Keys: <span class="kbd">Space</span>/<span class="kbd">S</span> start • <span class="kbd">P</span> pause • <span class="kbd">R</span> reset • <span class="kbd">T</span> theme.
+          State persists locally. Respects <em>prefers-reduced-motion</em>.
+        </p>
+        <div class="sr-only" aria-live="polite" id="ariaLive"></div>
+      </section>
+    </div>
+  </div>
+
+<script>
+(function(){
+  'use strict';
+  const $ = sel => document.querySelector(sel);
+  const stage = $('#stage');
+  const ctx = stage.getContext('2d');
+  const readout = $('#readout');
+  const statusDot = $('#statusDot');
+  const statusLabel = $('#statusLabel');
+  const bar = $('#bar');
+  const progress = $('#progress');
+  const rate = $('#rate');
+  const rateVal = $('#rateVal');
+  const startBtn = $('#startBtn');
+  const pauseBtn = $('#pauseBtn');
+  const resetBtn = $('#resetBtn');
+  const themeBtn = $('#themeBtn');
+  const loopChk = $('#loop');
+  const ariaLive = $('#ariaLive');
+  const app = $('#app');
+
+  const MAX = 1000000; // stops at 1,000,000
+  const DIGITS = 7;     // 0000000 -> 1000000
+
+  // Persistent state
+  const state = {
+    n: 0,
+    running: false,
+    speechRate: 1,
+    loop: false,
+    theme: localStorage.getItem('hc-theme') || 'night',
+  };
+
+  // Load saved state
+  try{
+    const saved = JSON.parse(localStorage.getItem('hc-state')||'{}');
+    Object.assign(state, saved);
+  }catch{}
+
+  // Apply UI from state
+  app.dataset.theme = state.theme;
+  loopChk.checked = !!state.loop;
+  rate.value = state.speechRate;
+  rateVal.textContent = state.speechRate.toFixed(2)+"×";
+
+  // Accessibility – progress
+  function updateProgress(){
+    const p = Math.min(state.n, MAX)/MAX;
+    bar.style.width = (p*100).toFixed(4)+'%';
+    progress.setAttribute('aria-valuenow', state.n);
+  }
+
+  // Format number with leading zeros
+  const z = (x)=> x.toString().padStart(DIGITS,'0');
+
+  function save(){
+    localStorage.setItem('hc-state', JSON.stringify({n:state.n, running:false, speechRate:state.speechRate, loop:state.loop}));
+    localStorage.setItem('hc-theme', state.theme);
+  }
+
+  // ---- Speech synthesis master clock ----
+  const synth = window.speechSynthesis;
+  let currentUtter = null;
+  let availableVoices = [];
+  let voicePick = null;
+
+  function chooseVoice(){
+    // try to prefer an elegant British / calm voice if available, with graceful fallback
+    const prefs = [
+      'Google UK English Male','Google UK English Female','Microsoft Libby Online (Natural) - English (United Kingdom)',
+      'Microsoft Sonia Online (Natural) - English (United Kingdom)', 'Daniel','Serena','English (United Kingdom)'
+    ];
+    availableVoices = synth.getVoices();
+    voicePick = null;
+    for(const name of prefs){
+      const v = availableVoices.find(v=> (v.name||'').includes(name));
+      if(v){ voicePick = v; break; }
+    }
+    if(!voicePick) voicePick = availableVoices.find(v=> /English/i.test(v.lang)) || availableVoices[0] || null;
+  }
+  chooseVoice();
+  if(availableVoices.length===0){
+    // Chrome loads voices asynchronously
+    window.speechSynthesis.onvoiceschanged = chooseVoice;
+  }
+
+  function speakNumber(num){
+    if(!('speechSynthesis' in window)){
+      console.warn('Speech Synthesis not supported.');
+      return;
+    }
+    if(currentUtter){ try{synth.cancel();}catch{} }
+    const phrase = num.toString();
+    const u = new SpeechSynthesisUtterance(phrase);
+    if(voicePick) u.voice = voicePick;
+    u.rate = state.speechRate; // 0.5-2
+    u.pitch = 0.8; // calmer
+    u.volume = 1.0;
+
+    u.onstart = ()=>{
+      status('Speaking', '#8fd3ff');
+      // Sync pendulum tick start
+      pendulumTick();
+    };
+    u.onend = ()=>{
+      status('Tick', '#ffc98f');
+      // Only now do we advance the odometer animation
+      triggerAdvance();
+    };
+    u.onerror = ()=>{
+      status('Speech error', 'var(--bad)');
+      state.running = false; save();
+    };
+    currentUtter = u;
+    synth.speak(u);
+  }
+
+  function status(text, color){
+    statusDot.style.color = color || 'var(--muted)';
+    statusLabel.textContent = text;
+  }
+
+  // ---- Odometer & Pendulum Animation ----
+  let t0 = performance.now();
+  let animId = 0;
+  let carryAnim = null; // {from, to, start, dur}
+  let pendulum = {phase:0, speed:Math.PI/1200, amp:0.9, lastTick:0};
+  const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if(prefersReduced){ pendulum.amp = 0.3; }
+
+  function pendulumTick(){
+    // emphasize a swing on each speech start/end
+    pendulum.phase = 0; // reset to left
+    pendulum.lastTick = performance.now();
+  }
+
+  function triggerAdvance(){
+    // Guard: if paused, do not advance or chain
+    if(!state.running) return;
+
+    const next = state.n + 1;
+    if(next>MAX){
+      if(state.loop){ state.n = 0; } else { state.running = false; status('Complete', 'var(--good)'); save(); return; }
+    } else {
+      // set up reel animation
+      const now = performance.now();
+      carryAnim = { from: state.n, to: next, start: now, dur: prefersReduced ? 200 : 600 };
+      state.n = next; // logically advance; drawing will animate
+      save();
+    }
+  }
+
+  function draw(now){
+    const w = stage.width, h = stage.height;
+    ctx.clearRect(0,0,w,h);
+
+    // BACKDROP
+    const g = ctx.createRadialGradient(w/2, h*0.28, 10, w/2, h*0.28, Math.max(w,h));
+    g.addColorStop(0,'rgba(143,211,255,0.10)');
+    g.addColorStop(1,'rgba(0,0,0,0.0)');
+    ctx.fillStyle = g; ctx.fillRect(0,0,w,h);
+
+    // PENDULUM
+    const cx = w/2, top = h*0.12, len = h*0.42;
+    const speed = pendulum.speed * (1 + (state.speechRate-1)*0.6);
+    pendulum.phase += speed * (now - t0);
+    const swing = Math.sin(pendulum.phase) * (pendulum.amp * 0.42 * Math.PI/6); // radians
+    ctx.save();
+    ctx.translate(cx, top);
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+    ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(0,h*0.06); ctx.stroke(); // hanger
+    ctx.rotate(swing);
+    // rod
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(0,len); ctx.stroke();
+    // bob
+    const bobR = Math.max(28, h*0.045);
+    const grad = ctx.createRadialGradient(0,len-bobR*0.4, bobR*0.2, 0, len, bobR);
+    grad.addColorStop(0,'rgba(255,201,143,.85)');
+    grad.addColorStop(1,'rgba(143,211,255,.25)');
+    ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(0,len,bobR,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+
+    // ODOMETER WINDOW
+    const winW = Math.min(w*0.86, 1100), winH = Math.min(h*0.18, 160);
+    const winX = (w - winW)/2, winY = h*0.60;
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    roundRect(ctx, winX-14, winY-18, winW+28, winH+36, 18); ctx.fill();
+
+    // Reel background
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    roundRect(ctx, winX, winY, winW, winH, 14); ctx.fill();
+
+    // DIGITS & SCROLL
+    const digits = (carryAnim? carryAnim.from : state.n).toString().padStart(DIGITS,'0').split('');
+    const nextDigits = (state.n).toString().padStart(DIGITS,'0').split('');
+    const cols = DIGITS;
+    const colW = winW/cols;
+    const centerY = winY + winH/2;
+
+    // compute animation progress 0..1
+    let prog = 1;
+    if(carryAnim){
+      const t = Math.min(1, (now - carryAnim.start)/carryAnim.dur);
+      prog = easeInOutCubic(t);
+      if(t>=1){ carryAnim = null; if(state.running){ speakNumber(state.n); } }
+    }
+
+    for(let i=0;i<cols;i++){
+      const x = winX + i*colW;
+      // column cut
+      ctx.save();
+      clipRoundRect(ctx, x+4, winY+6, colW-8, winH-12, 10);
+
+      // draw scrolling stack for this digit
+      const from = +digits[i];
+      const to = +nextDigits[i];
+      const changed = (from!==to);
+      const yOffset = changed ? (1-prog)*(winH) : 0; // scroll upward when changed
+
+      const stackTop = centerY - winH/2 - 40 + yOffset;
+      ctx.translate(x, stackTop);
+
+      // Soft glow per column
+      const cg = ctx.createLinearGradient(0,0,0,winH+80);
+      cg.addColorStop(0,'rgba(143,211,255,0.10)');
+      cg.addColorStop(1,'rgba(255,201,143,0.10)');
+      ctx.fillStyle = cg; ctx.fillRect(0,0,colW,winH+80);
+
+      // From digit
+      ctx.fillStyle = 'rgba(255,255,255,0.92)';
+      ctx.font = `${Math.floor(winH*0.72)}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.shadowColor = 'rgba(143,211,255,0.35)'; ctx.shadowBlur = 22;
+      ctx.fillText(from, colW/2, winH*0.75);
+
+      // To digit (scrolling into place if changed)
+      if(changed){
+        ctx.fillStyle = 'rgba(255,255,255,0.98)';
+        ctx.shadowColor = 'rgba(255,201,143,0.35)'; ctx.shadowBlur = 24;
+        ctx.fillText(to, colW/2, winH*0.75 - winH);
+      }
+
+      ctx.restore();
+
+      // divider
+      ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x+colW, winY+10); ctx.lineTo(x+colW, winY+winH-10); ctx.stroke();
+    }
+
+    // Label glass
+    ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.lineWidth = 2; roundRect(ctx, winX, winY, winW, winH, 14); ctx.stroke();
+
+    t0 = now;
+    animId = requestAnimationFrame(draw);
+  }
+
+  function easeInOutCubic(t){ return t<.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2,3)/2; }
+
+  function roundRect(c,x,y,w,h,r){ c.beginPath(); c.moveTo(x+r,y); c.arcTo(x+w,y,x+w,y+h,r); c.arcTo(x+w,y+h,x,y+h,r); c.arcTo(x,y+h,x,y,r); c.arcTo(x,y,x+w,y,r); }
+  function clipRoundRect(c,x,y,w,h,r){ c.save(); roundRect(c,x,y,w,h,r); c.clip(); }
+
+  // ---- Layout scaling for high-DPI & responsive ----
+  function fitCanvas(){
+    const dpr = Math.max(1, Math.min(2.5, window.devicePixelRatio||1));
+    const cssW = stage.clientWidth; const cssH = stage.clientHeight;
+    stage.width = Math.round(cssW*dpr); stage.height = Math.round(cssH*dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0); // scale drawing back to CSS pixels
+  }
+  new ResizeObserver(()=>{ fitCanvas(); }).observe(stage);
+  fitCanvas();
+
+  // ---- Playback wiring ----
+  function start(){
+    if(state.n>=MAX && !state.loop){ status('Complete', 'var(--good)'); return; }
+    if(!animId) animId = requestAnimationFrame(ts=>{ t0=ts; draw(ts); });
+    if(!state.running){ state.running=true; save(); speakNumber(state.n); startBtn.setAttribute('aria-pressed','true'); }
+    ariaLive.textContent = `Started at ${z(state.n)}`;
+  }
+  function pause(){
+    if(!state.running) return;
+    state.running=false; save();
+    try{ synth.cancel(); }catch{}
+    startBtn.setAttribute('aria-pressed','false');
+    status('Paused','var(--muted)');
+    ariaLive.textContent = 'Paused';
+  }
+  function reset(){
+    pause();
+    state.n = 0; carryAnim = null; save();
+    updateUI();
+    status('Reset','var(--muted)');
+    ariaLive.textContent = 'Reset to 0000000';
+  }
+
+  function updateUI(){
+    readout.textContent = z(state.n);
+    document.title = `${z(state.n)} — Hypnosis Clock`;
+    updateProgress();
+  }
+
+  // Controls
+  startBtn.addEventListener('click', start);
+  pauseBtn.addEventListener('click', pause);
+  resetBtn.addEventListener('click', reset);
+  rate.addEventListener('input', (e)=>{
+    state.speechRate = parseFloat(rate.value);
+    rateVal.textContent = state.speechRate.toFixed(2)+"×";
+    rate.setAttribute('aria-valuenow', state.speechRate);
+    save();
+  });
+  loopChk.addEventListener('change', ()=>{ state.loop = loopChk.checked; save(); ariaLive.textContent = `Loop ${state.loop?'on':'off'}`; });
+  themeBtn.addEventListener('click', ()=>{
+    state.theme = (state.theme==='night'?'dawn':'night');
+    app.dataset.theme = state.theme; save(); ariaLive.textContent = `Theme ${state.theme}`;
+  });
+
+  // Keyboard shortcuts
+  window.addEventListener('keydown', (e)=>{
+    if(e.target && /input|textarea|select/i.test(e.target.tagName)) return;
+    if(e.code==='Space' || e.key.toLowerCase()==='s'){ e.preventDefault(); start(); }
+    else if(e.key.toLowerCase()==='p'){ e.preventDefault(); pause(); }
+    else if(e.key.toLowerCase()==='r'){ e.preventDefault(); reset(); }
+    else if(e.key.toLowerCase()==='t'){ e.preventDefault(); themeBtn.click(); }
+  });
+
+  // Animation loop kick
+  if(!animId) animId = requestAnimationFrame(ts=>{ t0=ts; draw(ts); });
+
+  // Restore UI
+  updateUI();
+
+  // Speak once if returning and running was false (explicit control)
+  status('Idle','var(--muted)');
+
+  // Public-facing for debugging (optional)
+  window.__hc = { state, start, pause, reset };
+
+  // Every frame, also refresh the text readout in case of changes
+  const uiTimer = setInterval(updateUI, 120);
+})();
+</script>
+</body>
+</html>

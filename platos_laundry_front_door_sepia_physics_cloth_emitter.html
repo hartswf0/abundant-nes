@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+<title>Plato's Laundry — Front Door</title>
+<meta name="color-scheme" content="light dark" />
+<style>
+  :root{
+    --sepia-0:#0e0b07; --sepia-1:#17120c; --sepia-2:#221b13; --sepia-3:#2e241a;
+    --sepia-4:#3b2f22; --sepia-5:#5b4833; --sepia-6:#8e6d4a; --sepia-7:#d6ba8a;
+    --ink:#2b2219; --sand:#e6cf9f; --cream:#f2e6cf; --accent:#c2a46b;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; font-family: ui-serif, Georgia, "Times New Roman", serif;
+    color:var(--cream);
+    background: radial-gradient(120% 120% at 50% 10%, var(--sepia-3), var(--sepia-1));
+    overflow:hidden; -webkit-tap-highlight-color: transparent;
+  }
+  .wrap{position:relative; width:100%; height:100%;}
+  canvas#bg, canvas#fx{position:absolute; inset:0; width:100%; height:100%}
+  main{position:relative; z-index:3; height:100%; display:grid; place-items:center; padding:6vh 5vw;}
+
+  /* Washer door */
+  .dial{
+    width:min(84vmin,540px); aspect-ratio:1/1; border-radius:50%;
+    display:grid; place-items:center; position:relative;
+    filter: drop-shadow(0 24px 40px rgba(0,0,0,.45));
+  }
+  .ring{
+    width:100%; height:100%; border-radius:50%; position:absolute; inset:0;
+    border: max(1.6vmin,12px) solid rgba(226,205,166,.92);
+    box-shadow: 0 0 0 max(.9vmin,6px) rgba(0,0,0,.35) inset,
+                0 2.2vmin 5vmin rgba(0,0,0,.4);
+    background:
+      radial-gradient(80% 80% at 60% 35%, rgba(255,255,255,.06), rgba(255,255,255,0) 60%),
+      conic-gradient(from 0deg at 50% 50%, rgba(0,0,0,.07), rgba(255,255,255,.05), rgba(0,0,0,.1));
+    transition: transform .9s cubic-bezier(.2,.9,.2,1);
+  }
+  .glass{
+    width:86%; height:86%; border-radius:50%; position:relative; overflow:hidden;
+    background:
+      radial-gradient(120% 120% at 70% 30%, rgba(255,255,255,.12), rgba(255,255,255,0) 55%),
+      radial-gradient(60% 60% at 30% 70%, rgba(0,0,0,.25), rgba(0,0,0,.05) 60%);
+    border: .9vmin solid rgba(207,182,137,.35);
+    transform: translateZ(0);
+  }
+  /* Greek key ring (very faint) */
+  .meander{ position:absolute; inset:3.5%; border-radius:50%; opacity:.15; pointer-events:none;
+    mask: radial-gradient(closest-side, transparent 70%, #000 71% 84%, transparent 85%);
+    background: repeating-conic-gradient(from 0deg, rgba(255,255,255,.12) 0 6deg, rgba(255,255,255,0) 6deg 12deg);
+  }
+
+  /* Light cone radiating from door */
+  .lightCone{ position:absolute; inset:0; border-radius:50%; pointer-events:none; mix-blend-mode:screen; opacity:0; }
+
+  /* UI */
+  .ui{ position:absolute; inset:auto 0 4.5vh 0; z-index:4; display:grid; place-items:center; gap:.9rem; }
+  h1{ font-family:"Cormorant Garamond", ui-serif, Georgia, serif; letter-spacing:.06em; text-transform:uppercase; font-weight:700; color:var(--sand); text-shadow:0 2px 2px rgba(0,0,0,.35); font-size:clamp(1.1rem,5.4vw,2.2rem) }
+  .tag{ font-style:italic; color:#efe3cc; opacity:.9; font-size:clamp(.85rem,3.8vw,1.05rem) }
+  .ctr{ display:flex; gap:.6rem; flex-wrap:wrap; justify-content:center }
+  button{ appearance:none; border:1px solid rgba(230,207,159,.55); background:rgba(255,245,225,.06); color:var(--cream); padding:.7rem 1rem; border-radius:999px; letter-spacing:.08em; text-transform:uppercase; font-size:.78rem; font-weight:600 }
+  button:hover{ background:rgba(255,245,225,.12) }
+  .enter{ border-color:rgba(230,207,159,.85); background:rgba(230,207,159,.12); color:var(--sand) }
+
+  /* Poem labels (around compass) */
+  .labels{position:absolute; inset:0; display:grid; place-items:center; pointer-events:none}
+  .labels span{ position:absolute; font-variant:small-caps; letter-spacing:.12em; color:rgba(255,245,225,.8); text-shadow:0 1px 0 rgba(0,0,0,.5); font-size:clamp(.6rem,3.2vw,.9rem) }
+
+  /* Reduced motion */
+  @media (prefers-reduced-motion: reduce){ .ring{transition:none} }
+</style>
+</head>
+<body>
+<div class="wrap" aria-label="Plato's Laundry front door">
+  <canvas id="bg" aria-hidden="true"></canvas>
+  <canvas id="fx" aria-hidden="true"></canvas>
+
+  <main>
+    <section class="dial" aria-label="Radial washer dial">
+      <div class="ring" id="ring"></div>
+      <div class="glass" id="glass">
+        <div class="meander"></div>
+        <div class="lightCone" id="lightCone"></div>
+        <div class="labels" aria-hidden="true">
+          <span style="transform:translate(-50%,-50%) rotate(0deg) translate(0,-44%);">Wash</span>
+          <span style="transform:translate(-50%,-50%) rotate(90deg) translate(0,-44%);">Rinse</span>
+          <span style="transform:translate(-50%,-50%) rotate(180deg) translate(0,-44%);">Spin</span>
+          <span style="transform:translate(-50%,-50%) rotate(270deg) translate(0,-44%);">Dry</span>
+        </div>
+      </div>
+    </section>
+
+    <div class="ui" role="group" aria-label="Controls">
+      <h1>Plato’s Laundry</h1>
+      <div class="tag">A mythopoetic apparatus</div>
+      <div class="ctr">
+        <button id="play">Open & Emerge</button>
+        <button id="rinse">Rinse</button>
+        <button id="spin">Spin</button>
+        <button id="dry">Dry</button>
+        <button class="enter" id="enter">Enter</button>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+/* ===== Canvas sizing util ===== */
+function fitCanvas(canvas){
+  const DPR = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = Math.floor(innerWidth * DPR);
+  canvas.height = Math.floor(innerHeight * DPR);
+  canvas.style.width = innerWidth + 'px';
+  canvas.style.height = innerHeight + 'px';
+  return DPR;
+}
+
+/* ===== Background: drifting sepia squares ===== */
+(function bgSquares(){
+  const c = document.getElementById('bg');
+  const ctx = c.getContext('2d');
+  let DPR = fitCanvas(c);
+  addEventListener('resize', ()=>{ DPR = fitCanvas(c); });
+  const cells = [];
+  for(let i=0;i<100;i++){
+    cells.push({ x: Math.random()*c.width, y: Math.random()*c.height, s:(Math.random()*18+8)*DPR*0.5, a: Math.random()*0.1+0.05, v: Math.random()*0.25+0.05 });
+  }
+  (function step(){
+    ctx.clearRect(0,0,c.width,c.height);
+    ctx.fillStyle = '#00000012'; ctx.fillRect(0,0,c.width,c.height);
+    cells.forEach(p=>{
+      p.y += p.v*DPR; if(p.y - p.s > c.height){ p.y = -p.s; p.x = Math.random()*c.width; }
+      ctx.fillStyle = `rgba(215,195,155,${p.a})`;
+      ctx.fillRect(p.x, p.y, p.s, p.s);
+    });
+    requestAnimationFrame(step);
+  })();
+})();
+
+/* ===== Foreground FX: physics cloth + light from door ===== */
+(function fxLayer(){
+  const fx = document.getElementById('fx');
+  const ctx = fx.getContext('2d');
+  let DPR = fitCanvas(fx);
+  addEventListener('resize', ()=>{ DPR = fitCanvas(fx); });
+
+  // Portal anchor (will be updated on layout)
+  const portal = { x: innerWidth/2, y: innerHeight/2, r: Math.min(innerWidth, innerHeight)*0.32 };
+  function updatePortal(){
+    const dial = document.querySelector('.dial');
+    const rect = dial.getBoundingClientRect();
+    portal.x = rect.left + rect.width/2;
+    portal.y = rect.top + rect.height/2;
+    portal.r = rect.width * 0.43;
+  }
+  updatePortal(); addEventListener('resize', updatePortal);
+
+  // Simple cloth particles (rectangles) with Euler physics
+  const cloths = [];
+  const palette = ['#d6ba8a','#e6cf9f','#b99568','#f2e6cf','#8e6d4a'];
+  const wind = { t:0, dir:1 };
+  let emitting = false, phase='Wash', lightIntensity = 0;
+
+  function spawnCloth(burst=false){
+    const angle = (Math.random()*Math.PI*0.5) + Math.PI*0.58; // bias down-right cone
+    const speed = burst? (3 + Math.random()*2) : (1.2 + Math.random()*1.2);
+    const vx = Math.cos(angle)*speed;
+    const vy = Math.sin(angle)*speed;
+    const w = 14 + Math.random()*22;
+    const h = 10 + Math.random()*16;
+    const color = palette[(Math.random()*palette.length)|0];
+    cloths.push({ x: portal.x*DPR, y: portal.y*DPR, vx: vx*DPR, vy: vy*DPR, w:w*DPR, h:h*DPR, a: Math.random()*Math.PI, av: (Math.random()-.5)*0.06, life: 1, fade: 0, color });
+  }
+
+  function burst(n=30){ for(let i=0;i<n;i++) spawnCloth(true); }
+
+  function physics(){
+    wind.t += 0.01; const gust = Math.sin(wind.t*0.8)*0.08 + Math.cos(wind.t*0.37)*0.05; // gentle noise
+    for(let i=cloths.length-1;i>=0;i--){
+      const p = cloths[i];
+      // forces
+      p.vx += (0.02 + gust)*DPR;              // wind pushes right
+      p.vy += (0.06 + Math.abs(gust)*0.02)*DPR; // gravity
+      // damping
+      p.vx *= 0.995; p.vy *= 0.995; p.av *= 0.997;
+      // integrate
+      p.x += p.vx; p.y += p.vy; p.a += p.av;
+      // fade when offscreen
+      if(p.x/DPR < -80 || p.x/DPR > innerWidth+120 || p.y/DPR > innerHeight+120){ p.fade += 0.02; }
+      p.life -= 0.002 - (emitting?0.0006:0);
+      if(p.fade>1 || p.life<=0){ cloths.splice(i,1); }
+    }
+  }
+
+  function drawLight(){
+    if(lightIntensity<=0) return;
+    const grad = ctx.createRadialGradient(portal.x*DPR, portal.y*DPR, portal.r*0.1*DPR, portal.x*DPR, portal.y*DPR, portal.r*1.9*DPR);
+    grad.addColorStop(0, `rgba(250,235,200,${0.18*lightIntensity})`);
+    grad.addColorStop(0.35, `rgba(230,210,170,${0.12*lightIntensity})`);
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(portal.x*DPR, portal.y*DPR, portal.r*2.0*DPR, 0, Math.PI*2);
+    ctx.fill();
+
+    // soft cone to the right-bottom
+    ctx.save();
+    ctx.translate(portal.x*DPR, portal.y*DPR);
+    ctx.rotate(0.35);
+    const cone = ctx.createLinearGradient(0,0, portal.r*2.2*DPR, portal.r*1.5*DPR);
+    cone.addColorStop(0, `rgba(255,240,210,${0.20*lightIntensity})`);
+    cone.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = cone;
+    ctx.beginPath();
+    ctx.moveTo(0,0);
+    ctx.lineTo(portal.r*2.6*DPR, -portal.r*0.8*DPR);
+    ctx.lineTo(portal.r*2.8*DPR, portal.r*0.8*DPR);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawCloth(p){
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(p.a);
+    // cloth rectangle with soft edges
+    ctx.globalAlpha = Math.max(0, 1 - p.fade*0.9);
+    ctx.fillStyle = p.color;
+    const r = Math.min(p.w,p.h)*0.35;
+    roundRect(ctx, -p.w/2, -p.h/2, p.w, p.h, r);
+    ctx.fill();
+
+    // stitch lines
+    ctx.globalAlpha *= 0.35;
+    ctx.strokeStyle = 'rgba(0,0,0,.25)';
+    ctx.lineWidth = Math.max(1, 1.2*DPR);
+    ctx.beginPath(); ctx.moveTo(-p.w/2+2*DPR, -p.h/4); ctx.lineTo(p.w/2-2*DPR, -p.h/4); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-p.w/2+2*DPR,  p.h/4); ctx.lineTo(p.w/2-2*DPR,  p.h/4); ctx.stroke();
+    ctx.restore();
+  }
+
+  function roundRect(ctx, x, y, w, h, r){
+    const rr = Math.min(r, Math.abs(w)/2, Math.abs(h)/2);
+    ctx.beginPath();
+    ctx.moveTo(x+rr, y);
+    ctx.arcTo(x+w, y, x+w, y+h, rr);
+    ctx.arcTo(x+w, y+h, x, y+h, rr);
+    ctx.arcTo(x, y+h, x, y, rr);
+    ctx.arcTo(x, y, x+w, y, rr);
+    ctx.closePath();
+  }
+
+  // Main loop
+  (function loop(){
+    ctx.clearRect(0,0,fx.width,fx.height);
+    drawLight();
+    physics();
+    for(const p of cloths) drawCloth(p);
+    // emit steadily when door is open
+    if(emitting && Math.random()<0.45) spawnCloth(false);
+    requestAnimationFrame(loop);
+  })();
+
+  // Controls
+  const btnPlay = document.getElementById('play');
+  const btnRinse = document.getElementById('rinse');
+  const btnSpin  = document.getElementById('spin');
+  const btnDry   = document.getElementById('dry');
+  const btnEnter = document.getElementById('enter');
+  const ring = document.getElementById('ring');
+  const lightCone = document.getElementById('lightCone');
+  const glass = document.getElementById('glass');
+
+  function openDoor(){
+    emitting = true; lightIntensity = Math.min(1, lightIntensity+0.1);
+    ring.style.transform = 'scale(1.02)';
+    // CSS light overlay for extra glow
+    lightCone.style.opacity = 1;
+    lightCone.style.background = 'radial-gradient(60% 60% at 50% 50%, rgba(250,235,200,.25), rgba(230,210,170,.15) 45%, rgba(0,0,0,0) 70%)';
+    burst(24);
+  }
+  function closeDoor(){
+    emitting = false; ring.style.transform = 'scale(1)';
+    lightIntensity = Math.max(0, lightIntensity - 0.2);
+    lightCone.style.opacity = 0;
+  }
+
+  btnPlay.addEventListener('click', ()=>{
+    if(!emitting){ openDoor(); btnPlay.textContent = 'Pause Emerge'; }
+    else{ closeDoor(); btnPlay.textContent = 'Open & Emerge'; }
+  });
+  btnRinse.addEventListener('click', ()=>{ phase='Rinse'; burst(10); });
+  btnSpin .addEventListener('click', ()=>{ phase='Spin';  for(let i=0;i<18;i++) spawnCloth(true); });
+  btnDry  .addEventListener('click', ()=>{ phase='Dry';   closeDoor(); });
+  btnEnter.addEventListener('click', ()=>{
+    // hook up navigation or router here
+    alert('Entering the apparatus…');
+  });
+
+  // Tap the glass to toggle
+  glass.addEventListener('pointerdown', ()=>{ emitting ? closeDoor() : openDoor(); });
+
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Hyper‑Tetra Engine — Pro (single‑file)</title>
+<style>
+  :root{
+    --bg:#07090c; --fg:#eaf4ff; --muted:#9fb6ca;
+    --edge:#8fb6ff; --vert:#58d5ff;
+    /* Face brand colors (stroke) and subtle fills */
+    --fa:#58b3ff; --fa-fill:#0e2134;
+    --fb:#5ad1b4; --fb-fill:#0f2b24;
+    --fc:#c07bff; --fc-fill:#201433;
+    --fd:#ffc85a; --fd-fill:#2e250f;
+  }
+  html,body{height:100%; background:var(--bg); color:var(--fg); font-family:ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial;}
+  *{box-sizing:border-box}
+  #app{position:fixed; inset:0; display:grid; grid-template-rows:auto 1fr auto;}
+  header{padding:10px env(safe-area-inset-left) 6px env(safe-area-inset-right); display:flex; align-items:center; gap:10px; border-bottom:1px solid #0e141b; background:#0b0f14cc; backdrop-filter:saturate(1.1) blur(8px);}
+  header h1{font-size:14px; font-weight:600; letter-spacing:.3px; margin:0; color:var(--muted)}
+  .toolbar{margin-left:auto; display:flex; gap:6px; align-items:center}
+  .btn{appearance:none; border:1px solid #1d2730; background:#0e141a; color:var(--fg); padding:8px 10px; border-radius:10px; font-size:12px; letter-spacing:.2px}
+  .btn:active{transform:scale(.98)}
+  .btn.primary{border-color:#0b2f3b; background:#0b1c25; box-shadow:0 0 24px rgba(88,213,255,.25)}
+  .chip{display:inline-flex; align-items:center; gap:6px; padding:6px 8px; border-radius:999px; border:1px solid #17222b; background:#0c1117; cursor:pointer}
+  .chip[aria-pressed="true"]{outline:2px solid currentColor}
+  .dot{inline-size:10px; block-size:10px; border-radius:999px; background:currentColor}
+  .fa{color:var(--fa)} .fb{color:var(--fb)} .fc{color:var(--fc)} .fd{color:var(--fd)}
+
+  main{position:relative; overflow:hidden}
+  canvas#gl{position:absolute; inset:0; width:100%; height:100%; touch-action:none; outline:none}
+
+  /* Pro status panel */
+  .status{position:absolute; top:12px; right:12px; width:min(300px,52vw); background:#0c1117e0; border:1px solid #16222c; border-radius:14px; padding:10px; font-size:12px}
+  .status h2{margin:0 0 6px; font-size:12px; color:#cfe8ff; display:flex; align-items:center; gap:6px}
+  .status .grid{display:grid; grid-template-columns:1fr auto; row-gap:4px; column-gap:8px; color:var(--muted)}
+  .status .bar{height:6px; border-radius:999px; background:#0b131a; border:1px solid #15202a; overflow:hidden}
+  .status .bar>span{display:block; height:100%}
+  .status .row{display:flex; align-items:center; gap:6px}
+
+  .legend{position:absolute; left:12px; bottom:12px; right:12px; display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+  .legend .chip{background:#0c1117d0}
+
+  .panel{position:absolute; left:12px; bottom:72px; max-width:60%; pointer-events:auto; background:#0c1117e0; border:1px solid #17222b; border-radius:14px; padding:10px; font-size:12px}
+  .panel h3{margin:.2em 0 .4em; font-size:13px; color:#d7ecff}
+  .panel a{color:#ff8fb2; text-decoration:none}
+  .panel a:hover{text-decoration:underline}
+
+  .toast{position:absolute; inset:auto 12px 12px 12px; background:#0a0f14; border:1px solid #13202c; color:#9cff8a; border-radius:10px; padding:8px 10px; font-size:12px; opacity:0; transform:translateY(8px); transition:opacity .25s, transform .25s}
+  .toast.show{opacity:1; transform:none}
+
+  .help{position:absolute; top:56px; left:12px; background:#0c1117; border:1px solid #12202b; padding:10px; border-radius:12px; max-width:74ch; font-size:12px; color:var(--muted); display:none}
+  .help.show{display:block}
+  .tests{position:absolute; top:56px; right:12px; background:#0c1117; border:1px solid #12202b; padding:10px; border-radius:12px; max-width:72ch; font-size:12px; color:var(--muted); display:none}
+  .tests.show{display:block}
+
+  @media (prefers-reduced-motion: reduce){ .btn:active{transform:none} }
+</style>
+</head>
+<body>
+<div id="app" aria-live="polite" aria-atomic="true">
+  <header>
+    <h1>Hyper‑Tetra Engine — Pro</h1>
+    <div id="faceChips" class="chipbox" aria-label="Face quick select" style="display:flex; gap:6px; margin-left:12px">
+      <button class="chip fa" data-face="0" aria-pressed="true" title="Face A"><span class="dot"></span>Face A</button>
+      <button class="chip fb" data-face="1" title="Face B"><span class="dot"></span>Face B</button>
+      <button class="chip fc" data-face="2" title="Face C"><span class="dot"></span>Face C</button>
+      <button class="chip fd" data-face="3" title="Face D"><span class="dot"></span>Face D</button>
+    </div>
+    <div class="toolbar">
+      <button id="helpBtn" class="btn">Help</button>
+      <button id="testBtn" class="btn">Tests</button>
+      <button id="resetBtn" class="btn">Reset</button>
+      <button id="muteBtn" class="btn primary">Audio: On</button>
+    </div>
+  </header>
+  <main>
+    <canvas id="gl" aria-label="Hypertetrahedron canvas"></canvas>
+
+    <!-- Professional status readout -->
+    <aside id="status" class="status" aria-live="polite">
+      <h2>
+        <span id="statusFaceDot" class="dot" style="color:var(--fa)"></span>
+        <span id="statusFace">Face A</span>
+        <span id="statusLayer" style="margin-left:auto; color:#9fb6ca">1 / 96</span>
+      </h2>
+      <div class="grid">
+        <div>Span</div><div><code id="statusSpan">25%</code></div>
+        <div class="bar" aria-hidden="true"><span id="barSpan" style="width:25%; background:linear-gradient(90deg, #0b4a70, var(--fa))"></span></div><div></div>
+        <div>Speed</div><div><code id="statusSpeed">0.00×</code></div>
+        <div class="bar" aria-hidden="true"><span id="barSpeed" style="width:0%; background:linear-gradient(90deg, #0b4a70, var(--fa))"></span></div><div></div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <div class="chip" id="toggleLabels"><span class="dot" style="background:#9fb6ca"></span> Labels</div>
+        <div class="chip" id="toggleEdges"><span class="dot" style="background:#9fb6ca"></span> Edge tint</div>
+      </div>
+    </aside>
+
+    <!-- Hypertext panel -->
+    <aside id="info" class="panel" aria-label="Hypertext panel">
+      <h3 id="panelTitle">Tetrad</h3>
+      <p id="panelBody">Tap a <em>face</em> or select via colored chips. Each face owns its strata (96 layers). Pinch/rotate on that face to adjust <b>span</b> and <b>speed</b>. Drag an <em>edge</em> to co‑scrub its two faces. Vertices open E/O/R/V and broadcast bands to all faces.</p>
+    </aside>
+
+    <div id="toast" class="toast" role="status"></div>
+    <div id="help" class="help">
+      <strong>Gestures</strong>
+      <ul>
+        <li><b>Tap face</b> or use colored chips to select active face; the active face is brightly stroked and labeled.</li>
+        <li><b>Pinch (on active face)</b> → span · <b>Rotate</b> → speed. Tilt = micro‑mod.</li>
+        <li><b>Drag edge</b> → co‑scrub the two faces sharing that edge; edge tints to blended color.</li>
+        <li><b>Tap vertex</b> → E/O/R/V band preset on every face.</li>
+        <li><b>Long‑press</b> → confirm + trail.</li>
+      </ul>
+      <p><b>Audio</b> follows gesture energy. Toggle with <i>Audio</i>.</p>
+    </div>
+    <div id="testsPanel" class="tests" aria-label="Tests"></div>
+  </main>
+  <footer style="padding:8px 10px; color:var(--muted); font-size:11px; border-top:1px solid #0e141b; background:#0b0f14cc;">Single file. Pure Canvas + WebAudio + Vibration. Color‑coded faces, pro status HUD, per‑face control.</footer>
+</div>
+
+<script>
+(() => {
+  // ===== Utilities =====
+  const clamp=(v,a,b)=>Math.min(b,Math.max(a,v)); const lerp=(a,b,t)=>a+(b-a)*t; const now=()=>performance.now();
+  const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+  // ===== Canvas =====
+  const canvas=document.getElementById('gl'); const ctx=canvas.getContext('2d',{alpha:false, desynchronized:true});
+  const DPR=Math.min(2,devicePixelRatio||1); function resize(){ const r=canvas.getBoundingClientRect(); canvas.width=Math.floor(r.width*DPR); canvas.height=Math.floor(r.height*DPR); ctx.setTransform(DPR,0,0,DPR,0,0);} new ResizeObserver(resize).observe(canvas);
+
+  // ===== Audio =====
+  let audioOn=true; const AC=new (window.AudioContext||window.webkitAudioContext)(); const master=AC.createGain(); master.gain.value=.14; master.connect(AC.destination);
+  const noiseBuf=(()=>{const len=AC.sampleRate*1.0, b=AC.createBuffer(1,len,AC.sampleRate), d=b.getChannelData(0); for(let i=0;i<len;i++) d[i]=Math.random()*2-1; return b;})()
+  const tone=(f=220,type='sine',dur=.12)=>{ if(!audioOn) return; const o=AC.createOscillator(), g=AC.createGain(); o.type=type; o.frequency.value=f; o.connect(g); g.connect(master); const t=AC.currentTime; g.gain.setValueAtTime(.0001,t); g.gain.exponentialRampToValueAtTime(.28,t+.02); g.gain.exponentialRampToValueAtTime(.001,t+dur); o.start(); o.stop(t+dur+.03); }
+  const noise=(dur=.18, lp=1800)=>{ if(!audioOn) return; const s=AC.createBufferSource(); s.buffer=noiseBuf; const f=AC.createBiquadFilter(); f.type='lowpass'; f.frequency.value=lp; const g=AC.createGain(); s.connect(f); f.connect(g); g.connect(master); const t=AC.currentTime; g.gain.setValueAtTime(.0001,t); g.gain.exponentialRampToValueAtTime(.3,t+.02); g.gain.exponentialRampToValueAtTime(.001,t+dur); s.start(); s.stop(t+dur+.03); }
+  const glide=(a=220,b=660,d=.3)=>{ if(!audioOn) return; const o=AC.createOscillator(), g=AC.createGain(); o.type='triangle'; o.connect(g); g.connect(master); const t=AC.currentTime; o.frequency.setValueAtTime(a,t); o.frequency.linearRampToValueAtTime(b,t+d); g.gain.setValueAtTime(.0001,t); g.gain.exponentialRampToValueAtTime(.26,t+.02); g.gain.exponentialRampToValueAtTime(.001,t+d); o.start(); o.stop(t+d+.03); }
+
+  // ===== Haptics =====
+  const vibrate=p=>{try{navigator.vibrate&&navigator.vibrate(p)}catch(_){} };
+  const haptic={ tapV:()=>vibrate([8,40,8]), edge:()=>vibrate([2,8,2,8,2]), face:()=>vibrate([16,30,16,30,16]), confirm:()=>vibrate([40,60,40]) };
+
+  // ===== Geometry =====
+  const V=[[1,1,1],[-1,-1,1],[-1,1,-1],[1,-1,-1]]; // 0..3
+  const E=[[0,1],[0,2],[0,3],[1,2],[1,3],[2,3]];   // 6 edges
+  const F=[[0,1,2],[0,1,3],[0,2,3],[1,2,3]];       // 4 faces (A,B,C,D)
+
+  // ===== Face Branding / Colors =====
+  const FACE_INFO=[
+    {name:'Face A', stroke:css('--fa'), fill:css('--fa-fill'), code:'A'},
+    {name:'Face B', stroke:css('--fb'), fill:css('--fb-fill'), code:'B'},
+    {name:'Face C', stroke:css('--fc'), fill:css('--fc-fill'), code:'C'},
+    {name:'Face D', stroke:css('--fd'), fill:css('--fd-fill'), code:'D'},
+  ];
+  const EDGE_COLOR=css('--edge'); const VERT_COLOR=css('--vert');
+
+  // ===== Multi‑face strata engine =====
+  const LAYERS_PER_FACE=96; // performant default
+  const state={ activeFace:0, layerIdx:[0,0,0,0], autoRate:[0,0,0,0], rangeScale:[1,1,1,1], wobble:[0,0,0,0], tintEdges:true, showLabels:true };
+  const statusEl={
+    face:document.getElementById('statusFace'), faceDot:document.getElementById('statusFaceDot'),
+    layer:document.getElementById('statusLayer'), span:document.getElementById('statusSpan'), speed:document.getElementById('statusSpeed'),
+    barSpan:document.getElementById('barSpan'), barSpeed:document.getElementById('barSpeed')
+  };
+
+  function setActiveFace(i){ state.activeFace=i|0; const inf=FACE_INFO[state.activeFace]; statusEl.face.textContent=inf.name; statusEl.faceDot.style.color=inf.stroke; statusEl.barSpan.style.background=`linear-gradient(90deg,#0b4a70, ${inf.stroke})`; statusEl.barSpeed.style.background=`linear-gradient(90deg,#0b4a70, ${inf.stroke})`; document.querySelectorAll('#faceChips [data-face]').forEach(b=>b.setAttribute('aria-pressed', String(parseInt(b.dataset.face,10)===state.activeFace))); announce(`${inf.name} active`); haptic.face(); noise(.06,1500); }
+  function updateStatus(){ const i=state.activeFace; const layer=state.layerIdx[i]; statusEl.layer.textContent=`${String(layer+1).padStart(2,'0')} / ${LAYERS_PER_FACE}`; const spanPct=Math.round(25*state.rangeScale[i]); statusEl.span.textContent=`${spanPct}%`; statusEl.barSpan.style.width=`${spanPct}%`; const sp=state.autoRate[i]; statusEl.speed.textContent=`${sp.toFixed(2)}×`; statusEl.barSpeed.style.width=`${Math.min(100, sp*50)}%`; }
+
+  function oppositeVertexOfFace(fi){ const face=new Set(F[fi]); for(let i=0;i<4;i++) if(!face.has(i)) return i; }
+  function sliceForFace(fi, t){ const face=F[fi]; const o=oppositeVertexOfFace(fi); const oV=V[o]; return face.map(idx=>{ const fV=V[idx]; return [ oV[0]*(1-t)+fV[0]*t, oV[1]*(1-t)+fV[1]*t, oV[2]*(1-t)+fV[2]*t ]; }); }
+  function faceCentroid(fi){ const f=F[fi]; const c=[0,0,0]; for(const vi of f){ c[0]+=V[vi][0]; c[1]+=V[vi][1]; c[2]+=V[vi][2]; } return [c[0]/3,c[1]/3,c[2]/3]; }
+  function facesForEdge(ei){ const [a,b]=E[ei]; const r=[]; for(let i=0;i<F.length;i++){ const f=F[i]; if(f.includes(a)&&f.includes(b)) r.push(i); } return r; }
+
+  // Camera & transforms
+  let rotX=0.6, rotY=-0.3, rotZ=0, scale=1.2, camDist=5, autoSpin=.0004; let tiltX=0, tiltY=0; let trails=[];
+  function rotMat(ax,ay,az){ const cx=Math.cos(ax),sx=Math.sin(ax),cy=Math.cos(ay),sy=Math.sin(ay),cz=Math.cos(az),sz=Math.sin(az); return [ cz*cy, cz*sy*sx - sz*cx, cz*sy*cx + sz*sx,  sz*cy, sz*sy*sx + cz*cx, sz*sy*cx - cz*sx,  -sy,  cy*sx,  cy*cx ]; }
+  const mul=(m,v)=>{const [x,y,z]=v,s=scale;return[(m[0]*x+m[1]*y+m[2]*z)*s,(m[3]*x+m[4]*y+m[5]*z)*s,(m[6]*x+m[7]*y+m[8]*z)*s]};
+  const proj=(p,w,h)=>{const [x,y,z]=p, zz=z+camDist, f=260/zz; return [w*0.5+x*f, h*0.5-y*f, zz]};
+
+  // Picking helpers
+  const d2=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1]);
+  const segD=(p,a,b)=>{ const vx=b[0]-a[0],vy=b[1]-a[1],wx=p[0]-a[0],wy=p[1]-a[1]; const c1=vx*wx+vy*wy; if(c1<=0) return d2(p,a); const c2=vx*vx+vy*vy; if(c2<=c1) return d2(p,b); const t=c1/c2; return Math.hypot(p[0]-(a[0]+t*vx), p[1]-(a[1]+t*vy)); };
+  const inTri=(p,a,b,c)=>{ const s=(p,a,b)=>(b[0]-a[0])*(p[1]-a[1])-(b[1]-a[1])*(p[0]-a[0]); const s1=s(p,a,b), s2=s(p,b,c), s3=s(p,c,a); const n=(s1<0)||(s2<0)||(s3<0), pz=(s1>0)||(s2>0)||(s3>0); return !(n&&pz); };
+
+  // Tetrad nodes (stub text for panel)
+  const TET=['E','O','R','V']; const LABEL={E:'Enhance',O:'Obsolesce',R:'Retrieve',V:'Reverse'};
+  const NODE_HTML={ E:`<b>Enhance</b> — amplify capability.`, O:`<b>Obsolesce</b> — quiet prior forms.`, R:`<b>Retrieve</b> — echo past strata.`, V:`<b>Reverse</b> — flip at extremes.` };
+
+  // UI wiring
+  const toast=document.getElementById('toast'); const help=document.getElementById('help'); const testsPanel=document.getElementById('testsPanel');
+  const panelTitle=document.getElementById('panelTitle'); const panelBody=document.getElementById('panelBody');
+  document.getElementById('helpBtn').onclick=()=>help.classList.toggle('show');
+  document.getElementById('testBtn').onclick=()=>{ testsPanel.classList.toggle('show'); if(testsPanel.classList.contains('show')) runTests(); };
+  document.getElementById('resetBtn').onclick=()=>{ rotX=0.6; rotY=-0.3; rotZ=0; scale=1.2; trails.length=0; state.layerIdx=[0,0,0,0]; state.rangeScale=[1,1,1,1]; state.autoRate=[0,0,0,0]; announce('Reset'); updateStatus(); };
+  document.getElementById('muteBtn').onclick=(e)=>{ audioOn=!audioOn; e.currentTarget.textContent=audioOn?'Audio: On':'Audio: Off'; announce(audioOn?'Audio enabled.':'Audio muted.'); };
+  document.getElementById('faceChips').addEventListener('click', (e)=>{ const b=e.target.closest('[data-face]'); if(b){ setActiveFace(parseInt(b.dataset.face,10)); updateStatus(); }});
+  document.getElementById('toggleLabels').onclick=()=>{ state.showLabels=!state.showLabels; announce(state.showLabels?'Labels on':'Labels off'); };
+  document.getElementById('toggleEdges').onclick=()=>{ state.tintEdges=!state.tintEdges; announce(state.tintEdges?'Edge tint on':'Edge tint off'); };
+
+  function announce(t){ toast.textContent=t; toast.classList.add('show'); clearTimeout(announce._t); announce._t=setTimeout(()=>toast.classList.remove('show'), 1100); }
+  function openNode(key){ panelTitle.textContent=LABEL[key]; panelBody.innerHTML=NODE_HTML[key]; tone(key==='E'?520: key==='O'?280: key==='R'?390: 180,'sine',.12); haptic.tapV(); const bands={E:0,O:Math.floor(LAYERS_PER_FACE*0.33),R:Math.floor(LAYERS_PER_FACE*0.66),V:LAYERS_PER_FACE-1}; for(let i=0;i<4;i++) state.layerIdx[i]=bands[key]||0; updateStatus(); }
+
+  // Gestures
+  const gesture={t0:0,p0:null,p1:null,vIndex:null,eIndex:null,fIndex:null,twoDist:0,twoAngle:0};
+  let pressing=false, longPressTimer=null;
+  window.addEventListener('deviceorientation', e=>{ if(e && e.beta!=null){ tiltX=clamp((e.beta||0)/90,-1,1); tiltY=clamp((e.gamma||0)/90,-1,1);} }, {passive:true});
+
+  const pt=(ev)=>{ const r=canvas.getBoundingClientRect(); if(ev.touches && ev.touches.length){ return Array.from(ev.touches).map(t=>[t.clientX-r.left,t.clientY-r.top]); } return [[ev.clientX-r.left, ev.clientY-r.top]]; };
+  canvas.addEventListener('contextmenu', e=>e.preventDefault());
+  canvas.addEventListener('pointerdown', e=>{ canvas.setPointerCapture(e.pointerId); pressing=true; const p=pt(e)[0]; startGesture(p); longPressTimer=setTimeout(()=>{ haptic.confirm(); trails.push({mark:[p[0],p[1]],life:1}); announce('Marked'); }, 650); });
+  window.addEventListener('pointermove', e=>{ if(!pressing) return; const p=pt(e)[0]; moveGesture(p); });
+  window.addEventListener('pointerup', ()=>{ pressing=false; clearTimeout(longPressTimer); endGesture(); });
+
+  canvas.addEventListener('touchstart', e=>{ if(e.touches.length===2){ const [a,b]=pt(e); gesture.twoDist=Math.hypot(a[0]-b[0],a[1]-b[1]); gesture.twoAngle=Math.atan2(b[1]-a[1], b[0]-a[0]); } }, {passive:true});
+  canvas.addEventListener('touchmove', (e)=>{ if(e.touches.length===2 && gesture.fIndex!=null){ const [a,b]=pt(e); const d=Math.hypot(a[0]-b[0],a[1]-b[1]), ang=Math.atan2(b[1]-a[1], b[0]-a[0]); const pinch=(d-gesture.twoDist)/200; const rot=(ang-gesture.twoAngle); scale=clamp(scale+pinch*0.6,0.7,2.0); rotZ+=rot*0.8; noise(.12,1200+400*Math.abs(pinch)); haptic.face(); const i=state.activeFace; state.rangeScale[i]=clamp(scale,0.6,2.0); state.autoRate[i]=clamp(Math.abs(rot)*4,0,2); updateStatus(); e.preventDefault(); } }, {passive:false});
+
+  function startGesture(p){ gesture.t0=now(); gesture.p0=p; gesture.p1=p; pickAt(p); }
+  function moveGesture(p){ gesture.p1=p; if(gesture.vIndex!=null){ rotY+=(p[0]-gesture.p0[0])*0.002; rotX+=(p[1]-gesture.p0[1])*0.002; glide(260,420,.18); } else if(gesture.eIndex!=null){ haptic.edge(); glide(260,620,.2); // co‑scrub two faces along this edge
+      const fs=facesForEdge(gesture.eIndex); const nx=clamp(p[0]/canvas.clientWidth,0,1); const idx=Math.round(nx*(LAYERS_PER_FACE-1)); fs.forEach(fi=> state.layerIdx[fi]=idx ); updateStatus(); } else if(gesture.fIndex!=null){ // drag within face subtly rotates & nudges its layer
+      const i=gesture.fIndex; if(state.activeFace!==i) setActiveFace(i); haptic.face(); noise(.08,1500); const dx=p[0]-gesture.p0[0]; const step=Math.sign(dx); const idx=clamp(state.layerIdx[i]+step,0,LAYERS_PER_FACE-1); if(idx!==state.layerIdx[i]){ state.layerIdx[i]=idx; updateStatus(); } rotY+=(dx)*0.0012; } else { rotY+=(p[0]-gesture.p0[0])*0.0012; rotX+=(p[1]-gesture.p0[1])*0.0012; } gesture.p0=p; }
+  function endGesture(){ const dt=now()-gesture.t0; if(dt<250){ if(gesture.vIndex!=null){ openNode(TET[gesture.vIndex]); } else if(gesture.fIndex!=null){ setActiveFace(gesture.fIndex); updateStatus(); } } gesture.vIndex=gesture.eIndex=gesture.fIndex=null; }
+
+  function pickAt(p){ const w=canvas.clientWidth,h=canvas.clientHeight,m=rotMat(rotX,rotY,rotZ); const PV=V.map(v=>proj(mul(m,v),w,h)); for(let i=0;i<PV.length;i++){ if(d2(p,PV[i])<18){ gesture.vIndex=i; haptic.tapV(); return; }} for(let i=0;i<E.length;i++){ const a=PV[E[i][0]],b=PV[E[i][1]]; if(segD(p,a,b)<12){ gesture.eIndex=i; return; }} for(let i=0;i<F.length;i++){ const a=PV[F[i][0]],b=PV[F[i][1]],c=PV[F[i][2]]; if(inTri(p,a,b,c)){ gesture.fIndex=i; return; }} }
+
+  // ===== Render loop =====
+  function draw(){ const w=canvas.clientWidth,h=canvas.clientHeight; if(canvas.width!==Math.floor(w*DPR)) resize();
+    // subtle bg tinted to active face
+    const tint=FACE_INFO[state.activeFace].stroke; const grd=ctx.createLinearGradient(0,0,0,h); grd.addColorStop(0,`rgba(0,0,0,0.0)`); grd.addColorStop(1,`${hexToRgba(tint,0.05)}`); ctx.fillStyle='#07090c'; ctx.fillRect(0,0,w,h); ctx.fillStyle=grd; ctx.fillRect(0,0,w,h);
+
+    rotY+=autoSpin+tiltY*0.0005; rotX+=tiltX*0.0005; const m=rotMat(rotX,rotY,rotZ); const PV=V.map(v=>proj(mul(m,v),w,h));
+
+    // faces (back->front) with color-coded fills and active outline
+    const faces=F.map((f,i)=>({i,z:(PV[f[0]][2]+PV[f[1]][2]+PV[f[2]][2])/3})).sort((a,b)=>b.z-a.z);
+    for(const fd of faces){ const i=fd.i; const a=PV[F[i][0]],b=PV[F[i][1]],c=PV[F[i][2]]; const info=FACE_INFO[i];
+      ctx.beginPath(); ctx.moveTo(a[0],a[1]); ctx.lineTo(b[0],b[1]); ctx.lineTo(c[0],c[1]); ctx.closePath();
+      ctx.fillStyle=info.fill; ctx.globalAlpha = (i===state.activeFace)? 0.9 : 0.6; ctx.fill(); ctx.globalAlpha=1;
+      // outline
+      ctx.lineWidth = (i===state.activeFace) ? 3 : 1; ctx.strokeStyle=info.stroke; ctx.stroke();
+      // label at centroid (optional)
+      if(state.showLabels){ const cent=faceCentroid(i); const pc=proj(mul(m,cent),w,h); ctx.fillStyle=info.stroke; ctx.font='600 12px ui-sans-serif, system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(info.code, pc[0], pc[1]); }
+    }
+
+    // edges
+    for(let ei=0; ei<E.length; ei++){
+      const a=PV[E[ei][0]], b=PV[E[ei][1]]; ctx.beginPath(); ctx.moveTo(a[0],a[1]); ctx.lineTo(b[0],b[1]);
+      let lw=2, col=EDGE_COLOR; if(state.tintEdges){ const fs=facesForEdge(ei); const c1=FACE_INFO[fs[0]].stroke, c2=FACE_INFO[fs[1]].stroke; col=mixHex(c1,c2); lw = (gesture.eIndex===ei)?4:2; }
+      ctx.lineWidth=lw; ctx.strokeStyle=col; ctx.stroke();
+    }
+
+    // vertices
+    for(const p of PV){ ctx.beginPath(); ctx.arc(p[0],p[1],6,0,Math.PI*2); ctx.fillStyle=VERT_COLOR; ctx.shadowColor='rgba(88,213,255,.6)'; ctx.shadowBlur=12; ctx.fill(); ctx.shadowBlur=0; }
+
+    // per‑face strata (triangular slices)
+    for(let fi=0; fi<4; fi++){
+      const info=FACE_INFO[fi]; const span=Math.floor((LAYERS_PER_FACE-1)*(0.25*state.rangeScale[fi]));
+      if(state.autoRate[fi]>0){ const t=performance.now()*0.001*state.autoRate[fi]; const a=(Math.sin(t)*0.5+0.5)+(state.wobble[fi]||0); const target=clamp(Math.round(state.layerIdx[fi]-span+(span*2)*a),0,LAYERS_PER_FACE-1); state.layerIdx[fi]=target; if(fi===state.activeFace) updateStatus(); }
+      const start=Math.max(0,state.layerIdx[fi]-span), end=Math.min(LAYERS_PER_FACE-1,state.layerIdx[fi]+span);
+      for(let li=start; li<=end; li++){
+        const t=li/(LAYERS_PER_FACE-1); const tri3D=sliceForFace(fi,t).map(p=>proj(mul(m,p),w,h)); const focus=(li===state.layerIdx[fi]); const fade=1-Math.abs(li-state.layerIdx[fi])/(span||1);
+        ctx.globalAlpha = fi===state.activeFace ? (focus?0.95:0.18+0.65*fade) : (focus?0.45:0.08+0.22*fade);
+        ctx.beginPath(); ctx.moveTo(tri3D[0][0],tri3D[0][1]); ctx.lineTo(tri3D[1][0],tri3D[1][1]); ctx.lineTo(tri3D[2][0],tri3D[2][1]); ctx.closePath();
+        ctx.strokeStyle = info.stroke; ctx.lineWidth = focus?3:1; ctx.stroke(); ctx.globalAlpha=1;
+      }
+    }
+
+    // trails
+    trails=trails.filter(t=>(t.life-=0.01)>0); for(const t of trails){ if(t.edge!=null){ const e=E[t.edge]; const a=PV[e[0]],b=PV[e[1]]; ctx.globalAlpha=Math.max(0,t.life); ctx.lineWidth=4; ctx.strokeStyle='rgba(88,213,255,.5)'; ctx.beginPath(); ctx.moveTo(a[0],a[1]); ctx.lineTo(b[0],b[1]); ctx.stroke(); ctx.globalAlpha=1; } else if(t.face!=null){ const f=F[t.face]; const a=PV[f[0]],b=PV[f[1]],c=PV[f[2]]; ctx.globalAlpha=Math.max(0,t.life*0.7); ctx.beginPath(); ctx.moveTo(a[0],a[1]); ctx.lineTo(b[0],b[1]); ctx.lineTo(c[0],c[1]); ctx.closePath(); ctx.fillStyle='rgba(255,211,94,.22)'; ctx.fill(); ctx.globalAlpha=1; } else if(t.mark){ ctx.globalAlpha=Math.max(0,t.life); ctx.beginPath(); ctx.arc(t.mark[0], t.mark[1], 10+8*(1-t.life), 0, Math.PI*2); ctx.strokeStyle='rgba(156,255,138,.7)'; ctx.lineWidth=2; ctx.stroke(); ctx.globalAlpha=1; } }
+
+    requestAnimationFrame(draw);
+  }
+
+  // Helpers for colors
+  function hexToRgba(hex,a){ const c=parseInt(hex.slice(1),16); const r=(c>>16)&255,g=(c>>8)&255,b=c&255; return `rgba(${r},${g},${b},${a})`; }
+  function mixHex(h1,h2){ const c1=parseInt(h1.slice(1),16), c2=parseInt(h2.slice(1),16); const r=((c1>>16)+(c2>>16))>>1, g=(((c1>>8)&255)+((c2>>8)&255))>>1, b=((c1&255)+(c2&255))>>1; return `#${(1<<24 | (r<<16)|(g<<8)|b).toString(16).slice(1)}`; }
+
+  // Boot
+  resize(); setActiveFace(0); updateStatus(); draw();
+
+  // ===== Tests =====
+  function runTests(){ const tests=[]; const add=(n,fn)=>{ try{ tests.push({n,ok:!!fn()}); }catch(e){ tests.push({n,ok:false,err:e.message}); } };
+    add('Faces per edge = 2',()=> E.every((_,i)=>facesForEdge(i).length===2));
+    add('Layer count',()=> LAYERS_PER_FACE===96);
+    add('Face colors present',()=> FACE_INFO.every(f=>/^#/.test(f.stroke)));
+    add('Status updates',()=> typeof updateStatus==='function');
+    const el=document.getElementById('testsPanel'); el.innerHTML = `<b>Self‑tests</b><br>${tests.map(t=>`• ${t.ok?'✅':'❌'} ${t.n}${t.err?' — '+t.err:''}`).join('<br>')}`; announce(`${tests.filter(t=>t.ok).length}/${tests.length} tests passed`); }
+
+  // Welcome
+  setTimeout(()=>announce('Color‑coded faces. Tap a colored chip or face to control it.'), 600);
+})();
+</script>
+</body>
+</html>

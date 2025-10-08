@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>THE GOOD, THE BAD, AND THE SPUDDY</title>
+  <link href="https://fonts.googleapis.com/css2?family=Rye&family=Bebas+Neue&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --bg: #0a0604; --bg-elev: #1a0f08; --bg-card: #2d1810;
+      --ink: #f8ecd9; --ink-dim: #d8c4a5;
+      --accent: #e8b862; --accent-2:#8b5a2b; --shadow: rgba(0,0,0,.85);
+      --focus: #ffd166; --gap: clamp(1rem, 3vw, 2rem);
+    }
+    @media (prefers-color-scheme: light){
+      :root{ --bg:#f8f3ea; --bg-elev:#fff6e7; --bg-card:#fff; --ink:#27190f; --ink-dim:#4a3b30; --accent:#a26b11; --accent-2:#5b3a1f; --shadow:rgba(0,0,0,.2); }
+    }
+    *{box-sizing:border-box; margin:0; padding:0}
+    html,body{height:100%}
+    body{
+      background: radial-gradient(120% 120% at 50% 0%, var(--bg-elev) 0%, var(--bg) 60%);
+      color:var(--ink); font-family:'Bebas Neue', system-ui, sans-serif; line-height:1.35;
+      overflow-x:hidden; min-height:100vh;
+    }
+    .scroll-spacer{height:400vh; pointer-events:none}
+
+    /* Scene / Vignette */
+    #scene{position:fixed; inset:0; width:100%; height:100vh; z-index:1; background:transparent}
+    .vignette{position:fixed; inset:0; background:radial-gradient(120% 120% at 50% 40%, transparent 40%, rgba(0,0,0,.55)); pointer-events:none; z-index:2}
+
+    /* Overlay titles */
+    .overlay{position:fixed; inset:0; z-index:10; pointer-events:none; display:grid; place-items:center; gap:1rem; text-align:center; padding:2rem}
+    .title{font-family:'Rye', serif; font-size:clamp(2.6rem, 10vw, 7rem); letter-spacing:.08em; color:var(--accent);
+      text-shadow:2px 2px 0 var(--accent-2), 4px 4px 0 #5c3a21, 6px 6px 30px var(--shadow), 0 0 60px rgba(232,184,98,.5);
+      opacity:0; transform:translateY(-20px); transition:opacity .8s ease, transform .8s ease; line-height:1.1}
+    .subtitle{font-size:clamp(1.1rem, 4vw, 2.2rem); color:var(--ink-dim); letter-spacing:.28em; opacity:0; transform:translateY(20px);
+      transition:opacity .8s .2s ease, transform .8s .2s ease; text-shadow:2px 2px 8px var(--shadow);
+      border-top:2px solid var(--accent-2); border-bottom:2px solid var(--accent-2); padding:1rem 2rem; background:rgba(26,15,8,.7); backdrop-filter:blur(8px)}
+    .title.show,.subtitle.show{opacity:1; transform:none}
+
+    /* Controls */
+    .controls{position:fixed; top:1rem; right:1rem; z-index:30; display:flex; flex-wrap:wrap; gap:.75rem; pointer-events:auto}
+    .chip{background:var(--bg-elev); border:2px solid var(--accent-2); color:var(--ink); box-shadow:0 .5rem 2rem var(--shadow); padding:.55rem 1rem; border-radius:999px;
+      display:inline-flex; gap:.6rem; align-items:center; font-size:1rem; letter-spacing:.08em; transition: all .25s ease}
+    .chip:hover{transform:translateY(-2px); box-shadow:0 .75rem 2.25rem var(--shadow)}
+    .chip input{accent-color:var(--accent); width:1.1rem; height:1.1rem; cursor:pointer}
+    .chip:focus-within{outline:3px solid var(--focus); outline-offset:3px}
+
+    /* Scroll hint */
+    .scroll-hint{position:fixed; left:50%; bottom:2rem; transform:translateX(-50%); z-index:5; color:var(--accent); font-size:1.15rem; letter-spacing:.25em;
+      opacity:0; animation:hint 3s ease-in-out infinite; pointer-events:none; text-shadow:2px 2px 8px var(--shadow), 0 0 30px rgba(232,184,98,.6);
+      padding: .8rem 1.4rem; border:2px solid var(--accent-2); background:rgba(26,15,8,.8); backdrop-filter:blur(10px); border-radius:8px}
+    @keyframes hint{0%,100%{opacity:0; transform:translateX(-50%) translateY(10px)} 50%{opacity:1; transform:translateX(-50%) translateY(0)}}
+
+    /* Poster grid */
+    .poster-wrap{position:fixed; inset:0; display:grid; place-items:center; padding:2rem; z-index:20; pointer-events:none; opacity:0; transition:opacity .8s ease}
+    .poster-wrap.show{pointer-events:auto; opacity:1}
+    .grid{width:min(1400px,100%); display:grid; gap:var(--gap); grid-template-columns:repeat(auto-fit,minmax(min(420px,100%),1fr)); align-items:stretch}
+    .card{background:linear-gradient(135deg,var(--bg-card) 0%, var(--bg-elev) 100%); border:6px solid var(--accent-2); border-radius:16px; box-shadow:0 1.5rem 4rem var(--shadow), inset 0 0 30px rgba(139,90,43,.15);
+      display:flex; flex-direction:column; overflow:hidden; transition: all .35s cubic-bezier(.4,0,.2,1); position:relative}
+    .card::before{content:""; position:absolute; inset:-2px; background:linear-gradient(45deg, transparent 30%, rgba(232,184,98,.15) 50%, transparent 70%); opacity:0; transition:opacity .35s; pointer-events:none; z-index:1}
+    .card:hover{transform:translateY(-6px) scale(1.03); box-shadow:0 2rem 5rem var(--shadow), inset 0 0 40px rgba(139,90,43,.25); border-color:var(--accent)}
+    .card:hover::before{opacity:1}
+    .card header{background:linear-gradient(to bottom, var(--bg-elev), rgba(13,7,3,.9)); border-bottom:4px solid var(--accent-2); padding:1.25rem; text-align:center; position:relative; z-index:2}
+    .card header::after{content:""; position:absolute; top:0; left:0; right:0; height:2px; background:linear-gradient(90deg, transparent, var(--accent), transparent)}
+    .card h3{font-family:'Rye', serif; font-size:2rem; color:var(--accent); margin:.2rem 0 .5rem; text-shadow:2px 2px 6px var(--shadow), 0 0 20px rgba(232,184,98,.5); letter-spacing:.05em}
+    .card p.label{letter-spacing:.25em; color:var(--ink-dim); font-size:1.05rem; text-shadow:1px 1px 3px var(--shadow)}
+
+    .thumb{all:unset; aspect-ratio:16/9; width:100%; background:#000; display:grid; place-items:center; position:relative; cursor:pointer; overflow:hidden; z-index:2}
+    .thumb img{width:100%; height:100%; object-fit:cover; display:block; filter:saturate(.85) contrast(1.08); transition:transform .35s ease, filter .35s ease}
+    .thumb:hover img{transform:scale(1.06); filter:saturate(1) contrast(1.15)}
+    .play{position:absolute; width:3.4rem; height:3.4rem; border-radius:50%; border:4px solid var(--accent); display:grid; place-items:center; background:rgba(0,0,0,.55);
+      backdrop-filter:blur(8px); box-shadow:0 1rem 3rem var(--shadow); transition:transform .25s ease}
+    .thumb:hover .play{transform:scale(1.12)}
+    .play::after{content:"▶"; margin-left:.18rem; color:var(--accent); font-size:1.35rem}
+    .thumb:focus-visible{outline:4px solid var(--focus); outline-offset:3px}
+
+    .card footer{padding:1.1rem 1.4rem; border-top:4px solid var(--accent-2); font-size:1.15rem; font-style:italic; text-shadow:1px 1px 3px var(--shadow);
+      background:linear-gradient(to top, var(--bg-elev), rgba(13,7,3,.9)); position:relative; z-index:2}
+    .card footer::before{content:""; position:absolute; bottom:0; left:0; right:0; height:2px; background:linear-gradient(90deg, transparent, var(--accent), transparent)}
+
+    /* Info panel */
+    .info{position:fixed; left:50%; bottom:2.2rem; transform:translateX(-50%); background:linear-gradient(135deg, rgba(26,15,8,.97), rgba(13,7,3,.97)); border:4px solid var(--accent-2);
+      padding:1.8rem 2.2rem; max-width:min(760px, 92vw); text-align:center; opacity:0; pointer-events:none; z-index:25; border-radius:14px; backdrop-filter:blur(15px);
+      box-shadow:0 1.5rem 4rem var(--shadow), inset 0 0 30px rgba(139,90,43,.2); transition:opacity .8s ease, transform .8s ease; transform:translateX(-50%) translateY(28px)}
+    .info.show{opacity:1; pointer-events:auto; transform:translateX(-50%) translateY(0)}
+    .info p{font-size:1.1rem; line-height:1.65; margin:0 0 .75rem; text-shadow:1px 1px 3px var(--shadow)}
+    .info .tag{font-family:'Rye', serif; color:var(--accent); font-size:1.55rem; margin:0; text-shadow:2px 2px 6px var(--shadow), 0 0 20px rgba(232,184,98,.5)}
+
+    /* Modal */
+    .modal{position:fixed; inset:0; display:none; place-items:center; padding:1rem; background:rgba(0,0,0,.98); z-index:1000; animation:modalFadeIn .35s ease}
+    .modal.open{display:grid}
+    @keyframes modalFadeIn{from{opacity:0} to{opacity:1}}
+    .dialog{width:min(96vw, 1800px); aspect-ratio:16/9; border:10px solid var(--accent); box-shadow:0 0 100px rgba(232,184,98,.6), inset 0 0 40px rgba(139,90,43,.3);
+      position:relative; background:#000; border-radius:12px; animation:modalSlideUp .45s cubic-bezier(.4,0,.2,1)}
+    @keyframes modalSlideUp{from{transform:translateY(50px); opacity:0} to{transform:translateY(0); opacity:1}}
+    .dialog iframe{width:100%; height:100%; border:0; border-radius:4px}
+    .close{position:absolute; top:-4.25rem; right:0; background:linear-gradient(135deg, var(--accent), #f4d03f); color:#000; border:3px solid var(--accent-2);
+      padding:1rem 2rem; border-radius:10px; letter-spacing:.2em; font-weight:700; font-size:1.15rem; cursor:pointer; box-shadow:0 .75rem 2rem var(--shadow);
+      font-family:'Bebas Neue', sans-serif; transition: all .25s cubic-bezier(.4,0,.2,1)}
+    .close:hover{transform:translateY(-3px)}
+    .close:active{transform:translateY(-1px)}
+    .close:focus-visible{outline:4px solid var(--focus); outline-offset:3px}
+
+    /* Toast / Alerts */
+    .alert{position:fixed; left:50%; top:1.2rem; transform:translateX(-50%); z-index:2000; max-width:min(800px,92vw); padding:.9rem 1.25rem; border-radius:10px; border:2px solid currentColor;
+      background:var(--bg-elev); box-shadow:0 .75rem 2rem var(--shadow); display:none; font-size:1.05rem; letter-spacing:.05em}
+    .alert.show{display:block; animation:slideDown .28s ease}
+    @keyframes slideDown{from{transform:translateX(-50%) translateY(-14px); opacity:0} to{transform:translateX(-50%) translateY(0); opacity:1}}
+    .alert.error{color:#ff595e; border-color:#ff595e}
+    .alert.info{color:var(--accent); border-color:var(--accent)}
+
+    /* Utility */
+    .visually-hidden{position:absolute !important; height:1px; width:1px; overflow:hidden; clip:rect(1px,1px,1px,1px); white-space:nowrap}
+
+    /* High-contrast mode */
+    body.hc{--ink:#fff; --ink-dim:#f5e6d3; --bg:#000; --bg-elev:#111; --bg-card:#222; --accent:#ffd166; --accent-2:#ffe08a; --shadow:rgba(0,0,0,.9)}
+
+    @media (max-width:768px){
+      .close{top:-3.5rem; padding:.8rem 1.5rem; font-size:1.05rem}
+      .controls{right:.75rem; left:.75rem; justify-content:flex-end; gap:.5rem}
+      .chip{padding:.45rem .75rem; font-size:.9rem}
+      .grid{grid-template-columns:1fr; gap:1.3rem}
+      .card{border-width:4px}
+      .info{padding:1.3rem 1.6rem; bottom:2rem}
+      .dialog{width:98vw; border-width:6px}
+    }
+    @media (prefers-reduced-motion: reduce){ *{animation:none !important; transition:none !important} }
+  </style>
+</head>
+<body>
+  <noscript><div class="alert error show" role="alert">JavaScript is required for the interactive experience. You can still watch the videos below.</div></noscript>
+
+  <canvas id="scene" aria-hidden="true"></canvas>
+  <div class="vignette" aria-hidden="true"></div>
+
+  <div class="overlay" aria-live="polite" aria-atomic="true">
+    <div class="title" id="title">THE GOOD, THE BAD,<br>AND THE SPUDDY</div>
+    <div class="subtitle" id="subtitle">A WESTERN EPIC</div>
+  </div>
+
+  <div class="controls" role="group" aria-label="Experience settings">
+    <label class="chip" title="Enable haptic feedback">
+      <input type="checkbox" id="hapticsToggle" /> Haptics
+    </label>
+    <label class="chip" title="Enable sound effects">
+      <input type="checkbox" id="soundToggle" /> Sound
+    </label>
+    <label class="chip" title="High contrast mode">
+      <input type="checkbox" id="contrastToggle" /> Contrast
+    </label>
+    <label class="chip" title="Reduce animations">
+      <input type="checkbox" id="motionToggle" /> Reduce Motion
+    </label>
+  </div>
+
+  <div class="scroll-hint" id="hint">SCROLL TO ENTER TOWN ↓</div>
+
+  <section class="poster-wrap" id="posters" aria-label="Featured episodes">
+    <div class="grid">
+      <article class="card">
+        <header>
+          <h3>PART ONE</h3>
+          <p class="label">RISE OF THE SPUD</p>
+        </header>
+        <button class="thumb" data-yt="OoQzeY2rd7o" aria-label="Play Part One: Rise of the Spud">
+          <img alt="Episode poster" loading="lazy" src="https://i.ytimg.com/vi/OoQzeY2rd7o/maxresdefault.jpg"/>
+          <span class="play" aria-hidden="true"></span>
+        </button>
+        <footer>The legend begins in Boise Gulch</footer>
+      </article>
+
+      <article class="card">
+        <header>
+          <h3>PART TWO</h3>
+          <p class="label">THE RECKONING</p>
+        </header>
+        <button class="thumb" data-yt="cCzZ7JY2wtw" aria-label="Play Part Two: The Reckoning">
+          <img alt="Episode poster" loading="lazy" src="https://i.ytimg.com/vi/cCzZ7JY2wtw/maxresdefault.jpg"/>
+          <span class="play" aria-hidden="true"></span>
+        </button>
+        <footer>When truth rolls into town</footer>
+      </article>
+    </div>
+  </section>
+
+  <aside class="info" id="info" role="region" aria-label="Story synopsis" aria-live="polite">
+    <p>Idaho Potato, a russet outlaw with a GoPro star, preaches "Rise &amp; Grind" to the spudfolk. But when the Exposé Express arrives at dawn, he faces the ultimate showdown.</p>
+    <p class="tag">"Every Legend Has Its Roots"</p>
+  </aside>
+
+  <div id="toast" class="alert info" role="status" aria-live="polite"></div>
+  <div id="testResults" class="visually-hidden" role="status" aria-live="polite"></div>
+
+  <div class="modal" id="modal" role="dialog" aria-modal="true" aria-label="Video player" aria-hidden="true">
+    <div class="dialog" role="document">
+      <button class="close" id="closeBtn" aria-label="Close video player">✕ CLOSE</button>
+      <iframe id="player" title="Episode player" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+    </div>
+  </div>
+
+  <div class="scroll-spacer"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" onerror="console.warn('3D library failed')"></script>
+  <script>
+  (function(){
+    'use strict';
+
+    const $ = s => document.querySelector(s);
+    const $$ = s => Array.from(document.querySelectorAll(s));
+
+    /* =====================
+       State & persistence
+    ====================== */
+    const LS = localStorage;
+    const state = {
+      haptics: JSON.parse(LS.getItem('spuddy:haptics')||'false'),
+      sound: JSON.parse(LS.getItem('spuddy:sound')||'false'),
+      hiContrast: JSON.parse(LS.getItem('spuddy:contrast')||'false'),
+      reduceMotion: JSON.parse(LS.getItem('spuddy:motion')||'false'),
+      audioCtx: null,
+      focusTrapPrev: null
+    };
+
+    const toggles = {
+      haptics: $('#hapticsToggle'),
+      sound: $('#soundToggle'),
+      contrast: $('#contrastToggle'),
+      motion: $('#motionToggle')
+    };
+    toggles.haptics.checked = state.haptics;
+    toggles.sound.checked = state.sound;
+    toggles.contrast.checked = state.hiContrast;
+    toggles.motion.checked = state.reduceMotion;
+
+    if(state.hiContrast) document.body.classList.add('hc');
+
+    /* =====================
+       Toast & feedback
+    ====================== */
+    const toast = $('#toast');
+    function showToast(msg, kind='info', ms=2400){
+      toast.textContent = msg;
+      toast.className = 'alert '+kind+' show';
+      clearTimeout(showToast._t);
+      showToast._t = setTimeout(()=> toast.className = 'alert '+kind, ms);
+    }
+
+    function vibe(pattern=[10]){ if(state.haptics && navigator.vibrate){ try{ navigator.vibrate(pattern) }catch(_){} } }
+
+    async function initAudio(){
+      if(!state.sound) return;
+      try{
+        const AC = window.AudioContext || window.webkitAudioContext; if(!AC) return;
+        if(!state.audioCtx) state.audioCtx = new AC();
+        if(state.audioCtx.state === 'suspended') await state.audioCtx.resume();
+      }catch(e){ console.warn('Audio init failed', e) }
+    }
+
+    function tick(freq=620, dur=0.12){
+      if(!state.sound || !state.audioCtx) return;
+      try{
+        const osc = state.audioCtx.createOscillator();
+        const g = state.audioCtx.createGain();
+        osc.type = 'triangle'; osc.frequency.value = freq;
+        osc.connect(g); g.connect(state.audioCtx.destination);
+        const t = state.audioCtx.currentTime;
+        g.gain.setValueAtTime(0, t);
+        g.gain.linearRampToValueAtTime(0.08, t+0.01);
+        g.gain.exponentialRampToValueAtTime(0.001, t+dur);
+        osc.start(t); osc.stop(t+dur);
+      }catch(_){/* noop */}
+    }
+
+    /* =====================
+       Scene (Three.js) with graceful fallback
+    ====================== */
+    const title = $('#title');
+    const subtitle = $('#subtitle');
+    const hint = $('#hint');
+    const posters = $('#posters');
+    const info = $('#info');
+
+    let scene, camera, renderer, tumble, rafId = 0, scrollP = 0;
+
+    function initScene(){
+      if(state.reduceMotion || !window.THREE){
+        // Fallback: static background and early reveal
+        title.classList.add('show'); subtitle.classList.add('show');
+        return;
+      }
+      try{
+        scene = new THREE.Scene();
+        scene.fog = new THREE.Fog(0x0a0604, 10, 60);
+        camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, .1, 1000);
+        renderer = new THREE.WebGLRenderer({ canvas: $('#scene'), antialias:true, alpha:true });
+        renderer.setSize(innerWidth, innerHeight);
+        renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+        renderer.setClearColor(0x000000, 0);
+
+        const amb = new THREE.AmbientLight(0xd4a574, .45); scene.add(amb);
+        const sun = new THREE.DirectionalLight(0xe8b862, .95); sun.position.set(5,12,5); scene.add(sun);
+
+        const gGeo = new THREE.PlaneGeometry(120,120, 20,20);
+        const gMat = new THREE.MeshStandardMaterial({color:0x3d2415, roughness:.95});
+        const ground = new THREE.Mesh(gGeo,gMat); ground.rotation.x = -Math.PI/2; scene.add(ground);
+        // jitter terrain slightly
+        const v = ground.geometry.attributes.position; for(let i=0;i<v.count;i++){ v.setY(i, Math.random()*0.2) } v.needsUpdate=true; ground.geometry.computeVertexNormals();
+
+        const makeB=(w,h,d,x,z,c)=>{ const b=new THREE.Mesh(new THREE.BoxGeometry(w,h,d), new THREE.MeshStandardMaterial({color:c, roughness:.85})); b.position.set(x,h/2,z); scene.add(b);
+          const r=new THREE.Mesh(new THREE.BoxGeometry(w+.3,.4,d+.3), new THREE.MeshStandardMaterial({color:0x4a2f1e, roughness:.95})); r.position.set(x,h+.2,z); scene.add(r); };
+        makeB(5,3.5,2.5,-4,-8,0x5c3a21); makeB(3.5,3,2.5,4,-8,0x6b4423); makeB(4,3.5,2.5,-7,-13,0x4a3528); makeB(3.5,4,2.5,7,-13,0x3d2817);
+
+        const cactus=(x,z)=>{ const mat=new THREE.MeshStandardMaterial({color:0x2d5016});
+          const trunk=new THREE.Mesh(new THREE.CylinderGeometry(.18,.18,2,10),mat); trunk.position.set(x,1,z);
+          const armG=new THREE.CylinderGeometry(.12,.12,.7,8);
+          const L=new THREE.Mesh(armG,mat); L.position.set(x-.25,1.3,z); L.rotation.z=Math.PI/2.5;
+          const R=new THREE.Mesh(armG,mat); R.position.set(x+.25,1.5,z); R.rotation.z=-Math.PI/2.5;
+          scene.add(trunk,L,R);
+        };
+        cactus(-9,-6); cactus(9,-7); cactus(-11,-15); cactus(11,-16);
+
+        tumble = new THREE.Mesh(new THREE.IcosahedronGeometry(.42,2), new THREE.MeshStandardMaterial({color:0x8b7355, wireframe:true, opacity:.82, transparent:true}));
+        tumble.position.set(5,.4,-5); scene.add(tumble);
+
+        camera.position.set(0,2.5,12); camera.lookAt(0,1.5,0);
+        animate();
+      }catch(err){ console.warn('Scene init failed', err); title.classList.add('show'); subtitle.classList.add('show'); }
+    }
+
+    function animate(){
+      rafId = requestAnimationFrame(animate);
+      if(renderer && scene && camera){ renderer.render(scene, camera); }
+    }
+
+    /* =====================
+       Scroll choreography
+    ====================== */
+    function easeInOutCubic(t){ return t<.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3)/2 }
+
+    function onScroll(){
+      const maxScroll = document.body.scrollHeight - innerHeight;
+      scrollP = Math.max(0, Math.min(1, scrollY / maxScroll));
+
+      // Stage 1: Titles
+      if(scrollP < 0.15){ title.classList.add('show'); subtitle.classList.add('show'); hint.style.opacity = 1; }
+      else { hint.style.opacity = 0; }
+
+      // Stage 2: Move camera toward town
+      if(scrollP > 0.15 && scrollP < 0.5 && camera){
+        const m = easeInOutCubic((scrollP - 0.15)/0.35);
+        camera.position.z = 12 - (m * 14);
+        camera.position.y = 2.5 - (m * 0.8);
+        camera.lookAt(0, 1.5, -5);
+        title.classList.remove('show'); subtitle.classList.remove('show');
+      }
+
+      // Stage 3: Posters
+      if(scrollP > 0.5 && scrollP < 0.7){
+        if(camera){ camera.position.z = -2; camera.position.y = 1.7; camera.lookAt(0,1.7,-5); }
+        if(!posters.classList.contains('show')){ posters.classList.add('show'); vibe([12]); tick(440, .12); }
+      }
+
+      // Stage 4: Info
+      if(scrollP > 0.7){ if(!info.classList.contains('show')){ info.classList.add('show'); tick(523, .16); } }
+      else { info.classList.remove('show'); }
+
+      if(tumble){
+        tumble.rotation.x += 0.015; tumble.rotation.z += 0.015;
+        tumble.position.x = 5 + Math.sin(Date.now()*0.0008)*3;
+        tumble.position.z = -5 + Math.cos(Date.now()*0.0006)*2;
+      }
+    }
+
+    /* =====================
+       Modal / Player
+    ====================== */
+    const modal = $('#modal');
+    const player = $('#player');
+    const closeBtn = $('#closeBtn');
+
+    function ytUrl(id){ return `https://www.youtube.com/embed/${id}?autoplay=1&modestbranding=1&playsinline=1&rel=0` }
+
+    function openModal(ytId){
+      modal.classList.add('open'); modal.setAttribute('aria-hidden','false');
+      state.focusTrapPrev = document.activeElement;
+      player.src = ytUrl(ytId);
+      closeBtn.focus(); vibe([20]); tick(659,.18);
+      document.body.style.overflow = 'hidden';
+      // Focus trap
+      function trap(e){ if(e.key==='Tab'){ e.preventDefault(); closeBtn.focus(); } }
+      modal.addEventListener('keydown', trap);
+      modal._trap = trap;
+    }
+
+    function closeModal(){
+      modal.classList.remove('open'); modal.setAttribute('aria-hidden','true');
+      player.src = ''; document.body.style.overflow = '';
+      if(state.focusTrapPrev) state.focusTrapPrev.focus(); vibe([8]); tick(523,.12);
+      if(modal._trap){ modal.removeEventListener('keydown', modal._trap); modal._trap=null; }
+    }
+
+    $('#closeBtn').addEventListener('click', closeModal);
+    modal.addEventListener('click', (e)=>{ if(e.target===modal) closeModal(); });
+    document.addEventListener('keydown', (e)=>{ if(e.key==='Escape' && modal.classList.contains('open')) closeModal(); });
+
+    // Thumb handlers
+    $$('.thumb').forEach(btn=>{
+      btn.addEventListener('click', async ()=>{ await initAudio(); openModal(btn.dataset.yt); });
+      btn.addEventListener('mouseenter', ()=> tick(330,.08));
+    });
+
+    /* =====================
+       Toggles
+    ====================== */
+    toggles.haptics.addEventListener('change', e=>{ state.haptics = e.target.checked; LS.setItem('spuddy:haptics', state.haptics); showToast(state.haptics?'Haptics on':'Haptics off'); vibe([10,0,10]); });
+    toggles.sound.addEventListener('change', async e=>{ state.sound = e.target.checked; LS.setItem('spuddy:sound', state.sound); await initAudio(); showToast(state.sound?'Sound on':'Sound off'); tick(480,.1); });
+    toggles.contrast.addEventListener('change', e=>{ state.hiContrast = e.target.checked; LS.setItem('spuddy:contrast', state.hiContrast); document.body.classList.toggle('hc', state.hiContrast); showToast(state.hiContrast?'High contrast':'Default contrast'); });
+    toggles.motion.addEventListener('change', e=>{
+      state.reduceMotion = e.target.checked; LS.setItem('spuddy:motion', state.reduceMotion);
+      showToast(state.reduceMotion?'Reduced motion':'Full motion'); location.reload();
+    });
+
+    /* =====================
+       Resize & Perf guard
+    ====================== */
+    let rTO; addEventListener('resize', ()=>{ clearTimeout(rTO); rTO=setTimeout(()=>{
+      try{ if(camera && renderer){ camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); renderer.setPixelRatio(Math.min(devicePixelRatio,2)); } }
+      catch(_){/* noop */}
+    }, 200) });
+
+    // Basic FPS guard to drop pixel ratio if struggling
+    let fc=0, last=Date.now();
+    function fpsTick(){ fc++; const now=Date.now(); if(now-last>2000){ const fps = Math.round((fc*1000)/(now-last)); if(fps<20 && renderer){ renderer.setPixelRatio(1); showToast('Performance mode', 'info', 1200); } fc=0; last=now; } requestAnimationFrame(fpsTick); }
+    requestAnimationFrame(fpsTick);
+
+    // Scroll listener (throttled by browser)
+    addEventListener('scroll', onScroll, {passive:true});
+
+    // Kick things off
+    initScene();
+    // Soft-intro hint after a beat
+    setTimeout(()=>{ title.classList.add('show'); subtitle.classList.add('show'); }, 250);
+
+    // Unlock audio on first user interaction (mobile)
+    addEventListener('pointerdown', ()=>{ initAudio() }, { once:true });
+
+    /* =====================
+       Service Worker — disabled in sandbox/non-HTTP environments
+       (Fix for: "Failed to register a ServiceWorker: URL protocol 'blob:' not supported")
+       If you deploy with a real URL (https://your.site/) and add /spuddy-sw.js,
+       change ENABLE_SW to true and set SW_PATH accordingly.
+    ====================== */
+    const ENABLE_SW = false; // do not auto-register in this single-file/sandbox context
+    const SW_PATH = '/spuddy-sw.js';
+    (function maybeRegisterSW(){
+      if(!('serviceWorker' in navigator)) return;
+      const isHttp = location.protocol === 'https:' || location.protocol === 'http:';
+      if(!ENABLE_SW || !isHttp){
+        console.info('[SW] Skipped (ENABLE_SW=', ENABLE_SW, ', protocol=', location.protocol, ')');
+        return;
+      }
+      try{ navigator.serviceWorker.register(SW_PATH); }
+      catch(e){ console.warn('[SW] Registration failed:', e); }
+    })();
+
+    /* =====================
+       Minimal Self-Tests (smoke tests) — results in console & #testResults
+    ====================== */
+    (function runTests(){
+      const results = [];
+      function pass(name){ results.push('✅ '+name); }
+      function fail(name, err){ results.push('❌ '+name+' — '+(err&&err.message||err)); }
+      try{
+        // Test 1: Protocol guard prevents SW under non-http(s)
+        const isHttp = location.protocol === 'https:' || location.protocol === 'http:';
+        console.assert(ENABLE_SW === false || isHttp, 'SW only allowed on http(s)');
+        pass('SW protocol guard active');
+      }catch(e){ fail('SW protocol guard active', e); }
+
+      try{
+        // Test 2: Toggle persistence round-trip
+        const key = 'spuddy:test-toggle';
+        LS.setItem(key, 'true');
+        const round = LS.getItem(key) === 'true';
+        LS.removeItem(key);
+        if(!round) throw new Error('localStorage round-trip failed');
+        pass('localStorage round-trip');
+      }catch(e){ fail('localStorage round-trip', e); }
+
+      try{
+        // Test 3: Modal open/close cycle toggles class
+        openModal('OoQzeY2rd7o');
+        const opened = modal.classList.contains('open');
+        closeModal();
+        const closed = !modal.classList.contains('open');
+        if(!opened || !closed) throw new Error('modal did not toggle correctly');
+        pass('Modal open/close cycle');
+      }catch(e){ fail('Modal open/close cycle', e); }
+
+      // Report
+      const out = results.join('\n');
+      console.groupCollapsed('%cSPUDDY • Self-tests', 'color:#e8b862');
+      results.forEach(r=> console.log(r));
+      console.groupEnd();
+      const tr = $('#testResults'); tr.textContent = out; // a11y
+    })();
+
+  })();
+  </script>
+</body>
+</html>

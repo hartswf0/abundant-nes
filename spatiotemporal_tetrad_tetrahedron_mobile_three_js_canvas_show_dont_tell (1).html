@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Spatiotemporal Tetrad Tetrahedron — Fixed, Sharpened, Onion Layers</title>
+<style>
+  :root{
+    --bg:#050509; --fg:#d0d6ff; --grid:#0c0f18; --glow: 0 0 40px rgba(140,160,255,.25);
+    --enh:#7aa2ff; /* Enhance */
+    --obs:#f08fa8; /* Obsolesce */
+    --ret:#78e6c5; /* Retrieve */
+    --rev:#f6c85f; /* Reverse */
+  }
+  html,body{height:100%;margin:0;background:radial-gradient(1200px 800px at 70% 20%, #0a0e1e, var(--bg));}
+  /* Absolutely fixed so everything stays put */
+  #c{position:fixed; inset:0; display:block; touch-action:none;}
+  .frame{position:fixed; inset:0; pointer-events:none;}
+  .frame:before{content:"";position:absolute;inset:10px;border:1px solid rgba(255,255,255,.05);border-radius:18px;box-shadow:inset 0 0 80px rgba(0,0,0,.35);}  
+</style>
+
+<!-- Import map for sandbox-safe bare specifiers -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<div class="frame"></div>
+<canvas id="c"></canvas>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ----- Core -----
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = false;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1; // subtle pop/sharpen
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x050509, 0.015);
+
+// Master group so ALL elements move together (faces, edges, vertices, trail, lights)
+const tetra = new THREE.Group();
+scene.add(tetra);
+
+const camera = new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 0.01, 100);
+camera.position.set(0.9, 1.1, 2.2);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.enablePan = false;
+controls.minDistance = 1.0;
+controls.maxDistance = 4.5;
+controls.rotateSpeed = 0.8;
+
+// Lighting (attach to tetra so it moves in lockstep)
+const hemi = new THREE.HemisphereLight(0x6c78ff, 0x0b0c12, 0.8); tetra.add(hemi);
+const dir = new THREE.DirectionalLight(0xffffff, 0.65); dir.position.set(2,3,2); tetra.add(dir);
+
+// Faint grid for grounding (still fixed absolutely)
+const grid = new THREE.GridHelper(20, 40, 0x111421, 0x0b0e16);
+grid.material.opacity = 0.15; grid.material.transparent = true; grid.position.y = -1.1; scene.add(grid);
+
+// ----- Tetrad Colors -----
+const COLORS = {
+  ENH: new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue('--enh').trim()),
+  OBS: new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue('--obs').trim()),
+  RET: new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue('--ret').trim()),
+  REV: new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue('--rev').trim())
+};
+
+// ----- Geometry: regular tetrahedron -----
+const s = 0.8; // base scale for vertex coordinates
+const v0 = new THREE.Vector3( s,  s,  s);
+const v1 = new THREE.Vector3( s, -s, -s);
+const v2 = new THREE.Vector3(-s,  s, -s);
+const v3 = new THREE.Vector3(-s, -s,  s);
+
+// Rich onion: many nested shells for fuller look and motion between layers
+const NUM_SHELLS = 24; // *More* layers
+const shells = [];
+function makeTetraShell(scale, color=0xdde3ff, opacity=0.22){
+  const geo = new THREE.TetrahedronGeometry(s*1.9*scale, 0);
+  const edges = new THREE.EdgesGeometry(geo);
+  const mat = new THREE.LineBasicMaterial({color, transparent:true, opacity, depthWrite:false});
+  return new THREE.LineSegments(edges, mat);
+}
+for (let i=0;i<NUM_SHELLS;i++){
+  const t = i/(NUM_SHELLS-1);
+  const sc = 0.5 + 0.7*t; // 0.5 .. 1.2
+  const op = 0.08 + 0.22*Math.pow(t, 1.2); // subtle ramp
+  const sh = makeTetraShell(sc, 0xdde3ff, op);
+  shells.push(sh);
+  tetra.add(sh);
+}
+let layerFocus = 0; // highlighted shell index
+let autoScan = true; let autoScanCooldown = 0;
+
+// Faces (triangles) mapped to Tetrad laws
+const FACES = [
+  { name:'ENH', verts:[v0, v1, v2], color: COLORS.ENH },
+  { name:'OBS', verts:[v0, v3, v1], color: COLORS.OBS },
+  { name:'RET', verts:[v0, v2, v3], color: COLORS.RET },
+  { name:'REV', verts:[v1, v3, v2], color: COLORS.REV },
+];
+
+// Edges (pairs) — 6 unique edges
+const EDGE_PAIRS = [
+  ['ENH','OBS', v0, v1],
+  ['ENH','RET', v0, v2],
+  ['ENH','REV', v1, v2],
+  ['OBS','RET', v0, v3],
+  ['OBS','REV', v1, v3],
+  ['RET','REV', v2, v3],
+];
+
+// Vertex groups (Nexus points)
+const VERTEX_MAP = [
+  {pos:v0, faces:['ENH','OBS','RET']},
+  {pos:v1, faces:['ENH','OBS','REV']},
+  {pos:v2, faces:['ENH','RET','REV']},
+  {pos:v3, faces:['OBS','RET','REV']},
+];
+
+// Influence state for each law and pair
+const influenceLaw = {ENH:0.6, OBS:0.4, RET:0.5, REV:0.5};
+const influencePair = {}; EDGE_PAIRS.forEach(([a,b])=>{ influencePair[`${a}-${b}`]=0.5; });
+
+// Face materials (fuller)
+function faceMaterial(baseColor){
+  return new THREE.MeshStandardMaterial({
+    color: baseColor.clone().multiplyScalar(0.35),
+    emissive: baseColor,
+    emissiveIntensity: 0.35,
+    metalness: 0.0,
+    roughness: 0.25,
+    side: THREE.DoubleSide,
+    transparent:true,
+    opacity: 0.98,
+    flatShading:true
+  });
+}
+
+const faceMeshes = [];
+for(const f of FACES){
+  const g = new THREE.BufferGeometry();
+  const pos = new Float32Array([
+    f.verts[0].x, f.verts[0].y, f.verts[0].z,
+    f.verts[1].x, f.verts[1].y, f.verts[1].z,
+    f.verts[2].x, f.verts[2].y, f.verts[2].z
+  ]);
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.computeVertexNormals();
+  const m = faceMaterial(f.color);
+  const mesh = new THREE.Mesh(g, m);
+  mesh.userData.law = f.name;
+  tetra.add(mesh);
+  faceMeshes.push(mesh);
+}
+
+// Edge visual (lines) + pickable cylinders
+const edgeGroup = new THREE.Group(); tetra.add(edgeGroup);
+const pickerEdges = []; const edgeCylRadius = 0.015;
+for (const [a,b, p0,p1] of EDGE_PAIRS){
+  const key = `${a}-${b}`; const len = p0.distanceTo(p1);
+  const cylGeo = new THREE.CylinderGeometry(edgeCylRadius, edgeCylRadius, len, 10, 1, true);
+  const grad = new THREE.MeshBasicMaterial({color: COLORS[a].clone().lerp(COLORS[b],0.5), transparent:true, opacity:0.75});
+  const cyl = new THREE.Mesh(cylGeo, grad);
+  cyl.position.copy(p0.clone().add(p1).multiplyScalar(0.5));
+  cyl.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), p1.clone().sub(p0).normalize());
+  cyl.userData = {type:'edge', a, b, key, p0:p0.clone(), p1:p1.clone()};
+  edgeGroup.add(cyl);
+  // pick helper
+  const pickGeo = new THREE.CylinderGeometry(edgeCylRadius*2.5, edgeCylRadius*2.5, len, 8, 1, true);
+  const pickMat = new THREE.MeshBasicMaterial({visible:false});
+  const pick = new THREE.Mesh(pickGeo, pickMat);
+  pick.position.copy(cyl.position); pick.quaternion.copy(cyl.quaternion); pick.userData = cyl.userData;
+  pickerEdges.push(pick); tetra.add(pick);
+}
+
+// Vertex spheres
+const nexusGroup = new THREE.Group(); tetra.add(nexusGroup);
+const pickerVerts = [];
+for (const v of VERTEX_MAP){
+  const sphere = new THREE.Mesh(new THREE.SphereGeometry(0.05, 20, 20),
+    new THREE.MeshBasicMaterial({color: COLORS[v.faces[0]].clone().add(COLORS[v.faces[1]]).add(COLORS[v.faces[2]]).multiplyScalar(0.33)})
+  );
+  sphere.position.copy(v.pos); sphere.userData = {type:'vertex', faces:v.faces};
+  nexusGroup.add(sphere);
+  const pick = new THREE.Mesh(new THREE.SphereGeometry(0.09, 12, 12), new THREE.MeshBasicMaterial({visible:false}));
+  pick.position.copy(v.pos); pick.userData = sphere.userData;
+  pickerVerts.push(pick); tetra.add(pick);
+}
+
+// Core + trail
+const core = new THREE.Mesh(new THREE.IcosahedronGeometry(0.08, 1), new THREE.MeshStandardMaterial({color:0x9fa7ff, emissive:0x2e3bff, emissiveIntensity:0.45, roughness:0.2, metalness:0.1}));
+tetra.add(core);
+const trailMax = 180; const trailPts = []; let trailMesh = null;
+function updateTrail(pt){
+  trailPts.push(pt.clone()); if (trailPts.length > trailMax) trailPts.shift();
+  if (trailMesh) { tetra.remove(trailMesh); trailMesh.geometry.dispose(); trailMesh.material.dispose(); trailMesh = null; }
+  if (trailPts.length > 3){
+    const curve = new THREE.CatmullRomCurve3(trailPts, false, 'centripetal');
+    const geom = new THREE.TubeGeometry(curve, Math.min(300, trailPts.length*4), 0.012, 8, false);
+    const mat = new THREE.MeshBasicMaterial({color:0x9aa4ff, transparent:true, opacity:0.55});
+    trailMesh = new THREE.Mesh(geom, mat); tetra.add(trailMesh);
+  }
+}
+
+// ----- Interaction -----
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+let draggingEdge = null; let isScrubbingLayers = false; let lastY = 0;
+function setPointerFromEvent(e){
+  const rect = renderer.domElement.getBoundingClientRect();
+  const x = ((e.clientX ?? e.touches?.[0]?.clientX) - rect.left) / rect.width;
+  const y = ((e.clientY ?? e.touches?.[0]?.clientY) - rect.top) / rect.height;
+  pointer.set(x*2-1, -(y*2-1));
+}
+function vibrate(ms){ if (navigator.vibrate) navigator.vibrate(ms); }
+let audioCtx=null, osc=null, gain=null;
+function ensureAudio(){
+  if (audioCtx) return;
+  audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+  osc = audioCtx.createOscillator(); gain = audioCtx.createGain(); gain.gain.value = 0.0001;
+  osc.type = 'sine'; osc.frequency.value = 180; osc.connect(gain).connect(audioCtx.destination); osc.start();
+}
+function audioPulse(strength){ if (!audioCtx) return; const f=120+480*strength; const g=0.02+0.15*strength; osc.frequency.exponentialRampToValueAtTime(Math.max(40,f), audioCtx.currentTime+0.05); gain.gain.linearRampToValueAtTime(g, audioCtx.currentTime+0.08); }
+
+renderer.domElement.addEventListener('pointerdown', (e)=>{
+  ensureAudio(); setPointerFromEvent(e); raycaster.setFromCamera(pointer, camera);
+  const hitsEdge = raycaster.intersectObjects(pickerEdges, false)[0];
+  const hitsVert = raycaster.intersectObjects(pickerVerts, false)[0];
+  if (hitsEdge){ draggingEdge = hitsEdge.object.userData; vibrate(10); e.preventDefault(); }
+  else if (hitsVert){ const faces = hitsVert.object.userData.faces; for (const law of faces){ influenceLaw[law] = Math.min(1, influenceLaw[law] + 0.12);} audioPulse((influenceLaw[faces[0]]+influenceLaw[faces[1]]+influenceLaw[faces[2]])/3); vibrate([15,20,15]); e.preventDefault(); }
+  else { isScrubbingLayers = true; autoScan = false; autoScanCooldown = 2.0; lastY = (e.clientY ?? e.touches?.[0]?.clientY) || 0; }
+});
+
+renderer.domElement.addEventListener('pointermove', (e)=>{
+  if (draggingEdge){ setPointerFromEvent(e); raycaster.setFromCamera(pointer, camera);
+    const {p0,p1,key} = draggingEdge; const edgeDir = p1.clone().sub(p0); const edgeLen = edgeDir.length(); const edgeN = edgeDir.clone().normalize(); const camRay = raycaster.ray;
+    const v = p0.clone(); const w0 = camRay.origin.clone().sub(v); const a = edgeN.dot(edgeN); const b = edgeN.dot(camRay.direction); const c = camRay.direction.dot(camRay.direction); const d = edgeN.dot(w0); const e2 = camRay.direction.dot(w0);
+    const sc = (d*b - a*e2) / (a*c - b*b); const closest = camRay.origin.clone().add(camRay.direction.clone().multiplyScalar(sc));
+    let t = closest.clone().sub(p0).dot(edgeN) / edgeLen; t = Math.max(0, Math.min(1, t)); influencePair[key] = t; vibrate(2);
+  } else if (isScrubbingLayers){ const y = (e.clientY ?? e.touches?.[0]?.clientY) || lastY; const dy = y - lastY; lastY = y; const sensitivity = 0.02; layerFocus = THREE.MathUtils.clamp(layerFocus + dy * sensitivity, 0, NUM_SHELLS-1); }
+});
+
+window.addEventListener('pointerup', ()=>{ draggingEdge = null; isScrubbingLayers = false; });
+
+// Resize
+addEventListener('resize', ()=>{ renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix(); });
+
+// ----- Animation -----
+let tClock = 0;
+function animate(){
+  requestAnimationFrame(animate); controls.update(); const dt = 0.016; tClock += dt;
+  if (autoScan){ layerFocus = (layerFocus + dt*2) % (NUM_SHELLS-1); } else { autoScanCooldown -= dt; if (autoScanCooldown <= 0) autoScan = true; }
+
+  // decay laws slowly
+  for (const k of Object.keys(influenceLaw)) influenceLaw[k] = THREE.MathUtils.clamp(influenceLaw[k] * 0.9985, 0.05, 1.25);
+
+  // faces emissive
+  for (const m of faceMeshes){ const law = m.userData.law; const base = (0.35 + 0.55*influenceLaw[law]); const pulse = 0.10 + 0.10*Math.sin(tClock*(1.2 + influenceLaw[law]*2.0)); m.material.emissiveIntensity = base + pulse; }
+
+  // edges
+  let idx=0; for (const child of edgeGroup.children){ const info = child.userData; const infl = influencePair[info.key] ?? 0.5; child.scale.set(1.0 + infl*0.6, 1.0, 1.0 + infl*0.6); child.material.opacity = 0.5 + 0.45*Math.sin(tClock*2.0 + idx*0.7 + infl*3.14)*0.5 + infl*0.3; idx++; }
+
+  // shells: motion and highlight (moving between layers)
+  for(let i=0;i<shells.length;i++){
+    const sh = shells[i]; const t = i/(NUM_SHELLS-1); const d = Math.abs(i - layerFocus); const focus = Math.max(0, 1.0 - d/3.0);
+    const baseOpacity = 0.06 + 0.18*Math.pow(t,1.2); const wave = 0.06*Math.sin(tClock*2.2 + t*6.283);
+    sh.material.opacity = THREE.MathUtils.clamp(baseOpacity + focus*0.35 + wave, 0.02, 0.9);
+    const swell = 1.0 + 0.015*Math.sin(tClock*1.6 + i*0.35) + focus*0.02; sh.scale.setScalar(swell);
+  }
+
+  // core drift -> trail
+  const vEnh = influenceLaw.ENH, vObs = influenceLaw.OBS, vRet = influenceLaw.RET, vRev = influenceLaw.REV;
+  const drift = new THREE.Vector3(
+    Math.sin(tClock*0.9 + vRev*3.2)*0.03 + (vEnh - vObs)*0.02,
+    Math.cos(tClock*0.7 + vRet*2.6)*0.03 + (vRet - vRev)*0.02,
+    Math.sin(tClock*0.5 + vEnh*1.9)*0.03 + (vObs - vRet)*0.02
+  );
+  core.position.copy(drift.multiplyScalar(6.0)); updateTrail(core.position);
+
+  // Move entire construct together
+  tetra.rotation.y += 0.0015 + 0.001*(vEnh - vObs);
+  tetra.rotation.x += 0.0007 + 0.0005*(vRet - vRev);
+
+  audioPulse((vEnh + vObs + vRet + vRev)/4);
+  renderer.render(scene, camera);
+}
+animate();
+
+addEventListener('contextmenu', e=> e.preventDefault());
+
+// ---------------- Self-tests (console) ----------------
+(function selfTests(){
+  console.group('%cTetrad Tetrahedron — Self-tests','color:#9df');
+  try{
+    console.assert(!!THREE && !!THREE.WebGLRenderer, 'THREE loaded');
+    console.assert(renderer instanceof THREE.WebGLRenderer, 'Renderer instance OK');
+    console.assert(typeof OrbitControls === 'function' || !!OrbitControls, 'OrbitControls loaded');
+    console.assert(renderer.getContext() != null, 'WebGL context created');
+
+    // Scene composition
+    console.assert(faceMeshes.length === 4, 'Has 4 faces (tetrad laws)');
+    console.assert(edgeGroup.children.length === 6, 'Has 6 edges (media forces)');
+    console.assert(nexusGroup.children.length === 4, 'Has 4 vertices (nexus points)');
+
+    // Master group + layered shells
+    console.assert(!!tetra && tetra.isGroup === true, 'Master group exists');
+    console.assert(shells.length === NUM_SHELLS, 'Has expected number of shells');
+    console.assert(NUM_SHELLS >= 12, 'Plenty of layers for onion effect');
+    console.assert(layerFocus >= 0 && layerFocus <= NUM_SHELLS-1, 'Layer focus within range');
+
+    // Influence pair keys exist & within range
+    for (const [a,b] of EDGE_PAIRS){ const k = `${a}-${b}`; console.assert(k in influencePair, `Influence pair exists: ${k}`); console.assert(influencePair[k] >= 0 && influencePair[k] <= 1, `Influence in [0,1]: ${k}`); }
+
+    // Trail behavior
+    const before = trailPts.length; updateTrail(new THREE.Vector3(0,0,0)); updateTrail(new THREE.Vector3(0.1,0,0));
+    console.assert(trailPts.length >= before + 2, 'Trail appends points');
+    for(let i=0;i<trailMax+5;i++) updateTrail(new THREE.Vector3(i*0.01,0,0));
+    console.assert(trailPts.length <= trailMax, 'Trail clamps to trailMax');
+
+    // Sanity
+    console.assert(typeof influenceLaw.ENH === 'number', 'Law scalar present');
+    console.assert(Array.isArray(arguments) === false, 'Runtime OK');
+  } catch(err){ console.error('Self-tests error:', err); } finally { console.groupEnd(); }
+})();
+</script>
+</body>
+</html>

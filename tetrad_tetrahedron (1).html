@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Tetrad Hypertetrahedron — Visible Layered Media Engine</title>
+  <style>
+    html, body { margin:0; padding:0; height:100%; width:100%; background:#050505; overflow:hidden; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
+    canvas { display:block; width:100%; height:100%; touch-action:none; }
+    .ui { position: fixed; inset: 0 auto auto 0; padding: 10px 12px; color: #ddd; background: rgba(0,0,0,.35); backdrop-filter: blur(6px); border-bottom-right-radius: 12px; font-size: 12px; line-height: 1.35; }
+    .ui strong { color: #fff; }
+    .toggles { margin-top: 6px; display:flex; gap:6px; flex-wrap:wrap; }
+    .btn { padding:4px 8px; background:#111; color:#eee; border:1px solid #333; border-radius:8px; font-size:12px; }
+    .btn:active { transform: translateY(1px); }
+  </style>
+  <!-- Import map for modules -->
+  <script type="importmap">{
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }</script>
+</head>
+<body>
+  <div class="ui" id="ui">
+    <div><strong>Tetrad:</strong> <span style="color:#ff4d4d">Enhance</span> · <span style="color:#4dff7a">Obsolesce</span> · <span style="color:#4db4ff">Retrieve</span> · <span style="color:#ffd84d">Reverse</span></div>
+    <div>Vertices: <em>Nexus 1–4</em>. Edges show pairwise relations. Layers = strata of media (64/face).</div>
+    <div class="toggles">
+      <button class="btn" id="toggleLabels">Toggle Labels</button>
+      <button class="btn" id="toggleWires">Toggle Strata</button>
+      <button class="btn" id="toggleFaces">Toggle Faces</button>
+      <button class="btn" id="resetCam">Reset View</button>
+    </div>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // ===== Scene / Camera / Renderer =====
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x050505, 0.0);
+
+    const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 100);
+    const CAM_INIT = new THREE.Vector3(2.2, 2.2, 3.2);
+    camera.position.copy(CAM_INIT);
+
+    const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:false, powerPreference:'high-performance' });
+    renderer.setPixelRatio(Math.min(devicePixelRatio||1, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true; controls.dampingFactor = 0.06;
+
+    // ===== Palette (faces) =====
+    const COLORS = {
+      Enhance:   0xff4d4d,
+      Obsolesce: 0x4dff7a,
+      Retrieve:  0x4db4ff,
+      Reverse:   0xffd84d
+    };
+    const FACE_NAMES = ['Enhance','Obsolesce','Retrieve','Reverse'];
+
+    // ===== Geometry Setup =====
+    const SIZE = 1.2;               // radius scale
+    const LAYERS = 64;              // strata per face
+    const group = new THREE.Group(); scene.add(group);
+
+    // Canonical regular tetra vertices (normalized then scaled)
+    const rawVerts = [
+      new THREE.Vector3( 1,  1,  1),
+      new THREE.Vector3(-1, -1,  1),
+      new THREE.Vector3(-1,  1, -1),
+      new THREE.Vector3( 1, -1, -1)
+    ].map(v=>v.normalize().multiplyScalar(SIZE));
+
+    const faceIndices = [ [0,1,2], [0,3,1], [0,2,3], [1,3,2] ]; // 4 faces
+
+    // Base tetra faces (visible translucent)
+    function faceMesh(i){
+      const [a,b,c] = faceIndices[i].map(j=>rawVerts[j]);
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
+        a.x,a.y,a.z, b.x,b.y,b.z, c.x,c.y,c.z
+      ]),3));
+      geo.setIndex([0,1,2]);
+      geo.computeVertexNormals();
+      const m = new THREE.MeshPhysicalMaterial({
+        color: COLORS[FACE_NAMES[i]], metalness: 0.1, roughness: 0.8,
+        transparent:true, opacity:0.28, side: THREE.DoubleSide,
+        transmission: 0.0, clearcoat: 0.3, clearcoatRoughness: 0.9
+      });
+      const mesh = new THREE.Mesh(geo, m);
+      mesh.userData = { law: FACE_NAMES[i] };
+      return mesh;
+    }
+
+    const faceMeshes = [0,1,2,3].map(i=>faceMesh(i));
+    faceMeshes.forEach(m=>group.add(m));
+
+    // Base edges (bright)
+    const baseGeo = new THREE.TetrahedronGeometry(SIZE);
+    const baseEdges = new THREE.LineSegments(new THREE.EdgesGeometry(baseGeo), new THREE.LineBasicMaterial({ color:0xffffff, transparent:true, opacity:0.85 }));
+    group.add(baseEdges);
+
+    // ===== Strata per face (visible) =====
+    function makeLayeredFace(faceIdx){
+      const color = new THREE.Color(COLORS[FACE_NAMES[faceIdx]]);
+      const [a,b,c] = faceIndices[faceIdx].map(i=>rawVerts[i].clone());
+      const tri = new THREE.Triangle(a,b,c);
+      const normal = tri.getNormal(new THREE.Vector3());
+      const center = new THREE.Vector3(); tri.getMidpoint(center);
+      const u = b.clone().sub(a).normalize();
+      const v = new THREE.Vector3().crossVectors(normal, u).normalize();
+
+      const faceGroup = new THREE.Group();
+      faceGroup.userData = { law: faceIdx };
+
+      const edges = [ [a,b], [b,c], [c,a] ];
+
+      for(let i=0;i<LAYERS;i++){
+        const t = i/(LAYERS-1);
+        const offset = THREE.MathUtils.lerp(-0.025, 0.025, t);
+        const scale = THREE.MathUtils.lerp(0.97, 0.88, t);
+
+        const pts = [a,b,c].map(p=>{
+          const rel = p.clone().sub(center);
+          const relU = u.clone().multiplyScalar(rel.dot(u));
+          const relV = v.clone().multiplyScalar(rel.dot(v));
+          return center.clone().add(relU.multiplyScalar(scale)).add(relV.multiplyScalar(scale)).add(normal.clone().multiplyScalar(offset));
+        });
+
+        const g = new THREE.BufferGeometry();
+        const pos = new Float32Array( (edges.length*2) * 3 );
+        for(let e=0;e<edges.length;e++){
+          const i0 = e*2*3; const p0 = pts[e]; const p1 = pts[(e+1)%3];
+          pos[i0+0]=p0.x; pos[i0+1]=p0.y; pos[i0+2]=p0.z;
+          pos[i0+3]=p1.x; pos[i0+4]=p1.y; pos[i0+5]=p1.z;
+        }
+        g.setAttribute('position', new THREE.BufferAttribute(pos,3));
+
+        const mat = new THREE.LineBasicMaterial({ color: color.getHex(), transparent:true, opacity: THREE.MathUtils.lerp(0.85, 0.12, t) });
+        const wire = new THREE.LineSegments(g, mat);
+        wire.userData = { layer: i };
+        faceGroup.add(wire);
+      }
+      return faceGroup;
+    }
+
+    const faces = [0,1,2,3].map(i=>makeLayeredFace(i));
+    faces.forEach(f=>group.add(f));
+
+    // ===== Vertex Nexus Points (glow spheres) =====
+    const vertGeo = new THREE.SphereGeometry(0.055, 20, 20);
+    const vertMats = rawVerts.map((_,i)=>new THREE.MeshBasicMaterial({ color:0xffffff }));
+    const vertices = rawVerts.map((v,i)=>{
+      const s = new THREE.Mesh(vertGeo, vertMats[i]); s.position.copy(v); s.userData.name = `Nexus ${i+1}`; group.add(s); return s;
+    });
+
+    // ===== Edge Concept Labels =====
+    const EDGE_CONCEPTS = {
+      // Enhance face adjacencies
+      '0-1': 'Amplification–Fading',     // Enhance–Obsolesce
+      '0-2': 'Amplification–Recovery',   // Enhance–Retrieve
+      '0-3': 'Amplification–Inversion',  // Enhance–Reverse
+      // Obsolesce face adjacencies
+      '1-2': 'Fading–Recovery',          // Obsolesce–Retrieve
+      '1-3': 'Fading–Inversion',         // Obsolesce–Reverse
+      // Retrieve & Reverse remaining
+      '2-3': 'Recovery–Inversion'        // Retrieve–Reverse
+    };
+
+    function makeLabel(text){
+      const c = document.createElement('canvas');
+      const ctx = c.getContext('2d');
+      const pad = 8; const fs = 40; c.width = 512; c.height = 128;
+      ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(0,0,c.width,c.height);
+      ctx.font = `${fs}px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial`;
+      ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff';
+      ctx.fillText(text, pad, c.height/2);
+      const tex = new THREE.CanvasTexture(c); tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+      const mat = new THREE.SpriteMaterial({ map: tex, depthWrite:false, depthTest:true, transparent:true });
+      const spr = new THREE.Sprite(mat); spr.scale.set(0.8, 0.2, 1);
+      return spr;
+    }
+
+    const labelGroup = new THREE.Group(); group.add(labelGroup);
+    const edgePairs = [ [0,1],[0,2],[0,3],[1,2],[1,3],[2,3] ];
+    edgePairs.forEach(pair=>{
+      const [i,j] = pair; const key = `${Math.min(i,j)}-${Math.max(i,j)}`;
+      const mid = new THREE.Vector3().addVectors(rawVerts[i], rawVerts[j]).multiplyScalar(0.5);
+      const spr = makeLabel(EDGE_CONCEPTS[key]);
+      spr.position.copy(mid.clone().multiplyScalar(1.02));
+      labelGroup.add(spr);
+    });
+
+    // Vertex name labels
+    const vertexLabelGroup = new THREE.Group(); group.add(vertexLabelGroup);
+    vertices.forEach((v,i)=>{
+      const lbl = makeLabel(`Nexus ${i+1}`); lbl.scale.multiplyScalar(0.7);
+      lbl.position.copy(v.position.clone().multiplyScalar(1.06));
+      vertexLabelGroup.add(lbl);
+    });
+
+    // ===== Lighting =====
+    scene.add(new THREE.AmbientLight(0xffffff, 0.35));
+    const p1 = new THREE.PointLight(0xffffff, 0.9, 0, 2); p1.position.set(3,3,3); scene.add(p1);
+    const p2 = new THREE.PointLight(0xffffff, 0.6, 0, 2); p2.position.set(-3,-2,1); scene.add(p2);
+
+    // ===== Resize =====
+    addEventListener('resize', ()=>{
+      camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    }, {passive:true});
+
+    // ===== Animate =====
+    renderer.setAnimationLoop(()=>{
+      group.rotation.y += 0.0045;
+      controls.update();
+      renderer.render(scene, camera);
+    });
+
+    // ===== UI Toggles =====
+    const $ = sel=>document.querySelector(sel);
+    $('#toggleLabels').onclick = ()=>{ labelGroup.visible = !labelGroup.visible; vertexLabelGroup.visible = !vertexLabelGroup.visible; };
+    $('#toggleWires').onclick = ()=>{ faces.forEach(f=>f.visible = !f.visible); };
+    $('#toggleFaces').onclick = ()=>{ faceMeshes.forEach(m=>m.visible = !m.visible); };
+    $('#resetCam').onclick = ()=>{ camera.position.copy(CAM_INIT); controls.target.set(0,0,0); controls.update(); };
+
+    // ===== Tests =====
+    (function tests(){
+      const T = []; const ok=(c,m)=>T.push({ok:!!c,msg:m});
+      ok(renderer instanceof THREE.WebGLRenderer, 'Renderer initialized');
+      ok(scene instanceof THREE.Scene, 'Scene created');
+      ok(camera instanceof THREE.PerspectiveCamera, 'Camera created');
+      ok(faceMeshes.length===4, 'Four visible face meshes exist');
+      ok(faces.length===4 && faces.every(f=>f.children.length===64), 'Each face has 64 strata');
+      ok(labelGroup.children.length===6, 'Six edge concept labels');
+      ok(vertexLabelGroup.children.length===4, 'Four vertex labels');
+      const failed=T.filter(t=>!t.ok); if(failed.length){console.group('%cHypertetra Visible Tests — FAIL','color:#f66');failed.forEach(t=>console.error('✗',t.msg));console.groupEnd();} else {console.group('%cHypertetra Visible Tests — PASS','color:#6f6');T.forEach(t=>console.log('✓',t.msg));console.groupEnd();}
+    })();
+
+    // Expose a tiny API
+    window.tetrad = {
+      setLayer(face, layer){ /* no-op visual in this build: use toggles instead */ return {face, layer}; }
+    };
+  </script>
+</body>
+</html>

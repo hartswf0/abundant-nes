@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="light dark" />
+  <title>Echoes & Algorithms: How Sound Shapes Our Worlds in the Digital Age</title>
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --fg: #e8e8e8;
+      --muted: #b6b6b6;
+      --accent: #6ee7ff;
+      --accent-2: #a78bfa;
+      --card: #111214;
+      --shadow: 0 10px 30px rgba(0,0,0,.35);
+      --radius: 18px;
+      --pad: clamp(16px, 3.2vw, 28px);
+      --maxw: 1200px;
+      --lh: 1.6;
+      --h1: clamp(28px, 5.2vw, 64px);
+      --h2: clamp(22px, 3.8vw, 42px);
+      --h3: clamp(18px, 3vw, 28px);
+      --body: clamp(16px, 2.4vw, 20px);
+      --small: clamp(13px, 1.8vw, 16px);
+    }
+    @media (prefers-color-scheme: light) {
+      :root { --bg:#fbfbfc; --fg:#0b0b0d; --muted:#3d3d46; --card:#ffffff; --shadow: 0 10px 30px rgba(0,0,0,.08);}  
+    }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      background: radial-gradient(1200px 800px at 10% -10%, rgba(166,139,250,0.12), transparent 60%),
+                  radial-gradient(1200px 800px at 110% 110%, rgba(110,231,255,0.12), transparent 60%),
+                  var(--bg);
+      color: var(--fg);
+      font: 500 var(--body)/var(--lh) system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, "Noto Sans", sans-serif;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+    /* Deck layout */
+    .deck { height: 100%; display: grid; grid-template-rows: 1fr auto; }
+    .slide {
+      display: none;
+      height: 100%;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: var(--pad);
+      container-type: inline-size;
+    }
+    .slide.current { display: block; }
+    .frame {
+      max-width: var(--maxw);
+      margin-inline: auto;
+      background: color-mix(in oklab, var(--card), transparent 12%);
+      box-shadow: var(--shadow);
+      border-radius: var(--radius);
+      padding: clamp(18px, 3vw, 36px);
+      border: 1px solid color-mix(in oklab, var(--fg), transparent 90%);
+    }
+    h1, h2, h3 { line-height: 1.15; letter-spacing: -0.01em; }
+    h1 { font-size: var(--h1); margin: 0 0 .6em; }
+    h2 { font-size: var(--h2); margin: 0 0 .5em; }
+    h3 { font-size: var(--h3); margin: 1.2em 0 .4em; }
+    p { margin: .8em 0; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .lead { font-size: clamp(18px, 2.6vw, 22px); color: var(--muted); }
+    .subtitle { font-size: var(--h3); color: var(--muted); margin-top: .25em; }
+
+    /* Controls */
+    .controls {
+      display: grid; grid-template-columns: auto 1fr auto; gap: 12px;
+      align-items: center; padding: 10px var(--pad);
+      background: linear-gradient(180deg, transparent, color-mix(in oklab, var(--card), transparent 20%) 40%);
+      border-top: 1px solid color-mix(in oklab, var(--fg), transparent 90%);
+    }
+    .btn {
+      -webkit-tap-highlight-color: transparent;
+      border: 1px solid color-mix(in oklab, var(--fg), transparent 85%);
+      background: color-mix(in oklab, var(--card), transparent 8%);
+      color: var(--fg);
+      border-radius: 999px;
+      padding: 10px 14px; font: 600 var(--small)/1 system-ui, sans-serif;
+      box-shadow: var(--shadow);
+      cursor: pointer;
+    }
+    .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .btn[disabled] { opacity: .5; cursor: not-allowed; }
+    .progress { height: 6px; background: color-mix(in oklab, var(--fg), transparent 90%); border-radius: 999px; overflow: hidden; }
+    .bar { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
+
+    /* Typography helpers */
+    .kicker { text-transform: uppercase; letter-spacing: .12em; font-weight: 700; font-size: var(--small); color: var(--accent); }
+    .ref { font-size: clamp(14px,2vw,16px); word-break: break-word; }
+    ul { padding-left: 1.2em; }
+
+    /* Print */
+    @media print {
+      .controls { display: none; }
+      .slide { display: block !important; break-inside: avoid; }
+      body { background: #fff; color: #000; }
+      .frame { box-shadow: none; border: none; }
+      a { color: #000; text-decoration: underline; }
+    }
+  </style>
+</head>
+<body>
+  <div class="deck" id="deck">
+
+    <!-- SLIDE 1: Title -->
+    <section class="slide current" role="region" aria-labelledby="s1h">
+      <div class="frame">
+        <div class="kicker">Lecture • W07 • Listening as Interface</div>
+        <h1 id="s1h">Echoes & Algorithms</h1>
+        <div class="subtitle">How Sound Shapes Our Worlds in the Digital Age</div>
+        <p class="lead">A mobile‑first, single‑file presentation exploring acoustic ecology, AI‑mediated voice, architectural acoustics, and the ethics of attention in our algorithmic age.</p>
+      </div>
+    </section>
+
+    <!-- SLIDE 2: Opening vignette -->
+    <section class="slide" role="region" aria-labelledby="s2h">
+      <div class="frame">
+        <h2 id="s2h">A Quiet That Isn’t</h2>
+        <p>In a small, windowless room carved out of the city's constant hum, a single breath seemed to carry the weight of the world. Yet silence was anything but still. Beneath that quiet lay an orchestration of faint sounds—the rustle of distant footsteps, the hum of a server far beyond the walls, even the subtle digital whispers of a synthetic voice rehearsing its lines for a podcast episode soon to be heard by thousands.</p>
+        <p>This was a silence punctuated by presence, a quiet enlivened by layers unseen and unheard until, suddenly, it was impossible to ignore. To listen in this moment was to confront a shifting landscape—where sound is no longer just organic, silence is never just absence, and the lines between human and machine voices blur into uncanny communion.</p>
+      </div>
+    </section>
+
+    <!-- SLIDE 3: Ong setup -->
+    <section class="slide" role="region" aria-labelledby="s3h">
+      <div class="frame">
+        <h2 id="s3h">From Orality to Algorithms</h2>
+        <p>Walter Ong wrote that “words as such have no visual presence… They are sounds… occurrences, events.” Writing externalized memory and transformed consciousness. But what happens when the sounds that shape our thinking are synthetic—when neural networks whisper in our ears and platforms curate the acoustic environments we inhabit?</p>
+        <p>To understand how sound shapes our worlds now, we trace a path from acoustic ecology to human–machine vocal collaboration.</p>
+      </div>
+    </section>
+
+    <!-- SLIDE 4: Architecture of Attention -->
+    <section class="slide" role="region" aria-labelledby="s4h">
+      <div class="frame">
+        <h2 id="s4h">The Architecture of Attention</h2>
+        <p><strong>R. Murray Schafer</strong> distinguished <em>hi‑fi</em> (clear, distant hearing) from <em>lo‑fi</em> (sound congestion) soundscapes. Today, a third category dominates: the <strong>algorithmic soundscape</strong>—computational systems curating sonic attention via recommendation engines and feedback cues.</p>
+        <ul>
+          <li><em>Hi‑fi</em>: long‑range hearing, rural perspectives.</li>
+          <li><em>Lo‑fi</em>: urban immediacy, flattened distance.</li>
+          <li><em>Algorithmic</em>: platforms optimize attention; interface sounds become infrastructure.</li>
+        </ul>
+        <p class="ref">See: Schafer, <em>The Soundscape</em>; <em>99% Invisible</em>, “The Sound of the Artificial World.”</p>
+      </div>
+    </section>
+
+    <!-- SLIDE 5: Silence that speaks -->
+    <section class="slide" role="region" aria-labelledby="s5h">
+      <div class="frame">
+        <h2 id="s5h">The Silence That Speaks</h2>
+        <p>John Cage insisted that silence does not exist: 4′33″ exposes ambient presence and reframes attention. In digital life, we encounter <strong>protocol silence</strong>—gaps structured by platforms (buffering, latency, mute) rather than acoustics. Podcast close‑miking manufactures <em>recorded presence</em> that can exceed face‑to‑face intimacy.</p>
+        <p class="ref">See: Cage, <em>Silence</em>.</p>
+      </div>
+    </section>
+
+    <!-- SLIDE 6: Uncanny valley of voice -->
+    <section class="slide" role="region" aria-labelledby="s6h">
+      <div class="frame">
+        <h2 id="s6h">The Uncanny Valley of Voice</h2>
+        <p>AI voices approach the human without fully arriving. <strong>Holly Herndon’s</strong> <em>PROTO</em> and <em>Holly+</em> explore ritual training, sharing, and authorship through machine‑mediated vocal identity—what we might call <em>interspecies aurality</em>.</p>
+        <p><strong>Linguistic relativity</strong> research suggests uncanny effects vary across languages: categories for pitch and space map differently, shifting how “almost‑human” feels.</p>
+        <p class="ref">See: Herndon’s Holly+ project; Dolscheid et al., <em>Psychological Science</em> (2013).</p>
+      </div>
+    </section>
+
+    <!-- SLIDE 7: Evolutionary echoes -->
+    <section class="slide" role="region" aria-labelledby="s7h">
+      <div class="frame">
+        <h2 id="s7h">Evolutionary Echoes</h2>
+        <p><strong>D. Haskell</strong> traces sound from geology to biophony, showing layered temporal ecologies. Natural soundscapes coordinate without central control—the “benefits of anarchy.” Algorithmic soundscapes, by contrast, centralize optimization for engagement.</p>
+        <p class="ref">See: Haskell, “When the Earth Started to Sing,” <em>Emergence Magazine</em>.</p>
+      </div>
+    </section>
+
+    <!-- SLIDE 8: Choreography of listening -->
+    <section class="slide" role="region" aria-labelledby="s8h">
+      <div class="frame">
+        <h2 id="s8h">The Choreography of Listening</h2>
+        <p><strong>Jonathan Sterne</strong> shows how <em>audile technique</em> is learned and historical. Today we add a <strong>computational audile technique</strong>: models listen statistically, then teach us to listen back through recommendations and voice UIs.</p>
+        <p class="ref">See: Sterne, <em>The Audible Past</em>.</p>
+      </div>
+    </section>
+
+    <!-- SLIDE 9: Architectural acoustics -->
+    <section class="slide" role="region" aria-labelledby="s9h">
+      <div class="frame">
+        <h2 id="s9h">Architecture, Acoustics & Social Space</h2>
+        <p>Built spaces script behavior through reverberation, absorption, and diffusion: tiles that sharpen sibilants, stairwells that lengthen decay, studios that permit intimate whispers. Policy and design decide whose noise is permitted and whose is policed.</p>
+        <p class="ref">See: <em>99% Invisible</em>, “Reverb: The Evolution of Architectural Acoustics.”</p>
+      </div>
+    </section>
+
+    <!-- SLIDE 10: Ethics of artificial attention -->
+    <section class="slide" role="region" aria-labelledby="s10h">
+      <div class="frame">
+        <h2 id="s10h">The Ethics of Artificial Attention</h2>
+        <p>Surveillance capitalism extracts behavioral data from listening to predict and shape behavior. Platform “enshittification” degrades sonic experience: non‑skippable ads, algorithmic overfit, quality trade‑offs. Yet alternatives exist: community‑owned platforms, open voice tools, participatory soundscape design.</p>
+        <p class="ref">See: Zuboff, <em>The Age of Surveillance Capitalism</em>.</p>
+      </div>
+    </section>
+
+    <!-- SLIDE 11: Listening forward -->
+    <section class="slide" role="region" aria-labelledby="s11h">
+      <div class="frame">
+        <h2 id="s11h">Listening Forward</h2>
+        <p>Andy Clark calls us “natural‑born cyborgs.” The question is not <em>whether</em> listening is mediated but <em>how</em>. Practice <strong>critical listening</strong>:
+        </p>
+        <ul>
+          <li>Read the stack: acoustics → devices → protocols → platforms → incentives.</li>
+          <li>Design spaces for unmediated experience alongside computational curation.</li>
+          <li>Support community control over sonic tools and data.</li>
+          <li>Teach algorithmic listening literacy.</li>
+        </ul>
+        <p>Every soundscape reflects power and opens possibility. We can compose it differently.</p>
+      </div>
+    </section>
+
+    <!-- SLIDE 12: Full essay (optional reading) -->
+    <section class="slide" role="region" aria-labelledby="s12h">
+      <div class="frame">
+        <h2 id="s12h">Essay — Full Text</h2>
+        <p><em>For readers who prefer continuous prose, the complete essay appears below.</em></p>
+        <article>
+          <p>In a small, windowless room carved out of the city's constant hum, a single breath seemed to carry the weight of the world. Yet silence was anything but still. Beneath that quiet lay an orchestration of faint sounds—the rustle of distant footsteps, the hum of a server far beyond the walls, even the subtle digital whispers of a synthetic voice rehearsing its lines for a podcast episode soon to be heard by thousands. This was a silence punctuated by presence, a quiet enlivened by layers unseen and unheard until, suddenly, it was impossible to ignore. To listen in this moment was to confront a shifting landscape—where sound is no longer just organic, silence is never just absence, and the lines between human and machine voices blur into uncanny communion.</p>
+          <p>The question of what it means to listen today has become urgent in ways that Walter Ong could barely have imagined when he wrote about the cognitive revolution of literacy. In his seminal work <em>Orality and Literacy</em>, Ong argued that "words as such have no visual presence... They are sounds... occurrences, events" [1]. Writing, he claimed, functions as a cognitive technology that externalizes memory and transforms consciousness itself. But what happens when the sounds that shape our thinking are increasingly artificial, when the voices that whisper in our ears are synthesized by neural networks, and when the acoustic environments we inhabit are curated by algorithms designed to capture and monetize our attention?</p>
+          <p>We are living through a profound transformation in the nature of listening itself—one that extends far beyond the shift from oral to literate culture that Ong documented. Today's sonic landscape is shaped by forces he never considered: the uncanny valley of AI-generated voices, the lo-fi compression of urban soundscapes, and the algorithmic curation of our acoustic environments. To understand how sound shapes our worlds in the digital age, we must trace a path from the foundational theories of acoustic ecology through contemporary experiments in human-machine vocal collaboration.</p>
+          <h3>The Architecture of Attention</h3>
+          <p>R. Murray Schafer's concept of the "soundscape" offers a crucial framework for understanding how acoustic environments shape consciousness. In <em>The Soundscape: Our Sonic Environment and the Tuning of the World</em>, Schafer distinguishes between "hi-fi" environments—where discrete sounds can be heard clearly across distance—and "lo-fi" environments where "there is no distance; there is only presence" [2]. Rural soundscapes, with their clear acoustic perspective, enable what Schafer calls "long-range hearing." Urban environments, by contrast, create what he terms "sound congestion," flattening our acoustic perception into an overwhelming immediacy.</p>
+          <p>But Schafer's binary breaks down in our current moment. Consider the layered complexity of a modern urban soundscape: traffic noise masking distant sounds, electronic devices providing sonic feedback for usability, and the constant presence of mediated audio through headphones and speakers. As the podcast <em>99% Invisible</em> documented in their episode "The Sound of the Artificial World," "modern conveniences would be very hard to use without sonic feedback" [3]. We live in environments where artificial sounds have become environmental infrastructure rather than mere interface elements. This represents a third category beyond Schafer's hi-fi/lo-fi distinction—what we might call "algorithmic soundscape," where machine learning systems curate our acoustic attention through recommendation engines and platform algorithms.</p>
+          <h3>The Silence That Speaks</h3>
+          <p>John Cage's revolutionary insight that "silence does not exist" fundamentally challenges our assumptions about absence and presence in acoustic experience [4]. In his composition 4'33", Cage demonstrated that what we perceive as silence is actually filled with ambient sound—the creaking of chairs, the whisper of air circulation, the distant hum of urban life. "Silence," Cage argued, "is not acoustic. It is a change of mind, a turning around" [4]. Cage's structured silence operates through what he called "chance operations"—systematic methods for organizing time and attention that separate compositional elements from personal preference or melodic interpretation. But in our digital age, silence itself has become subject to new forms of technological mediation. The dead air of a Zoom call creates different anxieties than natural environmental silence. Platform algorithms determine when content gaps occur, creating what we might call "protocol silence"—absence structured by network rules rather than acoustic properties. Consider the contemporary phenomenon of podcast intimacy, where close-mic recording techniques create artificial presence through breath sounds and vocal texture more apparent than in face-to-face conversation. This represents a new form of what could be called "recorded presence"—technologically mediated intimacy that can exceed physical encounter. The silence between words in a podcast carries different weight than silence in live conversation, shaped by the production techniques and listening contexts that transform temporal gaps into meaningful pauses.</p>
+          <h3>The Uncanny Valley of Voice</h3>
+          <p>Perhaps nowhere is the transformation of listening more evident than in the emergence of AI-generated voices that approach but never quite reach human vocalization. Holly Herndon's album <em>PROTO</em> and her ongoing Holly+ project represent breakthrough experiments in human-machine vocal collaboration. Working with an AI system called "Spawn," Herndon created what she describes as "alien song craft and new forms of communion" through the ritual training of neural networks on human vocal data [5]. The Holly+ project allows anyone to upload audio and download a version transformed through Herndon's voice model, exploring what happens at the boundaries between human and synthetic vocal identity. This work reveals what we might call "interspecies aurality"—the recognition boundaries between human and machine voices that create uncanny effects precisely at the threshold of perfect mimicry. Research on cross-linguistic auditory perception adds another layer to this complexity. Studies of the Sapir-Whorf hypothesis show that "the structure of one's language influences the manner in which one perceives and understands the world," including auditory categories [6]. English speakers demonstrate stronger pitch-elevation correspondences because the same words ("high/low") describe both pitch and spatial relationships, while languages with separate terms show weaker perceptual connections [7]. This linguistic relativity in sound perception becomes crucial as AI voice synthesis develops. The uncanny valley effects of synthetic speech may vary across linguistic communities, suggesting that human-machine vocal boundaries are not universal but culturally and linguistically specific. What sounds almost-but-not-quite-human to an English speaker may register differently to speakers of languages with different sound categorization systems.</p>
+          <h3>Evolutionary Echoes</h3>
+          <p>David Haskell's <em>When the Earth Started to Sing</em> traces the deep history of sound from geological noise through the first communicative crickets to complex ecosystems, revealing that "the combined experience of thousands of ancestors flows to the air" [8]. His paleo-soundscape research shows listening as an evolutionary capacity shaped by environmental pressures over millions of years. Contemporary acoustic environments contain what we might call "temporal soundscape"—evolutionary layers from geological, biological, and technological periods layered into a complex acoustic archaeology. This evolutionary perspective helps explain why artificial soundscapes can feel so alienating. Natural soundscapes operate through what Haskell calls "the benefits of anarchy"—multiple species coordinating timing and frequency to avoid overlap while maintaining competitive advantages [8]. There's no central authority in a rainforest soundscape, yet maximum acoustic biodiversity emerges through organized chaos. Algorithmic soundscapes, by contrast, operate through centralized optimization for engagement and profit. The machine learning systems that curate our Spotify playlists or YouTube recommendations create new environmental conditions for listening that have no precedent in evolutionary history. We are the first generation to live in acoustic environments designed not for biological flourishing but for the capture and monetization of attention.</p>
+          <h3>The Choreography of Listening</h3>
+          <p>Jonathan Sterne's <em>The Audible Past</em> reveals how "sound reproduction technologies crystallize cultural practices" into technical forms, showing that listening is "historical all the way down" [9]. What Sterne calls "audile technique"—the learned, culturally specific practices of directed listening—emerged through medical technologies like the stethoscope before being applied to media technologies. The ear became a model for the microphone diaphragm, embedding biological listening practices into technological systems. But contemporary AI systems represent a new kind of listening choreography. Machine learning models trained on vast datasets of human speech and music develop their own forms of pattern recognition that may not align with human auditory processing. When algorithms recommend music or generate synthetic voices, they operate through statistical models of human preference that abstract away from the embodied, cultural specificities of listening that Sterne documents. This creates what we might call "computational audile technique"—new forms of machine listening that then reshape human listening practices. The way Spotify's algorithm learns to predict your preferences changes what you expect to hear and how you listen to new music. The way voice assistants parse human speech influences how we speak to machines and, eventually, to each other.</p>
+          <h3>Architectural Acoustics and Social Space</h3>
+          <p>The built environment plays a crucial but often invisible role in shaping listening practices. Research by <em>99% Invisible</em> on architectural acoustics reveals how "sound is affected by the architecture" in ways that script social behavior [10]. Bathroom tiles create harsh reflections that discourage lingering conversation. Stairwells generate long decay times that make whispered confessions feel more intimate. Padded studios absorb reverberation, creating conditions for close-mic recording that enables the artificial intimacy of podcast production. This "constructed soundscape" operates according to different principles than natural acoustic ecology. Architects and sound designers can intentionally craft acoustic environments to encourage specific social interactions—open offices with hard surfaces that discourage private conversation, restaurants with background noise levels calibrated to encourage turnover, meditation spaces designed for contemplative silence. The politics of acoustic space become evident in contexts like noise ordinances, which typically regulate volume levels without considering the cultural significance of different sound practices. Whose forms of acoustic expression are considered "noise pollution" and whose are protected as cultural heritage? How do zoning laws and architectural regulations embed assumptions about appropriate listening and sound-making into the built environment?</p>
+          <h3>The Ethics of Artificial Attention</h3>
+          <p>As our acoustic environments become increasingly mediated by algorithms and artificial intelligence, questions of agency and autonomy become urgent. The attention economy operates through what Shoshana Zuboff calls "surveillance capitalism," extracting behavioral data from our listening practices to build predictive models that can influence future behavior [11]. Our streaming histories, voice searches, and engagement patterns with audio content become inputs for systems designed to shape our preferences and capture our attention. The enshittification of digital platforms—their gradual degradation from user-serving to advertiser-serving to platform-owner-serving—affects acoustic environments as well as visual interfaces. Spotify's shift from chronological to algorithmic playlists, the introduction of ads that can't be skipped, the gradual degradation of audio quality to reduce bandwidth costs—all represent ways that commercial incentives reshape the sonic landscapes we inhabit. But there are also emergent possibilities for more ethical forms of acoustic mediation. Community-owned podcast platforms, open-source voice synthesis tools, participatory soundscape design projects—these point toward futures where listening technologies serve community flourishing rather than corporate profit extraction.</p>
+          <h3>Listening Forward</h3>
+          <p>Returning to that small, quiet room where this exploration began, we can now hear its silence differently. The subtle hum of digital infrastructure, the distant whisper of synthetic voices, the layered acoustic archaeology of urban life—all of these represent the complex negotiations between human and machine, natural and artificial, presence and mediation that define contemporary listening. The cognitive scientist Andy Clark argues that we are "natural-born cyborgs," beings whose minds naturally extend into our tools and technologies [12]. If Clark is right, then the question isn't whether our listening will be mediated by machines, but how we can shape that mediation to support human flourishing and social connection rather than exploitation and isolation. This requires what we might call "critical listening"—attention not just to what we hear, but to the technological, economic, and political systems that shape how we hear it. It means recognizing acoustic environments as designed spaces that can be redesigned. It means treating artificial intelligence not as an inevitable force but as a set of technologies that can be developed according to different values and priorities. The future of listening depends on our ability to maintain agency within increasingly mediated acoustic environments. This might involve developing new literacies around algorithmic curation, creating spaces for unmediated acoustic experience, supporting community control over sound technologies, or simply practicing the kind of attention that can hear the layers of presence within apparent silence. In the end, learning to listen critically in the digital age means recognizing that every acoustic environment—from the most natural soundscape to the most algorithmically curated playlist—is both a reflection of existing power relations and a space of potential transformation. The sounds that shape our worlds are not fixed; they are composed, and we can learn to compose them differently.</p>
+        </article>
+      </div>
+    </section>
+
+    <!-- SLIDE 13: References -->
+    <section class="slide" role="region" aria-labelledby="s13h">
+      <div class="frame">
+        <h2 id="s13h">References</h2>
+        <ol class="ref">
+          <li>[1] W. J. Ong, <em>Orality and Literacy</em>, 2nd ed., Routledge, 2002, pp. 21–47.</li>
+          <li>[2] R. M. Schafer, <em>The Soundscape</em>, Destiny Books, 1994, pp. 43–57.</li>
+          <li>[3] <em>99% Invisible</em>, “Episode 15: The Sound of the Artificial World,” Mar 31, 2020. <a href="https://99percentinvisible.org/episode/episode-15-the-sound-of-the-artificial-world/">Link</a></li>
+          <li>[4] J. Cage, <em>Silence: Lectures and Writings</em>, Wesleyan University Press, 1961, pp. 10–25.</li>
+          <li>[5] H. Herndon, “Holly Herndon: More‑than‑human, non‑human, inhuman,” <em>Passive/Aggressive</em>, May 23, 2019. <a href="https://passiveaggressive.dk/holly-herndon-proto/">Link</a></li>
+          <li>[6] B. L. Whorf, “The relation of habitual thought and behavior to language,” in <em>Language, Thought, and Reality</em>, MIT Press, 1956.</li>
+          <li>[7] C. Dolscheid et al., “The thickness of musical pitch,” <em>Psychological Science</em>, 24(5), 2013, 613–621.</li>
+          <li>[8] D. G. Haskell, “When the Earth Started to Sing,” <em>Emergence Magazine</em>, 2022. <a href="https://emergencemagazine.org/audio-story/when-the-earth-started-to-sing/">Link</a></li>
+          <li>[9] J. Sterne, <em>The Audible Past</em>, Duke University Press, 2003, pp. 33–59.</li>
+          <li>[10] <em>99% Invisible</em>, “Reverb: The Evolution of Architectural Acoustics,” Nov 6, 2019. <a href="https://99percentinvisible.org/episode/reverb-evolution-architectural-acoustics/">Link</a></li>
+          <li>[11] S. Zuboff, <em>The Age of Surveillance Capitalism</em>, PublicAffairs, 2019.</li>
+          <li>[12] A. Clark, <em>Natural‑Born Cyborgs</em>, Oxford University Press, 2003.</li>
+        </ol>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- Controls -->
+  <div class="controls" aria-label="Slide controls">
+    <button id="prev" class="btn" aria-label="Previous slide">◀ Prev</button>
+    <div class="progress" aria-hidden="true"><div class="bar" id="bar"></div></div>
+    <button id="next" class="btn" aria-label="Next slide">Next ▶</button>
+  </div>
+
+  <div id="sr-live" class="visually-hidden" aria-live="polite"></div>
+
+  <style>
+    .visually-hidden { position: absolute !important; height: 1px; width: 1px; overflow: hidden; clip: rect(1px, 1px, 1px, 1px); white-space: nowrap; }
+  </style>
+
+  <script>
+    (function() {
+      const deck = document.getElementById('deck');
+      const slides = Array.from(deck.querySelectorAll('.slide'));
+      const bar = document.getElementById('bar');
+      const prev = document.getElementById('prev');
+      const next = document.getElementById('next');
+      const live = document.getElementById('sr-live');
+
+      const idxFromHash = () => {
+        const m = location.hash.match(/#slide-(\d+)/);
+        const i = m ? parseInt(m[1],10)-1 : 0;
+        return (i >= 0 && i < slides.length) ? i : 0;
+      };
+      let i = idxFromHash();
+
+      const setSlide = (n, announce=true) => {
+        i = Math.max(0, Math.min(slides.length-1, n));
+        slides.forEach((s, k) => s.classList.toggle('current', k === i));
+        const pct = ((i+1)/slides.length)*100; bar.style.width = pct + '%';
+        history.replaceState(null, '', `#slide-${i+1}`);
+        // announce for screen readers
+        if (announce) {
+          const title = slides[i].querySelector('h1, h2, h3');
+          if (title) live.textContent = `Slide ${i+1} of ${slides.length}: ${title.textContent}`;
+        }
+        // enable/disable buttons
+        prev.disabled = (i===0); next.disabled = (i===slides.length-1);
+      };
+
+      // init
+      setSlide(i, false);
+
+      // controls
+      prev.addEventListener('click', () => setSlide(i-1));
+      next.addEventListener('click', () => setSlide(i+1));
+
+      // keyboard nav
+      window.addEventListener('keydown', (e) => {
+        const tag = (e.target && e.target.tagName) || '';
+        if(/INPUT|TEXTAREA|SELECT/.test(tag)) return;
+        if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { e.preventDefault(); setSlide(i+1); }
+        if (e.key === 'ArrowLeft' || e.key === 'PageUp' || e.key === 'Backspace') { e.preventDefault(); setSlide(i-1); }
+        if (e.key === 'Home') { e.preventDefault(); setSlide(0); }
+        if (e.key === 'End') { e.preventDefault(); setSlide(slides.length-1); }
+      });
+
+      // swipe nav
+      let touchX = null, touchY = null, t0 = 0;
+      deck.addEventListener('touchstart', (e) => {
+        const t = e.changedTouches[0];
+        touchX = t.clientX; touchY = t.clientY; t0 = Date.now();
+      }, {passive:true});
+      deck.addEventListener('touchend', (e) => {
+        if (touchX==null) return;
+        const t = e.changedTouches[0];
+        const dx = t.clientX - touchX; const dy = Math.abs(t.clientY - touchY);
+        const dt = Date.now() - t0; const TH = 40; // px threshold
+        if (Math.abs(dx) > TH && dy < TH && dt < 800) { setSlide(i + (dx < 0 ? 1 : -1)); }
+        touchX = touchY = null;
+      }, {passive:true});
+
+      // respond to hash changes (deep links)
+      window.addEventListener('hashchange', () => setSlide(idxFromHash()));
+
+      // Respect reduced motion
+      if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        document.documentElement.style.setProperty('scroll-behavior','auto');
+      }
+    })();
+  </script>
+</body>
+</html>

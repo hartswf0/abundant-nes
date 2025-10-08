@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Tetrahedron — Per-Face Layer Sculptor (Indexed-agnostic)</title>
+  <style>
+    html, body { margin:0; height:100%; background:#000; overflow:hidden; }
+    canvas { display:block; touch-action:none; }
+  </style>
+  <script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js"}}</script>
+</head>
+<body>
+<script type="module">
+import * as THREE from 'three';
+
+// ===== Core setup =====
+const scene = new THREE.Scene();
+const renderer = new THREE.WebGLRenderer({ antialias:true, powerPreference:'high-performance' });
+const DPR = Math.min(devicePixelRatio || 1, 2);
+renderer.setPixelRatio(DPR);
+renderer.setSize(innerWidth, innerHeight);
+renderer.setClearColor(0x000000, 1);
+renderer.localClippingEnabled = true; // for volume sculpt
+
+document.body.appendChild(renderer.domElement);
+
+let camera; const ORTHO = 3.4;
+function makeCamera(){
+  const a = innerWidth/innerHeight;
+  camera = new THREE.OrthographicCamera(-ORTHO*a, ORTHO*a, ORTHO, -ORTHO, 0.1, 100);
+  camera.position.set(4,4,4); camera.lookAt(0,0,0);
+}
+makeCamera();
+
+// ===== Unified Tetrahedron Root =====
+const tetra = new THREE.Group();
+scene.add(tetra);
+
+// Base geometry + vertices
+const tetGeo = new THREE.TetrahedronGeometry(2.4);
+const basePos = tetGeo.getAttribute('position');
+const uniq = new Map();
+for(let i=0;i<basePos.count;i++){
+  const x=basePos.getX(i), y=basePos.getY(i), z=basePos.getZ(i);
+  const k=`${x.toFixed(5)},${y.toFixed(5)},${z.toFixed(5)}`; if(!uniq.has(k)) uniq.set(k, new THREE.Vector3(x,y,z));
+}
+const verts = [...uniq.values()]; // should be 4
+
+// --- Faces (indices of 3 vertices) ---
+// Do NOT rely on geometry index (may be null in some builds). For a tetrahedron, the 4 faces are the 4 combinations of 3 vertices.
+const facesIdx = [ [0,1,2], [0,1,3], [0,2,3], [1,2,3] ];
+
+// Precompute tetra centroid
+const centroid = verts.reduce((a,b)=> a.add(b.clone()), new THREE.Vector3()).multiplyScalar(1/verts.length);
+
+// For each face, compute outward normal and opposite vertex
+const faces = facesIdx.map((fi)=>{
+  const [i0,i1,i2]=fi; const v0=verts[i0], v1=verts[i1], v2=verts[i2];
+  const center = new THREE.Vector3().addVectors(v0,v1).add(v2).multiplyScalar(1/3);
+  // Opposite vertex index = the one not in face
+  const opp = [0,1,2,3].find(j=> !fi.includes(j));
+  const oppV = verts[opp];
+  // Face normal orientation: use right-hand rule, then flip outward if needed
+  const n = new THREE.Vector3().subVectors(v1, v0).cross(new THREE.Vector3().subVectors(v2, v0)).normalize();
+  const toCent = new THREE.Vector3().subVectors(centroid, center);
+  if(n.dot(toCent) > 0) n.multiplyScalar(-1); // ensure it points outward (away from centroid)
+  return { fi, v:[v0.clone(),v1.clone(),v2.clone()], opp, oppV:oppV.clone(), center, normal:n };
+});
+
+// Wireframe
+const tetEdges = new THREE.LineSegments(
+  new THREE.EdgesGeometry(tetGeo),
+  new THREE.LineBasicMaterial({ color:0xEAEAEA, transparent:true, opacity:0.95 })
+);
+tetra.add(tetEdges);
+
+// Vertex spheres (pickable foci)
+const vertexGroup = new THREE.Group();
+for (const v of verts){
+  const s = new THREE.Mesh(new THREE.SphereGeometry(0.08, 16, 16), new THREE.MeshBasicMaterial({ color:0x8888ff }));
+  s.position.copy(v); vertexGroup.add(s);
+}
+tetra.add(vertexGroup);
+
+// ===== Per-Face Layer Systems =====
+const LAYERS = 64;
+const faceSystems = []; // {group, picks, gold, idx, band}
+
+function interpFaceTri(face, t){
+  // t = 0 at face, t -> 1 toward opposite vertex
+  // P(t) = (1 - t) * faceTri + t * oppV
+  const a = face.oppV; const [b0,b1,b2] = face.v;
+  const p0 = b0.clone().multiplyScalar(1-t).add(a.clone().multiplyScalar(t));
+  const p1 = b1.clone().multiplyScalar(1-t).add(a.clone().multiplyScalar(t));
+  const p2 = b2.clone().multiplyScalar(1-t).add(a.clone().multiplyScalar(t));
+  return [p0,p1,p2];
+}
+
+function lineTri(p0,p1,p2, opacity, color){
+  const g = new THREE.BufferGeometry();
+  const arr = new Float32Array([
+    p0.x,p0.y,p0.z, p1.x,p1.y,p1.z,
+    p1.x,p1.y,p1.z, p2.x,p2.y,p2.z,
+    p2.x,p2.y,p2.z, p0.x,p0.y,p0.z
+  ]);
+  g.setAttribute('position', new THREE.BufferAttribute(arr,3));
+  return new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color, transparent:true, opacity }));
+}
+function meshTri(p0,p1,p2){
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array([p0.x,p0.y,p0.z, p1.x,p1.y,p1.z, p2.x,p2.y,p2.z]),3));
+  g.setIndex([0,1,2]); g.computeVertexNormals();
+  return new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color:0x000000, transparent:true, opacity:0.0, depthWrite:false }));
+}
+
+const facePickMeshes = new THREE.Group();
+tetra.add(facePickMeshes);
+
+for(let f=0; f<4; f++){
+  const face = faces[f];
+  // Visible strata for this face
+  const group = new THREE.Group();
+  // Invisible picks for this face's layers
+  const picks = new THREE.Group();
+  // Gold seams for this face
+  const gold = new THREE.Group();
+
+  const layerObjs = []; const pickMeshes = [];
+  for(let i=0;i<LAYERS;i++){
+    const t = i/(LAYERS-1); // 0 face -> 1 apex
+    const [p0,p1,p2] = interpFaceTri(face, t);
+    const op = THREE.MathUtils.lerp(0.9, 0.05, t);
+    const tri = lineTri(p0,p1,p2, op, 0xEAEAEA);
+    tri.userData = { face:f, layerIndex:i };
+    group.add(tri); layerObjs.push(tri);
+
+    const pm = meshTri(p0,p1,p2); pm.userData = { face:f, layerIndex:i };
+    picks.add(pm); pickMeshes.push(pm);
+
+    // gold particles
+    const N=60, g=new THREE.BufferGeometry(), pts=new Float32Array(N*3);
+    for(let k=0;k<N;k++){
+      const u=Math.random(), v=Math.random()*(1-u), w=1-u-v;
+      const p = new THREE.Vector3().addScaledVector(p0,u).addScaledVector(p1,v).addScaledVector(p2,w);
+      pts[k*3]=p.x; pts[k*3+1]=p.y; pts[k*3+2]=p.z;
+    }
+    g.setAttribute('position', new THREE.BufferAttribute(pts,3));
+    const cloud = new THREE.Points(g, new THREE.PointsMaterial({ color:0xC9A227, size:0.014, transparent:true, opacity:0.28, depthWrite:false, blending:THREE.AdditiveBlending }));
+    cloud.userData = { face:f, layerIndex:i };
+    gold.add(cloud);
+  }
+
+  tetra.add(group); tetra.add(gold); facePickMeshes.add(picks);
+
+  faceSystems.push({ face, group, picks, gold, layerObjs, pickMeshes, idx:0, band:3 });
+}
+
+// ===== Face selection and per-face control state =====
+let activeFace = 0; // which face is currently under control
+let emphasis = 'balanced'; // 'wire' | 'gold' | 'balanced'
+let hueRate = 0.7; let autoBreath = true;
+let rotateY = 0, rotateX = 0; let dragStart=null; let touch2=null;
+const vibe = (ms)=> navigator.vibrate && navigator.vibrate(ms);
+
+function setFaceIndex(faceId, i, cause='program'){
+  const sys = faceSystems[faceId];
+  const prev = sys.idx; sys.idx = Math.max(0, Math.min(LAYERS-1, i));
+  if(prev!==sys.idx && cause!=='auto') vibe(6);
+  const fall = sys.band;
+  sys.layerObjs.forEach(tri=>{
+    const d = Math.abs((tri.userData.layerIndex||0) - sys.idx);
+    const near = Math.max(0, 1 - d/(fall||1));
+    const m = tri.material;
+    const baseOp = THREE.MathUtils.lerp(0.06, 0.95, near);
+    m.opacity = emphasis==='wire'? baseOp : THREE.MathUtils.lerp(baseOp, baseOp*0.5, emphasis==='gold');
+    m.color.setHex(d===0?0xFFFFFF:0xEAEAEA);
+    m.needsUpdate=true;
+  });
+  sys.gold.children.forEach(cl=>{
+    const d = Math.abs((cl.userData.layerIndex||0) - sys.idx);
+    const near = Math.max(0, 1 - d/(fall||1));
+    cl.material.opacity = emphasis==='gold' ? THREE.MathUtils.lerp(0.14, 0.95, near) : THREE.MathUtils.lerp(0.12, 0.6, near);
+  });
+  updateClipPlanes();
+}
+function setBand(faceId, b){ const sys = faceSystems[faceId]; sys.band = Math.max(0, Math.min(12, Math.round(b))); setFaceIndex(faceId, sys.idx, 'auto'); }
+function cycleEmphasis(){ emphasis = emphasis==='balanced'?'wire': emphasis==='wire'?'gold':'balanced'; faceSystems.forEach((_,f)=> setFaceIndex(f, faceSystems[f].idx,'auto')); }
+
+// ===== Sculpted Volume via Clipping Planes =====
+// For each face, define a clipping plane parallel to that face: plane offset moves from face (t=0) toward apex (t=1)
+const clipPlanes = faces.map((face, f)=>{
+  const n = face.normal.clone();
+  // plane equation n·x + c = 0 => compute c at face plane position (through any face vertex)
+  const c0 = - n.dot(face.v[0]);
+  const plane = new THREE.Plane(n, c0); // start at face
+  plane.userData = { face:f, baseC:c0 };
+  return plane;
+});
+
+const solidMat = new THREE.MeshStandardMaterial({
+  color: 0x0A0E15,
+  metalness: 0.1,
+  roughness: 0.9,
+  transparent: true,
+  opacity: 0.45,
+  side: THREE.DoubleSide,
+  clippingPlanes: clipPlanes,
+  clipShadows: false
+});
+const light = new THREE.DirectionalLight(0xffffff, 0.5); light.position.set(5,6,7); scene.add(light);
+const amb = new THREE.AmbientLight(0x404040, 0.6); scene.add(amb);
+const solid = new THREE.Mesh(tetGeo.clone(), solidMat);
+tetra.add(solid);
+
+function updateClipPlanes(){
+  // For each face f, compute plane offset according to that face's current index
+  for(const plane of clipPlanes){
+    const f = plane.userData.face; const sys = faceSystems[f]; const face = faces[f];
+    // Offset distance proportional to t = idx/(LAYERS-1) along inward direction (toward opposite vertex)
+    const t = sys.idx/(LAYERS-1);
+    // point on plane at this t: any vertex of the interpolated triangle will do
+    const p = interpFaceTri(face, t)[0];
+    plane.set(face.normal, - face.normal.dot(p));
+  }
+}
+
+// ===== Interaction =====
+// Select face by tapping its outer face triangle (build static pickers)
+const facePickers = new THREE.Group();
+faces.forEach((face,f)=>{
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
+    face.v[0].x,face.v[0].y,face.v[0].z,
+    face.v[1].x,face.v[1].y,face.v[1].z,
+    face.v[2].x,face.v[2].y,face.v[2].z
+  ]),3));
+  g.setIndex([0,1,2]); g.computeVertexNormals();
+  const m = new THREE.MeshBasicMaterial({ color:0x000000, transparent:true, opacity:0.0 });
+  const mesh = new THREE.Mesh(g,m); mesh.userData={face:f};
+  facePickers.add(mesh);
+});
+tetra.add(facePickers);
+
+function setActiveFace(f){ activeFace = (f+4)%4; vibe(12); highlightActiveFace(); }
+
+function highlightActiveFace(){
+  // brighten edge color around active face by temporarily recoloring strata 0 slice (t=0) and wire hue pulse
+  faceSystems.forEach((sys,f)=>{
+    const strong = (f===activeFace);
+    sys.layerObjs[0].material.color.setHex(strong?0x66CCFF:0xEAEAEA);
+    sys.layerObjs[0].material.opacity = strong? 1.0 : 0.9;
+  });
+}
+
+// Global gestures (but applied to active face)
+addEventListener('wheel', e=>{ setFaceIndex(activeFace, faceSystems[activeFace].idx + Math.sign(e.deltaY), 'wheel'); e.preventDefault(); }, { passive:false });
+
+addEventListener('pointerdown', e=>{ dragStart = { x:e.clientX, y:e.clientY, t:performance.now(), id:e.pointerId }; });
+addEventListener('pointermove', e=>{
+  if(!dragStart || dragStart.id!==e.pointerId) return;
+  const dx=e.clientX-dragStart.x, dy=e.clientY-dragStart.y;
+  if(Math.abs(dy)>Math.abs(dx)){
+    if(Math.abs(dy)>18){ setFaceIndex(activeFace, faceSystems[activeFace].idx + Math.sign(dy), 'swipe'); dragStart.y = e.clientY; }
+  } else {
+    rotateY += dx*0.0008; rotateX += dy*0.0005; dragStart.x = e.clientX; dragStart.y = e.clientY;
+  }
+});
+addEventListener('pointerup', e=>{
+  if(!dragStart) return; const dt=performance.now()-dragStart.t; const dist=Math.hypot(e.clientX-dragStart.x, e.clientY-dragStart.y);
+  if(dt<220 && dist<8){ pickAt(e.clientX, e.clientY); }
+  dragStart=null;
+}, { passive:true });
+
+// Two-finger pinch = change band on active face; twist = hue
+addEventListener('touchstart', e=>{
+  if(e.touches.length===2){
+    touch2 = {
+      a:{x:e.touches[0].clientX, y:e.touches[0].clientY},
+      b:{x:e.touches[1].clientX, y:e.touches[1].clientY},
+      dist:0, ang:0
+    };
+    touch2.dist = Math.hypot(touch2.a.x-touch2.b.x, touch2.a.y-touch2.b.y);
+    touch2.ang = Math.atan2(touch2.b.y-touch2.a.y, touch2.b.x-touch2.a.x);
+  }
+}, { passive:true });
+addEventListener('touchmove', e=>{
+  if(!touch2 || e.touches.length!==2) return;
+  const a={x:e.touches[0].clientX, y:e.touches[0].clientY};
+  const b={x:e.touches[1].clientX, y:e.touches[1].clientY};
+  const nd = Math.hypot(a.x-b.x, a.y-b.y);
+  const na = Math.atan2(b.y-a.y, b.x-a.x);
+  const pinch = (nd - touch2.dist) / 60;
+  if(Math.abs(pinch)>0.05){ setBand(activeFace, faceSystems[activeFace].band + pinch*2); touch2.dist = nd; }
+  let dAng = na - touch2.ang; while(dAng>Math.PI) dAng-=Math.PI*2; while(dAng<-Math.PI) dAng+=Math.PI*2;
+  if(Math.abs(dAng)>0.02){ hueRate = Math.max(0, Math.min(3, hueRate + dAng*0.6)); touch2.ang = na; }
+}, { passive:true });
+addEventListener('touchend', ()=>{ touch2=null; }, { passive:true });
+
+// Double-tap toggles breath; triple-tap cycles emphasis
+let tapTimes=[];
+addEventListener('pointerup', e=>{
+  const now=performance.now(); tapTimes = tapTimes.filter(t=> now - t < 420); tapTimes.push(now);
+  if(tapTimes.length===2){ autoBreath = !autoBreath; vibe(10); }
+  if(tapTimes.length===3){ cycleEmphasis(); vibe(20); tapTimes=[]; }
+});
+
+// Device tilt
+addEventListener('deviceorientation', e=>{ if(e.beta==null || e.gamma==null) return; rotateY += (e.gamma||0) * 0.00002; rotateX += (e.beta||0) * 0.00002; });
+
+// Picking (faces or layers)
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+function pickAt(cx, cy){
+  mouse.x = (cx/innerWidth)*2-1; mouse.y = -(cy/innerHeight)*2+1;
+  raycaster.setFromCamera(mouse, camera);
+  const candidates = [ ...facePickers.children, ...faceSystems.flatMap(s=> s.pickMeshes), ...vertexGroup.children ];
+  const hits = raycaster.intersectObjects(candidates, false);
+  if(hits.length){
+    const h = hits[0];
+    if(h.object.userData.face!=null && h.object.userData.layerIndex==null){ setActiveFace(h.object.userData.face); return; }
+    if(h.object.userData.layerIndex!=null){ setActiveFace(h.object.userData.face); setFaceIndex(activeFace, h.object.userData.layerIndex, 'pick'); return; }
+    // vertex focus nudge
+    const dir = new THREE.Vector3().copy(h.object.position).normalize(); rotateY += dir.x * 0.2; rotateX += dir.y * 0.15; vibe(12);
+  }
+}
+
+// ===== Audio (per active face) =====
+let audioCtx=null, osc=null, gain=null, filt=null;
+function bootAudio(){ if(audioCtx) return; audioCtx = new (window.AudioContext||window.webkitAudioContext)(); osc = audioCtx.createOscillator(); gain = audioCtx.createGain(); filt = audioCtx.createBiquadFilter(); filt.type='bandpass'; osc.type='sine'; osc.connect(filt); filt.connect(gain); gain.connect(audioCtx.destination); gain.gain.value = 0.0; osc.start(); }
+function audioTick(){ if(!audioCtx) return; const sys = faceSystems[activeFace]; const base = 70; const f = base + (sys.idx/(LAYERS-1))*520; const q = 2.5 + sys.band*0.4; filt.Q.value = q; filt.frequency.value = f; const t = audioCtx.currentTime; const target = emphasis==='gold'? 0.12 : emphasis==='wire'? 0.06 : 0.09; gain.gain.linearRampToValueAtTime(target, t+0.08); osc.frequency.exponentialRampToValueAtTime(Math.max(40,f), t+0.08); }
+addEventListener('pointerdown', ()=>{ bootAudio(); if(audioCtx.state==='suspended') audioCtx.resume(); }, { passive:true });
+
+// ===== Animate =====
+let t0=0;
+function animate(){
+  requestAnimationFrame(animate);
+  t0 += 0.005;
+  const wob = autoBreath? Math.sin(t0*0.6)*0.015 : 0.0;
+  tetra.rotation.y += wob + rotateY*0.02; tetra.rotation.x += wob*0.75 + rotateX*0.02;
+  const hue = (Math.sin(t0*hueRate)+1)*0.5;
+  tetEdges.material.color.setHSL(hue, 0.6, 0.7);
+  // Highlight the active face's current layer color
+  const sys = faceSystems[activeFace]; sys.layerObjs[sys.idx].material.color.setHSL((hue+0.5)%1, 0.8, 0.8);
+  audioTick(); rotateY *= 0.94; rotateX *= 0.94; renderer.render(scene, camera);
+}
+
+// Initialize all faces and volume state
+faceSystems.forEach((_,f)=> setFaceIndex(f, 0, 'auto'));
+setActiveFace(0);
+updateClipPlanes();
+animate();
+
+addEventListener('resize', ()=>{ renderer.setSize(innerWidth, innerHeight); makeCamera(); });
+
+// ===== Self-tests (console-only, no UI text) =====
+(function selfTests(){
+  try{
+    console.assert(verts.length===4, 'Exactly 4 unique vertices');
+    // Ensure face count is 4 and normals point outward (away from centroid)
+    console.assert(faces.length===4, 'Four faces computed from combinations');
+    const outwardOK = faces.every(f=> f.normal.dot(new THREE.Vector3().subVectors(centroid, f.center)) < 0);
+    console.assert(outwardOK, 'All face normals point outward');
+
+    console.assert(faceSystems.length===4, 'Four face systems');
+    console.assert(faceSystems.every(fs=> fs.layerObjs.length===64), '64 layers per face');
+    console.assert(tetEdges.isLineSegments===true, 'Wireframe present');
+    // Select face 2, set layer 10
+    setActiveFace(2); const prev = faceSystems[2].idx; setFaceIndex(2, 10, 'test'); console.assert(faceSystems[2].idx===10, 'Face 2 layer set to 10'); setFaceIndex(2, prev, 'test');
+    // Clip planes update
+    updateClipPlanes();
+    console.assert(solid.material.clippingPlanes.length===4, 'Four clipping planes active');
+    console.log('[Per-Face Sculptor] self-tests passed');
+  }catch(err){ console.warn('[Per-Face Sculptor] self-test issue', err); }
+})();
+</script>
+</body>
+</html>

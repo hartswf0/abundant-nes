@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+  <title>Hypertetrahedral Temporal Control Gizmo — Rich Layers</title>
+  <style>
+    :root { --bg:#090c12; --fg:#c9d7ff; --accent:#7aa2ff; --gold:#c9a227; }
+    html, body { height:100%; margin:0; background:var(--bg); color:var(--fg); }
+    canvas { display:block; touch-action:none; }
+    .hud { position:fixed; inset:0; pointer-events:none; }
+    .ring { position:absolute; width:10px; height:10px; border-radius:50%; outline:2px solid #5ea1ff55; box-shadow:0 0 12px #5ea1ff55; transform:translate(-50%, -50%); opacity:0; transition:opacity .2s ease; }
+    .scope { position:fixed; right:env(safe-area-inset-right,8px); bottom:calc(8px + env(safe-area-inset-bottom,8px)); width:200px; height:84px; border-radius:12px; background:#0d1220aa; backdrop-filter:blur(6px); outline:1px solid #27407a; box-shadow:0 8px 24px #0006; }
+    .scope canvas { width:100%; height:100%; }
+    .btns { position:fixed; left:env(safe-area-inset-left,8px); bottom:calc(8px + env(safe-area-inset-bottom,8px)); display:flex; gap:8px; }
+    .btn { width:36px; height:36px; border-radius:10px; background:#0d1220cc; outline:1px solid #27407a; box-shadow:inset 0 0 0 1px #0b1733; display:grid; place-items:center; pointer-events:auto; }
+    .btn svg { width:18px; height:18px; fill:#9bb7ff; opacity:.85; }
+    .btn:active { filter:brightness(1.2); }
+    .badge { position:fixed; left:8px; top:8px; background:#0d1220cc; outline:1px solid #27407a; backdrop-filter:blur(6px); border-radius:10px; padding:6px 10px; font:600 11px/1.2 ui-sans-serif,system-ui; color:#bcd1ff; pointer-events:none }
+  </style>
+  <script type="importmap">{"imports":{ "three":"https://unpkg.com/three@0.160.1/build/three.module.js", "three/addons/":"https://unpkg.com/three@0.160.1/examples/jsm/" }}</script>
+</head>
+<body>
+  <div id="hud" class="hud">
+    <div id="ring" class="ring"></div>
+    <div class="scope"><canvas id="osc"></canvas></div>
+    <div class="btns">
+      <div class="btn" id="playPause" title="Play/Pause" aria-label="Play/Pause"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></div>
+      <div class="btn" id="rec" title="Snapshot" aria-label="Snapshot"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/></svg></div>
+      <div class="btn" id="load" title="Load State/Media" aria-label="Load"><svg viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 19h16"/></svg></div>
+      <div class="btn" id="media" title="Media Layers" aria-label="Media Layers"><svg viewBox="0 0 24 24"><path d="M4 5h16v4H4zM4 10h10v4H4zM4 15h7v4H4z"/></svg></div>
+      <input id="file" type="file" accept="application/json,text/plain,.json" hidden />
+    </div>
+  </div>
+  <div class="badge" id="layerBadge">Shells: — · Veins: — · Media: 0</div>
+
+  <!-- Media panel -->
+  <div id="mediaPanel" style="position:fixed;left:8px;right:8px;bottom:calc(56px + env(safe-area-inset-bottom,8px));background:#0b1020cc;border:1px solid #27407a;border-radius:12px;backdrop-filter:blur(8px);box-shadow:0 8px 24px #0006;display:none">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px">
+      <div style="display:flex;gap:8px;align-items:center">
+        <svg width="18" height="18" viewBox="0 0 24 24" style="fill:#9bb7ff;opacity:.9"><path d="M4 5h16v4H4zM4 10h10v4H4zM4 15h7v4H4z"/></svg>
+        <div id="mediaStatus" style="font-size:12px;color:#aecdff;opacity:.9"></div>
+      </div>
+      <button id="mediaClose" class="btn" style="width:28px;height:28px"><svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+    </div>
+    <div id="mediaTray" style="display:flex;gap:8px;overflow:auto;padding:8px 10px 12px"></div>
+    <div id="mediaViewer" style="display:flex;align-items:center;justify-content:center;max-height:36vh;border-top:1px solid #27407a;background:#000"></div>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // ========== Self-tests (won't modify UI) ==========
+    (function(){
+      console.assert(!!THREE && !!THREE.Vector3 && typeof OrbitControls==='function', 'three + OrbitControls loaded');
+    })();
+
+    // ---- Renderer & Scene (defer starting the loop until after state is initialized) ----
+    const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:false, powerPreference:'high-performance' });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    document.body.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue('--bg'));
+
+    const camera = new THREE.PerspectiveCamera(50, innerWidth/innerHeight, 0.01, 100);
+    camera.position.set(0.9, 0.9, 1.9);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true; controls.dampingFactor = 0.06; controls.enablePan = false;
+
+    // Lights
+    const key = new THREE.DirectionalLight(0xffffff, 1.0); key.position.set(2, 3, 4);
+    const fill = new THREE.DirectionalLight(0x88aaff, 0.5); fill.position.set(-3, -2, 1);
+    const rim  = new THREE.PointLight(0x3a79ff, 1.6, 6); rim.position.set(0, 1.6, -1.2);
+    scene.add(key, fill, rim);
+
+    // ===== Base Tetra =====
+    const radius = 0.64, detail = 0; // flat faces
+    const tetraGeo = new THREE.TetrahedronGeometry(radius, detail);
+
+    // Outer skin (wire + face materials)
+    const faceMaterials = [];
+    const faceMesh = new THREE.Mesh();
+    {
+      const geo = tetraGeo.clone(); geo.clearGroups();
+      const triCount = geo.index ? geo.index.count/3 : geo.attributes.position.count/3;
+      for (let i=0;i<triCount;i++) {
+        const mat = new THREE.MeshStandardMaterial({ color:0x0f172a, metalness:0.2, roughness:0.45, emissive:0x2a6cff, emissiveIntensity:0.0, transparent:true, opacity:0.9 });
+        faceMaterials.push(mat); geo.addGroup(i*3, 3, i);
+      }
+      faceMesh.geometry = geo; faceMesh.material = faceMaterials; scene.add(faceMesh);
+      console.assert(triCount===4, 'Expected 4 triangular faces');
+    }
+
+    const edges = new THREE.LineSegments(new THREE.EdgesGeometry(tetraGeo), new THREE.LineDashedMaterial({ color:0x7aa2ff, dashSize:0.05, gapSize:0.03 }));
+    edges.computeLineDistances(); scene.add(edges);
+
+    // ===== Robust vertex extraction (prevents undefined.x) =====
+    function uniqueVertsFrom(geo){
+      const a = geo.getAttribute('position');
+      const list = [];
+      for(let i=0;i<a.count;i++) list.push(new THREE.Vector3().fromBufferAttribute(a, i));
+      const map = new Map(list.map(p=>[p.toArray().map(n=>n.toFixed(5)).join(','), p]));
+      return [...map.values()];
+    }
+    function canonicalTetraVerts(r=1){
+      const s = r/Math.sqrt(3);
+      return [ new THREE.Vector3(1,1,1), new THREE.Vector3(-1,-1,1), new THREE.Vector3(-1,1,-1), new THREE.Vector3(1,-1,-1) ].map(v=>v.multiplyScalar(s));
+    }
+    function getTetraVerts(geo, r){
+      const u = uniqueVertsFrom(geo);
+      if(u.length===4 && u.every(v=>v && Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.z))) return u;
+      console.warn('Fallback to canonical tetra verts (found', u.length, ')');
+      return canonicalTetraVerts(r);
+    }
+
+    const verts = getTetraVerts(tetraGeo, radius);
+
+    // Vertex orbs (guarded)
+    const vGeo = new THREE.SphereGeometry(0.03, 16, 16);
+    const vMat = new THREE.MeshStandardMaterial({ color:0x9bb7ff, emissive:0x4f7cff, emissiveIntensity:0.25, roughness:0.2 });
+    const vertexMeshes = [];
+    verts.forEach(p=>{
+      if(!(p && Number.isFinite(p.x))) return; // safety
+      const m=new THREE.Mesh(vGeo, vMat.clone()); m.position.set(p.x, p.y, p.z); scene.add(m); vertexMeshes.push(m);
+    });
+
+    // ===== Richness: Inner Shells (instanced) =====
+    const SHELLS = 18; // layered inner tetra shells
+    const shellGeo = new THREE.TetrahedronGeometry(radius*0.98, 0);
+    const shellMat = new THREE.MeshStandardMaterial({ color:0x1b2948, emissive:0x1a56ff, emissiveIntensity:0.0, transparent:true, opacity:0.08, metalness:0.1, roughness:0.85, side:THREE.DoubleSide });
+    const shells = new THREE.InstancedMesh(shellGeo, shellMat, SHELLS);
+    const m4 = new THREE.Matrix4();
+    for(let i=0;i<SHELLS;i++){ const s = 0.2 + (i+1)/SHELLS*0.74; m4.makeScale(s,s,s); shells.setMatrixAt(i, m4); shells.setColorAt?.(i, new THREE.Color().setHSL(0.6 + i*0.02, 0.6, 0.5)); }
+    scene.add(shells);
+
+    // ===== Richness: Edge Veins (animated particles along edges) =====
+    function tetraEdges(v4){ return [[v4[0],v4[1]],[v4[0],v4[2]],[v4[0],v4[3]],[v4[1],v4[2]],[v4[1],v4[3]],[v4[2],v4[3]]]; }
+    const veinGroup = new THREE.Group(); scene.add(veinGroup);
+    const edgePairs = tetraEdges(verts);
+    const VEIN_PER_EDGE = 60;
+    const veinMats = [];
+    for (let e=0; e<edgePairs.length; e++){
+      const [a,b] = edgePairs[e];
+      if(!(a && b && Number.isFinite(a.x) && Number.isFinite(b.x))){ console.warn('Invalid edge pair at', e, edgePairs[e]); continue; }
+      const geo = new THREE.BufferGeometry();
+      const pos = new Float32Array(VEIN_PER_EDGE*3);
+      for(let i=0;i<VEIN_PER_EDGE;i++){
+        const t = i/VEIN_PER_EDGE; const p = new THREE.Vector3().lerpVectors(a,b,t);
+        pos[i*3]=p.x; pos[i*3+1]=p.y; pos[i*3+2]=p.z;
+      }
+      geo.setAttribute('position', new THREE.BufferAttribute(pos,3));
+      const mat = new THREE.PointsMaterial({ color:0x7aa2ff, size:0.01, transparent:true, opacity:0.8, depthWrite:false, blending:THREE.AdditiveBlending });
+      veinMats.push(mat);
+      const pts = new THREE.Points(geo, mat); veinGroup.add(pts);
+    }
+
+    // ===== Richness: Interior Scan Slices (mini planes) =====
+    const SLICE_COUNT = 12; const slices = new THREE.Group(); scene.add(slices);
+    for(let i=0;i<SLICE_COUNT;i++){
+      const g=new THREE.PlaneGeometry(radius*1.2, radius*1.2, 18, 18);
+      const m=new THREE.MeshBasicMaterial({ color:0x6ea0ff, transparent:true, opacity:0.06, wireframe:true });
+      const pl = new THREE.Mesh(g,m); pl.rotation.set(Math.PI/2, 0, (i/SLICE_COUNT)*Math.PI*2); pl.position.y = THREE.MathUtils.lerp(-radius*0.5, radius*0.5, i/(SLICE_COUNT-1));
+      slices.add(pl);
+    }
+
+    // ===== State including media engine (declare BEFORE any code that might use it) =====
+    const state = {
+      t: 0,
+      playing: true,
+      faces: faceMaterials.map(()=>({ warp: 0.0, complexity: 0.0 })),
+      edges: { dashOffset: 0.0, energy: 0.0 },
+      vertices: vertexMeshes.map(()=>({ pulse: 0.0 })),
+      trail: [],
+      media: {
+        active: 0,
+        banks: [[],[],[],[]], // per face; each is an array of media items
+        unified: [],          // flattened master list
+      }
+    };
+
+    // Default seed media (can be replaced by import). Kept minimal (no external URLs bundled).
+    state.media.unified = [
+      { title:"Biden – SOTU clip", type:"video", url:"", tag:"biden" },
+      { title:"Campaign still",  type:"image", url:"", tag:"biden" },
+      { title:"Press audio",     type:"audio", url:"", tag:"biden" }
+    ];
+    // Place same seed into face banks as placeholders
+    for(let f=0; f<4; f++) state.media.banks[f] = JSON.parse(JSON.stringify(state.media.unified));
+
+    // ===== Picking & input =====
+    const ray = new THREE.Raycaster(); const pointer = new THREE.Vector2();
+    let dragging=null; let lastHit=null; let holdTimer=null;
+
+    function setPointerFromEvent(e){ const x=(e.touches? e.touches[0].clientX:e.clientX)/innerWidth*2-1; const y=-( (e.touches? e.touches[0].clientY:e.clientY)/innerHeight )*2+1; pointer.set(x,y); }
+    function vibrate(ms=12){ if(navigator.vibrate) navigator.vibrate(ms); }
+    function pick(){ ray.setFromCamera(pointer, camera); const faceHits=ray.intersectObject(faceMesh,false); let hit=faceHits[0]?{ type:'face', index:(faceHits[0].faceIndex|0), point:faceHits[0].point }:null; if(!hit){ const vHits=ray.intersectObjects(vertexMeshes,false); if(vHits[0]) hit={ type:'vertex', index:vertexMeshes.indexOf(vHits[0].object), point:vHits[0].point }; } return hit; }
+
+    const ring = document.getElementById('ring');
+    function showRing(x,y){ ring.style.left=x+'px'; ring.style.top=y+'px'; ring.style.opacity=1; clearTimeout(showRing._t); showRing._t=setTimeout(()=>ring.style.opacity=0,200); }
+
+    function onDown(e){ setPointerFromEvent(e); const hit=pick(); if(hit){ lastHit=hit; const sx=e.touches?e.touches[0].clientX:e.clientX; const sy=e.touches?e.touches[0].clientY:e.clientY; showRing(sx,sy); vibrate(10);
+      if(hit.type==='face'){ dragging={ type:'face', index:hit.index, startWarp:state.faces[hit.index].warp }; cycleMediaBank(hit.index); }
+      else if(hit.type==='vertex'){ dragging={ type:'vertex', index:hit.index, startWarp:state.vertices[hit.index].pulse }; }
+      holdTimer=setTimeout(()=>{ state.playing=!state.playing; vibrate(30); }, 420);
+    }}
+    function onMove(e){ if(!dragging) return; e.preventDefault(); const clientX=e.touches?e.touches[0].clientX:e.clientX; const clientY=e.touches?e.touches[0].clientY:e.clientY; const nx=(clientX/innerWidth)*2-1; const ny=-(clientY/innerHeight)*2+1; const delta=Math.hypot(nx-pointer.x, ny-pointer.y); const sign=Math.sign(nx-pointer.x || 1);
+      if(dragging.type==='face'){ const i=dragging.index; state.faces[i].warp=THREE.MathUtils.clamp(dragging.startWarp + sign*delta*3.2, -2.5, 2.5); state.faces[i].complexity=THREE.MathUtils.smoothstep(Math.abs(state.faces[i].warp), 0, 2.5); syncMediaTimeFromWarp(i); }
+      else if(dragging.type==='vertex'){ const i=dragging.index; state.vertices[i].pulse=THREE.MathUtils.clamp(dragging.startWarp + sign*delta*4.0, -3.0, 3.0); }
+      state.edges.energy = 0.25 + 0.75*avgFaceComplexity(); state.trail.push([clientX, clientY, Date.now()]); }
+    function onUp(){ dragging=null; clearTimeout(holdTimer); holdTimer=null; }
+
+    // Attach input AFTER state exists
+    renderer.domElement.addEventListener('pointerdown', onDown, { passive:true });
+    addEventListener('pointermove', onMove, { passive:false });
+    addEventListener('pointerup', onUp, { passive:true });
+    addEventListener('pointercancel', onUp, { passive:true });
+
+    // ===== Audio =====
+    let AC, masterGain; const vertexOsc = [];
+    function initAudio(){ if(AC) return; AC=new (window.AudioContext||window.webkitAudioContext)(); masterGain=AC.createGain(); masterGain.gain.value=0.05; masterGain.connect(AC.destination); vertexMeshes.forEach((_,i)=>{ const osc=AC.createOscillator(); osc.type='sine'; osc.frequency.value=220+i*60; const gain=AC.createGain(); gain.gain.value=0.0; const p=AC.createStereoPanner?AC.createStereoPanner():AC.createGain(); if(p.pan) p.pan.value=(i-1.5)/1.5; osc.connect(gain).connect(p).connect(masterGain); osc.start(); vertexOsc.push({osc,gain,p}); }); }
+    addEventListener('pointerdown', ()=>{ initAudio(); if(AC && AC.state==='suspended') AC.resume(); }, { once:true, passive:true });
+
+    // ===== Oscilloscope HUD =====
+    const oscCanvas=document.getElementById('osc'); const octx=oscCanvas.getContext('2d');
+    function drawScope(){ const w=oscCanvas.width=oscCanvas.clientWidth*devicePixelRatio; const h=oscCanvas.height=oscCanvas.clientHeight*devicePixelRatio; octx.clearRect(0,0,w,h); octx.globalAlpha=0.9; octx.fillStyle='#0b1022'; octx.fillRect(0,0,w,h); octx.strokeStyle='#6ea0ff'; octx.lineWidth=2; octx.beginPath(); const N=140, now=performance.now()*0.001; for(let i=0;i<N;i++){ const x=i/(N-1)*w; const y=h*0.5 + Math.sin(now*2 + i*0.22) * 12 * (0.2 + avgFaceComplexity()); if(i===0) octx.moveTo(x,y); else octx.lineTo(x,y);} octx.stroke(); const ttl=800, tnow=Date.now(); state.trail = state.trail.filter(([, , t])=> tnow-t < ttl); octx.strokeStyle='#a6c4ff66'; octx.lineWidth=1; octx.beginPath(); state.trail.forEach(([x,y],i)=>{ const sx=x/innerWidth*w, sy=y/innerHeight*h; if(i===0) octx.moveTo(sx,sy); else octx.lineTo(sx,sy); }); octx.stroke(); }
+
+    // ===== Media panel & import =====
+    const playBtn=document.getElementById('playPause');
+    const recBtn=document.getElementById('rec');
+    const loadBtn=document.getElementById('load');
+    const mediaBtn=document.getElementById('media');
+    const fileInp=document.getElementById('file');
+
+    const mediaPanel=document.getElementById('mediaPanel');
+    const mediaTray=document.getElementById('mediaTray');
+    const mediaViewer=document.getElementById('mediaViewer');
+    const mediaStatus=document.getElementById('mediaStatus');
+    const mediaClose=document.getElementById('mediaClose');
+    const layerBadge=document.getElementById('layerBadge');
+
+    mediaClose.addEventListener('click', ()=> mediaPanel.style.display='none');
+    mediaBtn.addEventListener('click', ()=> toggleMediaPanel());
+
+    playBtn.addEventListener('click', ()=>{ state.playing=!state.playing; vibrate(15); initAudio(); if(AC && AC.state==='suspended') AC.resume(); });
+    recBtn.addEventListener('click', ()=>{ snapshot(); vibrate(20); });
+    loadBtn.addEventListener('click', ()=> fileInp.click());
+
+    fileInp.addEventListener('change', async (e)=>{
+      const file=e.target.files[0]; if(!file) return; const txt=await file.text();
+      try{
+        // Accept two schemas: {media:[...]}, or {layers:[{title,text,source,media:[...]}]}
+        const data = parseLooseJSON(txt);
+        if(Array.isArray(data?.media)){ // unified list
+          state.media.unified = data.media;
+          for(let f=0; f<4; f++) state.media.banks[f] = JSON.parse(JSON.stringify(state.media.unified));
+        }
+        if(Array.isArray(data?.layers)){
+          // Distribute layers across faces (round-robin), pull any media arrays
+          state.media.unified = [];
+          for(let f=0; f<4; f++) state.media.banks[f] = [];
+          data.layers.forEach((L, i)=>{
+            const mlist = Array.isArray(L.media)? L.media : [];
+            const face = i % 4; state.media.banks[face].push(...mlist); state.media.unified.push(...mlist);
+          });
+        }
+        renderMediaTray(); vibrate(30); updateBadge();
+      } catch(err){ console.warn('Invalid JSON for media/layers', err); }
+    });
+
+    function toggleMediaPanel(){ if(mediaPanel.style.display==='none' || !mediaPanel.style.display){ renderMediaTray(); mediaPanel.style.display='block'; } else mediaPanel.style.display='none'; }
+
+    function renderMediaTray(){ mediaTray.innerHTML=''; const items = state.media.unified; mediaStatus.textContent = `${items.length} item${items.length!==1?'s':''}`; showMedia(items[0]); items.forEach((m)=>{ const b=document.createElement('button'); b.className='btn'; b.style.minWidth='64px'; b.style.height='36px'; b.innerHTML = `<svg viewBox='0 0 24 24' width='16' height='16' style='fill:#9bb7ff;opacity:.9'>${iconPath(m.type)}</svg>`; b.addEventListener('click', ()=>{ showMedia(m); vibrate(8); }); mediaTray.appendChild(b); }); }
+
+    function iconPath(type){ if(type==='video') return "<path d='M4 6h12v12H4zM16 10l4-2v8l-4-2z'/>"; if(type==='audio') return "<path d='M9 7v10l6-4V11l4-2v6'/>"; return "<path d='M4 5h16v14H4z'/>"; }
+
+    function showMedia(m){ mediaViewer.innerHTML=''; if(!m) return; let node; if(m.type==='image'){ node = new Image(); node.src=m.url; node.alt=m.title||'image'; } else if(m.type==='video'){ node=document.createElement('video'); node.src=m.url; node.controls=true; node.playsInline=true; } else if(m.type==='audio'){ node=document.createElement('audio'); node.src=m.url; node.controls=true; } else { node=document.createElement('div'); node.style.padding='12px'; node.style.color='#9bb7ff'; node.textContent='Unsupported media'; } mediaViewer.appendChild(node); }
+
+    // ===== Media control mappings =====
+    function cycleMediaBank(faceIndex){ const bank=state.media.banks[faceIndex]||[]; if(!bank.length) return; state.media.active = (state.media.active + 1) % bank.length; if(mediaPanel.style.display==='block'){ showMedia(bank[state.media.active]); } }
+    function syncMediaTimeFromWarp(faceIndex){ const bank=state.media.banks[faceIndex]||[]; const m = bank[state.media.active]; if(!m) return; const el = mediaViewer.querySelector('video, audio'); if(el && el.duration && isFinite(el.duration)){ const w = state.faces[faceIndex].warp; const t = (w+2.5)/5; el.currentTime = t * el.duration; } }
+
+    // ===== Animate (start AFTER state exists) =====
+    function animate(){
+      const dt = 0.016; state.t += (state.playing? dt : 0);
+
+      // Face glow & opacity
+      faceMaterials.forEach((m,i)=>{ const f=state.faces[i]; const beat=Math.sin(state.t*(1.5+Math.abs(f.warp)))*0.5+0.5; m.emissiveIntensity=0.05 + f.complexity*(0.25+0.9*beat); m.opacity=0.82 + 0.18*Math.sin(state.t*0.8 + i); });
+
+      // Edges dash flow
+      edges.material.dashOffset -= dt * (0.5 + state.edges.energy); edges.material.needsUpdate=true;
+
+      // Vertex pulse & audio
+      vertexMeshes.forEach((vm,i)=>{ const v=state.vertices[i]; const s=1+0.6*Math.sin(state.t*2 + v.pulse); vm.scale.setScalar(THREE.MathUtils.lerp(vm.scale.x, 0.9+0.12*s, 0.2)); if(vertexOsc[i]) vertexOsc[i].gain.gain.value=0.02 + 0.08*Math.max(0, Math.sin(state.t*2 + v.pulse)); });
+
+      // Inner shells shimmer (depth cue)
+      for(let i=0;i<SHELLS;i++){ const phase = (i/SHELLS); const inten = 0.06 + 0.45*Math.abs(Math.sin(state.t*1.2 + phase*6.283)); shells.setColorAt?.(i, new THREE.Color().setHSL(0.60 + phase*0.1, 0.6, 0.4 + inten*0.2)); } shells.instanceColor && (shells.instanceColor.needsUpdate=true);
+      shells.material.emissiveIntensity = 0.05 + 0.6*avgFaceComplexity();
+
+      // Veins drift
+      veinGroup.children.forEach((pts, idx)=>{ const m=pts.material; m.opacity = 0.4 + 0.5*Math.abs(Math.sin(state.t*1.8 + idx)); const p=pts.geometry.attributes.position; for(let i=0;i<p.count;i++){ const j=i*3; const x=p.array[j], y=p.array[j+1], z=p.array[j+2]; const k = (i/p.count + state.t*0.25 + idx*0.07)%1; p.array[j] = x*(1+0.02*Math.sin(6.283*k)); p.array[j+2] = z*(1+0.02*Math.cos(6.283*k)); } p.needsUpdate=true; });
+
+      // Slices wobble slowly
+      slices.children.forEach((pl, i)=>{ pl.rotation.z += 0.001 + i*0.00002; pl.material.opacity = 0.03 + 0.12*Math.abs(Math.sin(state.t*0.9 + i*0.3)); });
+
+      // Slow autonomous rotation
+      faceMesh.rotation.y += 0.10*dt; faceMesh.rotation.x += 0.06*dt; edges.rotation.copy(faceMesh.rotation); vertexMeshes.forEach(v=> v.rotation.copy(faceMesh.rotation)); shells.rotation.copy(faceMesh.rotation); veinGroup.rotation.copy(faceMesh.rotation); slices.rotation.copy(faceMesh.rotation);
+
+      // Rim light ties to complexity
+      rim.intensity = 0.7 + 1.1*avgFaceComplexity();
+
+      controls.update(); renderer.render(scene, camera); drawScope(); updateBadge();
+    }
+
+    function avgFaceComplexity(){ return state.faces.reduce((a,f)=>a+f.complexity,0)/state.faces.length; }
+
+    // ===== Snapshot (includes media) =====
+    function snapshot(){ const data={ faces:state.faces.map(f=>({warp:f.warp})), vertices:state.vertices.map(v=>({pulse:v.pulse})), playing:state.playing, media:{ banks:state.media.banks, unified:state.media.unified } }; const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='hypertetrahedron_rich_state.json'; document.body.appendChild(a); a.click(); a.remove(); }
+
+    // ===== Utilities =====
+    function updateBadge(){ layerBadge.textContent = `Shells: ${SHELLS} · Veins: ${edgePairs.length}×${VEIN_PER_EDGE} · Media: ${state.media.unified.length}`; }
+    function parseLooseJSON(txt){
+      try { return JSON.parse(txt); } catch{ /* try to eval arrays from JS-like source */ }
+      try {
+        // Very permissive: extract `LAYERS` and `MEDIA` arrays from a JS or HTML file
+        const layersMatch = txt.match(/const\s+LAYERS\s*=\s*(\[[\s\S]*?\]);/);
+        const mediaMatch  = txt.match(/const\s+MEDIA\s*=\s*(\{\[?[\s\S]*?\]?\});/);
+        const out = {};
+        if(layersMatch){ out.layers = eval('('+layersMatch[1]+')').map(([title,text,source])=>({title,text,source,media:[]})); }
+        if(mediaMatch){ const mediaObj = eval('('+mediaMatch[1]+')'); out.layers = out.layers||[]; // attach if indices present
+          Object.keys(mediaObj).forEach(k=>{ const ix=Number(k); const arr=mediaObj[k]; if(!out.layers[ix]) out.layers[ix]={title:`Layer ${ix+1}`,text:'',source:'',media:[]}; out.layers[ix].media = arr; });
+        }
+        if(Object.keys(out).length) return out;
+      } catch(err) { console.warn('Loose JSON parse failed', err); }
+      throw new Error('Unable to parse JSON/JS media payload');
+    }
+
+    // ===== Tests =====
+    (function tests(){
+      console.assert(shells.count===SHELLS, 'instanced shells count');
+      console.assert(veinGroup.children.length===6, 'vein edge groups = 6');
+      const prev = state.media.active; state.media.active = 0; state.media.banks[0] = [{type:'audio',url:'test.mp3'}]; cycleMediaBank(0); console.assert(state.media.active===0, 'single-item cycle stable');
+      // iconPath tests
+      console.assert(typeof iconPath === 'function', 'iconPath is a function');
+      console.assert(/<path/.test(iconPath('video')), 'iconPath(video) returns an SVG path');
+      console.assert(iconPath('unknown').includes("M4 5h16v14H4z"), 'iconPath(default) returns image rect path');
+      // NEW: sanity tests ensuring state exists before loop
+      console.assert(state && typeof state === 'object', 'state object exists');
+      console.assert(Array.isArray(state.faces) && state.faces.length === 4, 'state.faces has 4 entries');
+      // Geometry tests to guard against undefined vertices (the original crash)
+      console.assert(Array.isArray(verts) && verts.length === 4, `expected 4 unique verts, got ${verts.length}`);
+      console.assert(edgePairs.length === 6, `expected 6 edges, got ${edgePairs.length}`);
+      console.assert(edgePairs.every(([a,b])=>a&&b&&a instanceof THREE.Vector3 && b instanceof THREE.Vector3 && Number.isFinite(a.x) && Number.isFinite(b.x)), 'edgePairs contain valid Vector3s');
+      console.assert(vertexMeshes.length === 4 && vertexMeshes.every(m=>Number.isFinite(m.position.x)), 'vertex meshes positioned');
+    })();
+
+    // ===== Responsive =====
+    addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+
+    // Start the animation loop ONLY after everything (including state) is initialized
+    renderer.setAnimationLoop(animate);
+    updateBadge();
+
+  </script>
+</body>
+</html>

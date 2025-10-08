@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Tetrad Hypertetrahedron — Invisible Layered Media Engine</title>
+  <style>
+    html, body { margin:0; padding:0; height:100%; width:100%; background:#000; overflow:hidden; }
+    canvas { display:block; width:100%; height:100%; touch-action:none; }
+  </style>
+  <!-- Resolve bare 'three' for JSM helpers (mobile-safe) -->
+  <script type="importmap">{
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }</script>
+</head>
+<body>
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // ===== Scene / Camera / Renderer =====
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 100);
+    camera.position.set(2.2, 2.2, 3.2);
+
+    const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:false, powerPreference:'high-performance' });
+    renderer.setPixelRatio(Math.min(devicePixelRatio||1, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true; controls.dampingFactor = 0.06;
+
+    // ===== Tetrad Hypertetrahedron (Invisible, Layered) =====
+    // Faces map to: 0 Enhance, 1 Obsolesce, 2 Retrieve, 3 Reverse
+    const SIZE = 1.2;                // circumscribed radius scale
+    const LAYERS = 64;               // stratified media layers per face
+    const group = new THREE.Group(); scene.add(group);
+
+    // Canonical regular tetra vertices (normalized then scaled)
+    const rawVerts = [
+      new THREE.Vector3( 1,  1,  1),
+      new THREE.Vector3(-1, -1,  1),
+      new THREE.Vector3(-1,  1, -1),
+      new THREE.Vector3( 1, -1, -1)
+    ].map(v=>v.normalize().multiplyScalar(SIZE));
+
+    // Build tetra faces as indices into rawVerts
+    const faceIndices = [ [0,1,2], [0,3,1], [0,2,3], [1,3,2] ]; // 4 triangular faces
+
+    // Invisible materials
+    const matFace = new THREE.MeshBasicMaterial({ color:0x000000, transparent:true, opacity:0.0, side:THREE.DoubleSide });
+    const matEdge = new THREE.LineBasicMaterial({ color:0x000000, transparent:true, opacity:0.0 });
+    const matVert = new THREE.MeshBasicMaterial({ color:0x000000, transparent:true, opacity:0.0 });
+
+    // Base tetra shell (invisible)
+    const baseGeo = new THREE.TetrahedronGeometry(SIZE);
+    const baseMesh = new THREE.Mesh(baseGeo, matFace);
+    group.add(baseMesh);
+    const baseEdges = new THREE.LineSegments(new THREE.EdgesGeometry(baseGeo), matEdge);
+    group.add(baseEdges);
+
+    // ===== Layer generator per face =====
+    // For each face, create 64 invisible offset wire layers (tri edge outlines).
+    function makeLayeredFace(faceIdx){
+      const [a,b,c] = faceIndices[faceIdx].map(i=>rawVerts[i].clone());
+      const tri = new THREE.Triangle(a,b,c);
+      const normal = tri.getNormal(new THREE.Vector3());
+
+      // Center and basis for face-local coordinates
+      const center = new THREE.Vector3(); tri.getMidpoint(center);
+
+      // Construct a local frame in the face plane
+      const u = b.clone().sub(a).normalize();
+      const v = new THREE.Vector3().crossVectors(normal, u).normalize();
+
+      // Layer group container
+      const faceGroup = new THREE.Group();
+      faceGroup.userData = { law: faceIdx }; // 0..3 map to tetrad
+
+      // Edge list for base triangle (for wireframe cloning)
+      const edges = [ [a,b], [b,c], [c,a] ];
+
+      for(let i=0;i<LAYERS;i++){
+        const t = i/(LAYERS-1);              // 0..1
+        // Offset subtly along normal (like depth within face)
+        const offset = THREE.MathUtils.lerp(-0.02, 0.02, t);
+
+        // Slight in-plane inflation/deflation curve to echo strata feel
+        const scale = THREE.MathUtils.lerp(0.96, 0.90, t);
+
+        // Build a thin triangle by scaling points about the face center
+        const pts = [a,b,c].map(p=>{
+          const rel = p.clone().sub(center);
+          // project to face plane then scale
+          const relU = u.clone().multiplyScalar(rel.dot(u));
+          const relV = v.clone().multiplyScalar(rel.dot(v));
+          return center.clone().add(relU.multiplyScalar(scale)).add(relV.multiplyScalar(scale)).add(normal.clone().multiplyScalar(offset));
+        });
+
+        // Create invisible wire for the triangular layer
+        const g = new THREE.BufferGeometry();
+        const pos = new Float32Array( (edges.length*2) * 3 );
+        for(let e=0;e<edges.length;e++){
+          const i0 = e*2*3;
+          const p0 = pts[e];
+          const p1 = pts[(e+1)%3];
+          pos[i0+0]=p0.x; pos[i0+1]=p0.y; pos[i0+2]=p0.z;
+          pos[i0+3]=p1.x; pos[i0+4]=p1.y; pos[i0+5]=p1.z;
+        }
+        g.setAttribute('position', new THREE.BufferAttribute(pos,3));
+        const wire = new THREE.LineSegments(g, matEdge.clone());
+        wire.material.opacity = 0.0; // ensure invisibility
+        wire.userData = { layer: i };
+        faceGroup.add(wire);
+      }
+      return faceGroup;
+    }
+
+    const faces = [0,1,2,3].map(i=>makeLayeredFace(i));
+    faces.forEach(f=>group.add(f));
+
+    // ===== Invisible vertex nodes (Nexus Points) =====
+    const vertGeo = new THREE.SphereGeometry(0.045, 12, 12);
+    rawVerts.forEach((v, i)=>{
+      const s = new THREE.Mesh(vertGeo, matVert);
+      s.position.copy(v); s.userData.name = `Nexus ${i+1}`; // Tetrad Nexus Point
+      group.add(s);
+    });
+
+    // ===== Minimal black lighting (no contribution) =====
+    scene.add(new THREE.AmbientLight(0x000000, 1.0));
+    const pl = new THREE.PointLight(0x000000, 0.0); pl.position.set(3,3,3); scene.add(pl);
+
+    // ===== Resize =====
+    addEventListener('resize', ()=>{
+      camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    }, {passive:true});
+
+    // ===== Animate (latent rotation only) =====
+    renderer.setAnimationLoop(()=>{
+      group.rotation.y += 0.0045;
+      controls.update();
+      renderer.render(scene, camera);
+    });
+
+    // ===== Runtime Tests (console only; no visuals) =====
+    (function tests(){
+      const T = [];
+      const ok = (cond,msg)=>T.push({ok:!!cond,msg});
+      ok(renderer instanceof THREE.WebGLRenderer, 'Renderer initialized');
+      ok(scene instanceof THREE.Scene, 'Scene created');
+      ok(camera instanceof THREE.PerspectiveCamera, 'Camera created');
+      ok(faces.length===4, 'Four face groups for tetrad laws');
+      ok(faces.every(f=>f.children.length===64), 'Each face has 64 strata layers');
+      ok(group.children.length >= 4+3, 'Group contains base + faces + vertices');
+      // Invisibility checks
+      ok(matFace.opacity===0.0, 'Face material invisible');
+      ok(matEdge.opacity===0.0, 'Edge material invisible');
+      ok(matVert.opacity===0.0, 'Vertex material invisible');
+      const failed=T.filter(t=>!t.ok); if(failed.length){
+        console.group('%cHypertetra Tests — FAIL','color:#f66'); failed.forEach(t=>console.error('✗',t.msg)); console.groupEnd();
+      } else {
+        console.group('%cHypertetra Tests — PASS','color:#6f6'); T.forEach(t=>console.log('✓',t.msg)); console.groupEnd();
+      }
+    })();
+
+    // ===== API stub (no UI): setLayer(faceIndex, layerIndex) =====
+    // Mirrors the cube's layered concept but keeps visuals hidden. Useful for future audio/haptics mapping.
+    function setLayer(face, layer){
+      const f = faces[Math.max(0,Math.min(3, face|0))];
+      const idx = Math.max(0, Math.min(LAYERS-1, layer|0));
+      // Placeholder hook: here we could trigger haptics/audio per layer without visuals.
+      if('vibrate' in navigator) navigator.vibrate(4);
+      // No visual change by design.
+      return {face: f.userData.law, layer: idx};
+    }
+    // Expose for console experiments
+    window.tetrad = { setLayer };
+  </script>
+</body>
+</html>

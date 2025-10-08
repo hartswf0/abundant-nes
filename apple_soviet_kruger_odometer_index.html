@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Odometer Timepiece — Apple × Soviet × Kruger</title>
+<meta name="theme-color" content="#0b0b0c" />
+<style>
+  :root{
+    --bg:#0b0b0c;           /* Apple graphite */
+    --ink:#e7e7ea;          /* soft white */
+    --muted:#9aa0a6;        /* graphite-muted */
+    --accent:#e50914;       /* Kruger red */
+    --accent-2:#111315;     /* constructivist shadow */
+    --apple-gloss: linear-gradient(180deg, rgba(255,255,255,.18), rgba(255,255,255,0));
+
+    --digit-on:#e7e7ea;
+    --digit-off:#2a2c2f;
+
+    --safe-top: env(safe-area-inset-top, 12px);
+    --safe-bottom: env(safe-area-inset-bottom, 16px);
+    --safe-left: env(safe-area-inset-left, 12px);
+    --safe-right: env(safe-area-inset-right, 12px);
+  }
+  [data-theme="kruger"]{
+    --bg:#f2f2f2; 
+    --ink:#0a0b0c; 
+    --muted:#3a3a3a; 
+    --accent:#ff0000; 
+    --accent-2:#0a0b0c; 
+    --digit-on:#0a0b0c;
+    --digit-off:#d2d2d2;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; background:var(--bg); color:var(--ink); font:400 15px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;
+    -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+  }
+  .wrap{display:grid; grid-template-rows:auto 1fr auto; min-height:100%; padding:var(--safe-top) var(--safe-left) var(--safe-bottom) var(--safe-right); gap:12px}
+  header{
+    display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px 12px; border-radius:16px; background:linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02)); outline:1px solid rgba(255,255,255,.06);
+    position:sticky; top:var(--safe-top); z-index:5;
+  }
+  header .brand{display:flex; align-items:center; gap:10px}
+  .dot{width:10px; height:10px; border-radius:50%; background:var(--accent); box-shadow:0 0 18px var(--accent)}
+  .title{font-weight:600; letter-spacing:.02em}
+  .bar{
+    position:relative; height:6px; background:var(--accent-2); border-radius:999px; overflow:hidden; outline:1px solid rgba(255,255,255,.06);
+  }
+  .bar>i{position:absolute; inset:0; transform:scaleX(0); transform-origin:left; background:var(--accent); box-shadow:0 0 16px var(--accent) inset;}
+
+  main{position:relative; border-radius:24px; overflow:hidden; background:radial-gradient(1200px 600px at 50% 0%, rgba(255,255,255,.05), rgba(255,255,255,0)), var(--apple-gloss);
+       outline:1px solid rgba(255,255,255,.06)}
+
+  canvas{display:block; width:100%; height:100%; touch-action:none}
+
+  .hud{position:absolute; inset:auto 0 0 0; padding:10px; display:grid; gap:10px; background:linear-gradient(0deg, rgba(0,0,0,.35), rgba(0,0,0,0)); pointer-events:none}
+  .controls{
+    pointer-events:auto; display:grid; grid-template-columns:1fr auto; gap:10px; align-items:center;
+  }
+  .btns{display:flex; gap:8px; flex-wrap:wrap}
+  button, .toggle {
+    -webkit-tap-highlight-color: transparent;
+    appearance:none; border:none; outline: none; border-radius:14px; padding:10px 14px; background:rgba(255,255,255,.06);
+    color:var(--ink); font-weight:600; letter-spacing:.02em; cursor:pointer; position:relative; overflow:hidden;
+  }
+  button:focus-visible, .toggle:focus-visible{outline:2px solid var(--accent)}
+  button.primary{background:var(--accent); color:white}
+  .toggle{display:inline-flex; align-items:center; gap:8px}
+  .toggle input{appearance:none; width:34px; height:20px; border-radius:999px; background:rgba(255,255,255,.18); position:relative}
+  .toggle input:before{content:""; position:absolute; top:2px; left:2px; width:16px; height:16px; border-radius:50%; background:#fff; transition:left .2s ease}
+  .toggle input:checked{background:var(--accent)}
+  .toggle input:checked:before{left:16px}
+
+  .sliders{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
+  .sliders label{display:flex; align-items:center; gap:8px; font-size:13px; color:var(--muted)}
+  .sliders input[type=range]{accent-color:var(--accent); width:min(44vw,260px)}
+
+  .odometer{
+    position:absolute; inset:auto 50% calc(12px + var(--safe-bottom)) auto; transform:translateX(-50%);
+    display:flex; gap:6px; padding:10px 12px; border-radius:16px; background:linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,.03)); outline:1px solid rgba(255,255,255,.08);
+    backdrop-filter: blur(6px);
+  }
+  .wheel{width:26px; height:40px; position:relative; overflow:hidden; border-radius:8px; background:linear-gradient(180deg, rgba(255,255,255,.12), rgba(255,255,255,0)); outline:1px solid rgba(255,255,255,.08)}
+  .digits{position:absolute; left:0; right:0; will-change:transform}
+  .digit{height:40px; display:flex; align-items:center; justify-content:center; font:700 24px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color:var(--digit-on); text-shadow:0 0 6px rgba(255,255,255,.25)}
+  .digit.off{color:var(--digit-off); text-shadow:none}
+
+  .kruger-ribbon{
+    position:absolute; top:16px; left:50%; transform:translateX(-50%);
+    background:var(--accent); color:#fff; padding:6px 10px; border-radius:8px; font-weight:800; letter-spacing:.06em; text-transform:uppercase;
+    mix-blend-mode:normal; box-shadow:0 10px 30px rgba(0,0,0,.35);
+  }
+  .kruger-ribbon small{display:block; font-weight:600; letter-spacing:.08em; opacity:.9}
+
+  footer{display:flex; gap:10px; align-items:center; justify-content:space-between; color:var(--muted)}
+  footer kbd{background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.1); padding:.2em .45em; border-radius:6px; font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:.9em; color:var(--ink)}
+
+  [aria-live]{position:absolute; inset:auto 0 0 0; height:1px; overflow:hidden; clip:rect(1px,1px,1px,1px)}
+
+  @media (prefers-reduced-motion: reduce){
+    .hud{background:none}
+  }
+</style>
+</head>
+<body>
+<div class="wrap" id="app" data-theme="apple">
+  <header>
+    <div class="brand" aria-label="Odometer Timepiece">
+      <span class="dot" aria-hidden="true"></span>
+      <div class="title">Apple × Soviet × Kruger — Odometer</div>
+    </div>
+    <div class="bar" aria-hidden="true"><i id="progressFill"></i></div>
+  </header>
+
+  <main>
+    <div class="kruger-ribbon" aria-hidden="true">
+      <small>PERDURANT FRAMEWORK</small>
+      TIME ≠ NUMBER — TIME = DEBRIS
+    </div>
+    <canvas id="stage" role="img" aria-label="Mesmeric three-dimensional canvas showing time as debris and accumulation"></canvas>
+    <div class="hud">
+      <div class="controls">
+        <div class="btns">
+          <button id="startBtn" class="primary" aria-pressed="false" aria-label="Start speaking and counting (space)">Start</button>
+          <button id="pauseBtn" aria-label="Pause or resume (space)">Pause</button>
+          <button id="resetBtn" aria-label="Reset to zero (R)">Reset</button>
+          <label class="toggle" for="loopChk" title="Loop back to zero after one million">
+            <input id="loopChk" type="checkbox" role="switch" aria-checked="false" /> Loop
+          </label>
+          <label class="toggle" for="themeChk" title="Toggle Kruger theme">
+            <input id="themeChk" type="checkbox" role="switch" aria-checked="false" /> Kruger
+          </label>
+        </div>
+        <div class="sliders">
+          <label>Rate <input id="rate" type="range" min="0.6" max="1.6" step="0.1" value="1.0" aria-valuemin="0.6" aria-valuemax="1.6" aria-valuenow="1.0" aria-label="Speech rate"></label>
+          <label>Pendulum <input id="pend" type="range" min="0.3" max="2.0" step="0.1" value="1.0" aria-label="Pendulum speed"></label>
+          <label>Glow <input id="glow" type="range" min="0" max="1" step="0.05" value="0.5" aria-label="Glow intensity"></label>
+        </div>
+      </div>
+    </div>
+    <div class="odometer" aria-hidden="true" id="odo"></div>
+    <div aria-live="polite" id="live"></div>
+  </main>
+
+  <footer>
+    <div>Keys: <kbd>Space</kbd> start/pause • <kbd>R</kbd> reset • <kbd>T</kbd> theme • <kbd>L</kbd> loop</div>
+    <div id="status">Ready</div>
+  </footer>
+</div>
+
+<script>
+(() => {
+  'use strict';
+  const MAX = 1_000_000; // target (inclusive behavior handled below)
+  const app = document.getElementById('app');
+  const cvs = document.getElementById('stage');
+  const ctx = cvs.getContext('2d');
+  const startBtn = document.getElementById('startBtn');
+  const pauseBtn = document.getElementById('pauseBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const loopChk = document.getElementById('loopChk');
+  const themeChk = document.getElementById('themeChk');
+  const rate = document.getElementById('rate');
+  const pend = document.getElementById('pend');
+  const glow = document.getElementById('glow');
+  const live = document.getElementById('live');
+  const statusEl = document.getElementById('status');
+  const progressFill = document.getElementById('progressFill');
+  const odo = document.getElementById('odo');
+
+  // --- State ---
+  let state = {
+    n: 0,
+    running: false,
+    speaking: false,
+    loop: false,
+    theme: 'apple',
+    rate: 1.0,
+    pend: 1.0,
+    glow: 0.5,
+  };
+
+  // restore
+  try {
+    const saved = JSON.parse(localStorage.getItem('odometerState_v3'));
+    if(saved){ state = Object.assign(state, saved); }
+  } catch(_){}
+
+  loopChk.checked = !!state.loop;
+  themeChk.checked = state.theme !== 'apple';
+  app.dataset.theme = state.theme === 'apple' ? 'apple' : 'kruger';
+  rate.value = state.rate;
+  pend.value = state.pend;
+  glow.value = state.glow;
+
+  // Layout and canvas sizing
+  function size(){
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const rect = cvs.getBoundingClientRect();
+    cvs.width = Math.max(1, rect.width * dpr);
+    cvs.height = Math.max(1, rect.height * dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  new ResizeObserver(size).observe(cvs);
+  size();
+
+  // Odometer DOM reels
+  const wheels = [];
+  function buildOdometer(){
+    odo.innerHTML = '';
+    const digits = 7; // 0000000 → 1000000
+    for(let i=0;i<digits;i++){
+      const w = document.createElement('div');
+      w.className = 'wheel';
+      const stack = document.createElement('div');
+      stack.className = 'digits';
+      for(let d=0; d<10; d++){
+        const el = document.createElement('div');
+        el.className = 'digit';
+        el.textContent = d;
+        stack.appendChild(el);
+      }
+      w.appendChild(stack);
+      wheels.push({w, stack, y:0});
+      odo.appendChild(w);
+      if(i===1){
+        // thin spacer for readability
+        const gap = document.createElement('div'); gap.style.width='6px'; odo.appendChild(gap);
+      }
+    }
+    setOdo(state.n);
+  }
+  function setOdo(num){
+    const s = num.toString().padStart(7,'0');
+    for(let i=0;i<wheels.length;i++){
+      const target = parseInt(s[i]);
+      const st = wheels[i].stack;
+      // Smooth reel: we tween towards target row
+      wheels[i].y = -target * 40; // 40px per digit height
+      st.style.transform = `translateY(${wheels[i].y}px)`;
+    }
+  }
+  buildOdometer();
+
+  // --- Speech synthesis as the master clock ---
+  const synth = window.speechSynthesis;
+  let selectedVoice = null;
+  function chooseVoice(){
+    const voices = synth.getVoices();
+    // Prefer British/neutral voices
+    selectedVoice = voices.find(v=>/en-GB|UK|British/i.test(v.name+v.lang))
+      || voices.find(v=>/Apple|Samantha|Daniel|Serena|Alex/i.test(v.name))
+      || voices[0] || null;
+  }
+  chooseVoice();
+  if ('onvoiceschanged' in synth) synth.onvoiceschanged = chooseVoice;
+
+  function speakNumber(n){
+    if(!('speechSynthesis' in window)){
+      status('Speech not supported. Advancing silently.');
+      afterSpoken();
+      return;
+    }
+    if(state.speaking){ return; }
+    const u = new SpeechSynthesisUtterance(n.toString());
+    u.rate = parseFloat(state.rate);
+    u.pitch = 1.0; u.volume = 1.0;
+    if(selectedVoice) u.voice = selectedVoice;
+    u.onstart = ()=>{ state.speaking = true; status(`Speaking ${n}`); live.textContent = `Number ${n}`; addWordTrail(n); };
+    u.onend = ()=>{ state.speaking = false; afterSpoken(); };
+    u.onerror = ()=>{ state.speaking = false; status('Speech error — advancing.'); afterSpoken(); };
+    try { synth.speak(u); }
+    catch(e){ state.speaking=false; status('Speech failed — advancing.'); afterSpoken(); }
+  }
+
+  function afterSpoken(){
+    // only advance once fully spoken
+    if(!state.running) return;
+    increment();
+    tick();
+  }
+
+  function increment(){
+    let next = state.n + 1;
+    if(next > MAX){
+      if(state.loop){ next = 0; }
+      else { state.running = false; status('Reached one million.'); return; }
+    }
+    state.n = next;
+    setOdo(state.n);
+    save();
+  }
+
+  function tick(){
+    // Schedule next speech only after previous finished
+    if(state.running && !state.speaking){ speakNumber(state.n); }
+  }
+
+  function status(t){ statusEl.textContent = t; }
+
+  // --- Time-worm trail model (pseudo-3D) ---
+  const trail = []; // {text, x, y, z, life}
+  function addWordTrail(n){
+    const text = n.toString();
+    // push multiple fragments to create constructivist debris
+    const fragments = [text, ...splitConstructivist(text)];
+    for(const f of fragments){
+      trail.push({
+        text:f,
+        x:(Math.random()-.5)*cvs.width*0.6,
+        y:(Math.random()-.3)*cvs.height*0.5,
+        z:Math.random()*120 + 40, // depth
+        life:1
+      });
+    }
+  }
+  function splitConstructivist(s){
+    // Break digits into propaganda-like shards
+    const out=[]; for(let i=0;i<s.length;i++){ out.push(s.slice(0,i+1)); }
+    return out;
+  }
+
+  // --- Pendulum state ---
+  let pendPhase = 0; // radians
+
+  // --- Render ---
+  function render(t){
+    const w = cvs.width; const h = cvs.height; // CSS pixels due to ctx transform
+    ctx.clearRect(0,0,w,h);
+
+    // Background: collapsing grid (perspective)
+    drawGrid();
+
+    // Pendulum (top-center), timed to speech rate × pendulum control
+    drawPendulum(t);
+
+    // Time-worm fragments receding
+    drawTrail();
+
+    // Odometer shine
+    drawGlass();
+
+    // Progress bar
+    const p = Math.min(1, state.n / MAX);
+    progressFill.style.transform = `scaleX(${p})`;
+
+    requestAnimationFrame(render);
+  }
+  requestAnimationFrame(render);
+
+  function drawGrid(){
+    const w = cvs.width, h = cvs.height;
+    const cx = w/2, cy = h*0.58;
+    ctx.save();
+    ctx.translate(cx, cy);
+    const persp = 420; // perspective depth
+    const rows = 18, cols = 24;
+    for(let i=0;i<=rows;i++){
+      const z = i*40 + 40;
+      const s = persp/(persp+z);
+      const y = -Math.tan(12*Math.PI/180) * z; // collapse tilt
+      ctx.globalAlpha = 0.25 * (1 - i/rows);
+      ctx.beginPath();
+      ctx.moveTo(-cols*20*s, y);
+      ctx.lineTo(cols*20*s, y);
+      ctx.strokeStyle = `rgba(255,255,255,${0.12 + 0.35*(1-i/rows)})`;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+    for(let j=-cols;j<=cols;j++){
+      ctx.globalAlpha = 0.2;
+      ctx.beginPath();
+      for(let i=0;i<=rows;i++){
+        const z = i*40 + 40; const s = persp/(persp+z); const y = -Math.tan(12*Math.PI/180)*z; const x = j*20*s;
+        if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+      }
+      ctx.strokeStyle = 'rgba(255,255,255,.08)'; ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawPendulum(t){
+    const w=cvs.width, h=cvs.height; const cx=w/2; const top=40;
+    const baseFreq = 0.8; // seconds per swing
+    const speed = parseFloat(state.pend) * (1.2 / Math.max(0.6, parseFloat(state.rate)));
+    pendPhase += 0.016 * speed * (Math.PI*2/baseFreq);
+    const angle = Math.sin(pendPhase) * 0.5; // ± radians
+
+    ctx.save();
+    ctx.translate(cx, top);
+    ctx.rotate(angle);
+    ctx.strokeStyle = `rgba(255,255,255,.25)`;
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(0,70); ctx.stroke();
+
+    const bobY = 90; const r = 10;
+    ctx.beginPath(); ctx.arc(0,bobY,r,0,Math.PI*2);
+    ctx.fillStyle = `rgba(255,255,255,${0.25+0.35*state.glow})`;
+    ctx.shadowColor = `rgba(255,255,255,${0.3*state.glow})`;
+    ctx.shadowBlur = 20*state.glow; ctx.fill();
+    ctx.restore();
+  }
+
+  function drawTrail(){
+    const w=cvs.width, h=cvs.height; const cx=w/2, cy=h*0.62; const persp=420;
+    for(let i=trail.length-1;i>=0;i--){
+      const it = trail[i];
+      it.z += 0.8; // push deeper (backwards in time)
+      it.life -= 0.0015;
+      if(it.life<=0 || it.z>1200){ trail.splice(i,1); continue; }
+      const s = persp/(persp+it.z);
+      const x = cx + it.x*s;
+      const y = cy + it.y*s - Math.tan(12*Math.PI/180)*it.z;
+      const a = Math.max(0, 0.75*it.life);
+      ctx.save();
+      ctx.translate(x,y);
+      ctx.scale(s*1.2, s*1.2);
+      // Kruger propaganda blocks behind some fragments
+      if(Math.random()<0.12){
+        ctx.fillStyle = `rgba(${state.theme==='kruger'?255:229},0,0,${0.25*a})`;
+        ctx.fillRect(-18,-12, Math.max(36, it.text.length*12), 18);
+      }
+      ctx.fillStyle = `rgba(231,231,234,${a})`;
+      ctx.font = '700 16px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+      ctx.textBaseline = 'middle';
+      ctx.shadowColor = `rgba(255,255,255,${0.35*state.glow})`;
+      ctx.shadowBlur = 18*state.glow;
+      ctx.fillText(it.text, 0, 0);
+      ctx.restore();
+
+      // Debris lines / fragments
+      ctx.save();
+      ctx.globalAlpha = 0.15*a;
+      ctx.beginPath();
+      ctx.moveTo(x-6*s, y+6*s);
+      ctx.lineTo(x+12*s, y-8*s);
+      ctx.strokeStyle = 'rgba(255,255,255,.25)';
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  function drawGlass(){
+    const w=cvs.width, h=cvs.height;
+    const g = ctx.createLinearGradient(0,0,0,h*0.6);
+    g.addColorStop(0, 'rgba(255,255,255,.06)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g; ctx.fillRect(0,0,w,h*0.6);
+  }
+
+  // --- Controls ---
+  function play(){ if(state.running) return; state.running=true; status('Running'); save(); if(!state.speaking) speakNumber(state.n); }
+  function pause(){ state.running=false; status('Paused'); save(); if(synth && synth.speaking) synth.cancel(); }
+  function reset(){ pause(); state.n=0; setOdo(0); progressFill.style.transform='scaleX(0)'; trail.length=0; status('Reset'); save(); }
+
+  startBtn.addEventListener('click', ()=>{ if(!state.running) play(); else { pause(); } });
+  pauseBtn.addEventListener('click', ()=>{ if(state.running){ pause(); } else { play(); } });
+  resetBtn.addEventListener('click', reset);
+  loopChk.addEventListener('change', (e)=>{ state.loop = e.target.checked; save(); });
+  themeChk.addEventListener('change', (e)=>{ state.theme = e.target.checked? 'kruger':'apple'; app.dataset.theme = state.theme; save(); });
+  rate.addEventListener('input', (e)=>{ state.rate = parseFloat(e.target.value); save(); });
+  pend.addEventListener('input', (e)=>{ state.pend = parseFloat(e.target.value); save(); });
+  glow.addEventListener('input', (e)=>{ state.glow = parseFloat(e.target.value); save(); });
+
+  // Keyboard
+  window.addEventListener('keydown', (e)=>{
+    if(e.key===' '){ e.preventDefault(); if(state.running) pause(); else play(); }
+    if(e.key==='r' || e.key==='R'){ reset(); }
+    if(e.key==='t' || e.key==='T'){ themeChk.click(); }
+    if(e.key==='l' || e.key==='L'){ loopChk.click(); }
+  });
+
+  function save(){
+    try{ localStorage.setItem('odometerState_v3', JSON.stringify(state)); }catch(_){ }
+  }
+
+  // Initial status and if running resume
+  setOdo(state.n);
+  if(state.running){ play(); }
+  else { status('Ready'); }
+})();
+</script>
+</body>
+</html>

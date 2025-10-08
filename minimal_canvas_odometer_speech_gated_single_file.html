@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Canvas Odometer — Speech‑Gated</title>
+<style>
+  :root { --bg:#fff; --fg:#000; }
+  html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);}
+  body{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1rem;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Inter,Arial,sans-serif}
+  canvas{width:min(95vw,900px);height:min(40vh,40vw);display:block}
+  button{font:inherit;padding:.75rem 1rem;border:1px solid currentColor;background:transparent;border-radius:.5rem;cursor:pointer}
+  button:focus{outline:2px solid currentColor;outline-offset:2px}
+  .sr{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
+</style>
+</head>
+<body>
+  <canvas id="odometer" aria-label="Odometer canvas" role="img"></canvas>
+  <button id="toggle" aria-pressed="false" aria-label="Start or Stop counting">Start</button>
+  <div id="live" class="sr" aria-live="polite"></div>
+
+<script>
+(function(){
+  'use strict';
+  const MAX = 1_000_000;      // inclusive upper bound
+  const DIGITS = 7;           // zero-padded width
+  const RATE = 0.95;          // speech rate (1.0 = normal)
+  const PITCH = 1.0;
+  const LANG = navigator.language || 'en-US';
+
+  const cvs = document.getElementById('odometer');
+  const ctx = cvs.getContext('2d');
+  const btn = document.getElementById('toggle');
+  const live = document.getElementById('live');
+
+  let running = false;
+  let n = 0;
+  let rafHandle = 0;
+
+  function pad(num){ return num.toString().padStart(DIGITS,'0'); }
+
+  function fitCanvas(){
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    const cssW = cvs.clientWidth;
+    const cssH = cvs.clientHeight;
+    const w = Math.max(1, Math.floor(cssW * dpr));
+    const h = Math.max(1, Math.floor(cssH * dpr));
+    if (cvs.width !== w || cvs.height !== h){
+      cvs.width = w; cvs.height = h;
+    }
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.clearRect(0,0,cvs.width,cvs.height);
+    drawCurrent();
+  }
+
+  function drawCurrent(){
+    const w = cvs.width, h = cvs.height;
+    ctx.clearRect(0,0,w,h);
+    const text = pad(n);
+
+    // Choose a font size that fits: 70% of canvas height.
+    const fontSize = Math.floor(h * 0.7);
+    ctx.font = `${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    // Measure and downscale if too wide
+    let metrics = ctx.measureText(text);
+    if (metrics.width > w * 0.92){
+      const scale = (w * 0.92) / metrics.width;
+      ctx.setTransform(scale,0,0,scale, w/2, h/2);
+      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--fg') || '#000';
+      ctx.fillText(text, 0, 0);
+      ctx.setTransform(1,0,0,1,0,0);
+    } else {
+      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--fg') || '#000';
+      ctx.fillText(text, w/2, h/2);
+    }
+  }
+
+  function speak(text){
+    return new Promise((resolve,reject)=>{
+      if (!('speechSynthesis' in window)){
+        reject(new Error('Speech synthesis not supported'));
+        return;
+      }
+      // Cancel any queued utterances before starting a new one
+      try { window.speechSynthesis.cancel(); } catch(e){}
+      const utt = new SpeechSynthesisUtterance(String(text));
+      utt.lang = LANG;
+      utt.rate = RATE;
+      utt.pitch = PITCH;
+      // Pick a voice matching language if available
+      const pickVoice = () => {
+        const voices = window.speechSynthesis.getVoices() || [];
+        const best = voices.find(v => v.lang && v.lang.toLowerCase().startsWith(LANG.toLowerCase()))
+                  || voices.find(v => v.default)
+                  || voices[0];
+        if (best) utt.voice = best;
+        window.speechSynthesis.speak(utt);
+      };
+      // Some browsers load voices async
+      if ((window.speechSynthesis.getVoices() || []).length === 0){
+        window.speechSynthesis.onvoiceschanged = () => { pickVoice(); };
+        // Fallback start if event never fires
+        setTimeout(pickVoice, 250);
+      } else {
+        pickVoice();
+      }
+      utt.onend = () => resolve();
+      utt.onerror = (e) => reject(e.error || e);
+    });
+  }
+
+  function setRunning(next){
+    running = next;
+    btn.textContent = running ? 'Stop' : 'Start';
+    btn.setAttribute('aria-pressed', running ? 'true' : 'false');
+  }
+
+  async function runLoop(){
+    while (running){
+      // Draw and announce current value
+      drawCurrent();
+      live.textContent = `Number: ${pad(n)}`;
+      try {
+        await speak(n);
+      } catch(err){
+        // If speaking fails, stop to honor requirement that speech must occur
+        console.warn('Speech error:', err);
+        alert('Speech synthesis is unavailable or failed. Cannot continue.');
+        setRunning(false);
+        break;
+      }
+      if (!running) break; // might have been stopped during speech
+      if (n >= MAX){
+        setRunning(false);
+        break;
+      }
+      // Advance AFTER speech ends
+      n += 1;
+    }
+  }
+
+  // Controls
+  btn.addEventListener('click', () => {
+    if (!running){
+      setRunning(true);
+      // Ensure audio context policies (mobile) — speaking will prompt user permission naturally on first call
+      runLoop();
+    } else {
+      setRunning(false);
+      try { window.speechSynthesis.cancel(); } catch(e){}
+    }
+  });
+
+  // Keyboard accessibility is native for <button>; add space/enter support for some browsers
+  btn.addEventListener('keydown', (e)=>{
+    if (e.key === ' ' || e.key === 'Enter'){
+      e.preventDefault(); btn.click();
+    }
+  });
+
+  // Resize handling
+  window.addEventListener('resize', ()=>{ cancelAnimationFrame(rafHandle); rafHandle = requestAnimationFrame(fitCanvas); });
+  fitCanvas();
+
+  // Optional: restore last number if needed — kept minimal per request (not enabled)
+})();
+</script>
+</body>
+</html>

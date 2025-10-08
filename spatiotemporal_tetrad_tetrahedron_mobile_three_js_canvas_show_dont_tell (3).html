@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Tetrad Onion Engine — Haptics · Always-On Slider · Compact Menu</title>
+<style>
+  :root{ --bg:#050509; --fg:#d0d6ff; --enh:#7aa2ff; --obs:#f08fa8; --ret:#78e6c5; --rev:#f6c85f; }
+  html,body{height:100%;margin:0;background:radial-gradient(1200px 800px at 70% 20%, #0a0e1e, var(--bg)); overflow:hidden;}
+  #c{position:fixed; inset:0; display:block; touch-action:none;}
+  .frame{position:fixed; inset:0; pointer-events:none;}
+  .frame:before{content:"";position:absolute;inset:10px;border:1px solid rgba(255,255,255,.05);border-radius:18px;box-shadow:inset 0 0 80px rgba(0,0,0,.35);} 
+
+  /* Dock: Always-on slider + tiny toggle for the face menu */
+  #dock{position:fixed; right:10px; top:10px; bottom:10px; transform:none; z-index:9999; font-family: ui-sans-serif, system-ui; display:flex; flex-direction:column; align-items:center; justify-content:space-between; gap:10px; width:56px; pointer-events:auto}
+  #layerBox{display:flex; flex-direction:column; align-items:center; gap:6px; padding:10px; background:rgba(8,10,20,.55); backdrop-filter:blur(6px); border:1px solid rgba(255,255,255,.08); border-radius:14px; box-shadow:0 6px 24px rgba(0,0,0,.35); height:calc(100vh - 120px);}
+  #layerSlider{writing-mode: bt-lr; -webkit-appearance: slider-vertical; width:34px; height:100%; accent-color:#9aaaff}
+  .hud-badge{font-size:12px; font-weight:700; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.12); padding:2px 8px; border-radius:999px; color:#e7ebff}
+
+  /* Compact toggle button */
+  #facesToggle{width:36px;height:36px;border-radius:50%; border:1px solid rgba(255,255,255,.18); background:rgba(10,14,26,.7); color:#e6ebff; backdrop-filter:blur(6px); box-shadow:0 6px 24px rgba(0,0,0,.35); cursor:pointer; z-index:10000}
+  #facesToggle:active{transform:translateY(1px)}
+
+  /* Panel that expands on toggle (face selection + visibility) */
+  #facesPanel{position:fixed; right:66px; top:10px; bottom:10px; transform:none; color:#cfd6ff; background:rgba(8,10,20,.68); backdrop-filter: blur(8px); border:1px solid rgba(255,255,255,.12); border-radius:14px; padding:12px; box-shadow:0 8px 28px rgba(0,0,0,.45); display:none; width:240px; overflow:auto; z-index:10001}
+  #facesPanel.open{display:block}
+  .rows{display:flex; flex-direction:column; gap:8px; width:100%;}
+  .row{display:flex; gap:8px; align-items:center; justify-content:space-between; width:100%;}
+  .face-btn{flex:1; min-width:0; height:32px; border-radius:10px; border:1px solid rgba(255,255,255,.16); background:linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.02)); box-shadow:inset 0 0 14px color-mix(in oklab, var(--c) 45%, transparent); color:#fff; font-weight:700; letter-spacing:.3px; cursor:pointer}
+  .face-btn.selected{outline:2px solid color-mix(in oklab, var(--c) 65%, transparent)}
+  .toggle{display:flex; align-items:center; gap:6px; font-size:11px; opacity:.9}
+  .toggle input{accent-color:#aab0ff}
+  .legend{font-size:11px; opacity:.8; text-align:center; margin-top:6px}
+</style>
+<script type="importmap">
+{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"}}
+</script>
+</head>
+<body>
+<div class="frame"></div>
+<!-- Always-on slider + tiny toggle for the menu -->
+<div id="dock">
+  <div id="layerBox">
+    <input id="layerSlider" type="range" min="0" max="63" value="0" step="1" aria-label="Layer depth" />
+    <span id="layerValue" class="hud-badge">0</span>
+  </div>
+  <button id="facesToggle" title="Face controls">⚙️</button>
+</div>
+<!-- Compact panel (appears only when toggled) -->
+<div id="facesPanel" aria-label="Tetrad Face Controls">
+  <div class="rows">
+    <div class="row">
+      <button class="face-btn selected" data-law="ENH" style="--c:var(--enh)" title="Select Enhance (1)">Enh</button>
+      <label class="toggle"><input type="checkbox" class="face-vis" data-law="ENH" checked> On</label>
+    </div>
+    <div class="row">
+      <button class="face-btn" data-law="OBS" style="--c:var(--obs)" title="Select Obsolesce (2)">Obs</button>
+      <label class="toggle"><input type="checkbox" class="face-vis" data-law="OBS" checked> On</label>
+    </div>
+    <div class="row">
+      <button class="face-btn" data-law="RET" style="--c:var(--ret)" title="Select Retrieve (3)">Ret</button>
+      <label class="toggle"><input type="checkbox" class="face-vis" data-law="RET" checked> On</label>
+    </div>
+    <div class="row">
+      <button class="face-btn" data-law="REV" style="--c:var(--rev)" title="Select Reverse (4)">Rev</button>
+      <label class="toggle"><input type="checkbox" class="face-vis" data-law="REV" checked> On</label>
+    </div>
+  </div>
+  <div class="legend">Click to select · Toggle On/Off · Double‑tap canvas to reset</div>
+</div>
+<canvas id="c"></canvas>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// --- Haptics helper ---
+function buzz(ms=10){ if (navigator.vibrate) navigator.vibrate(ms); }
+
+// ---- Renderer / Scene ----
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.14;
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 0.01, 100);
+camera.position.set(1.0, 1.1, 2.4);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.enablePan = false; controls.minDistance = 1.0; controls.maxDistance = 5.0;
+
+// Master group: everything moves together
+const tetra = new THREE.Group(); scene.add(tetra);
+const hemi = new THREE.HemisphereLight(0x7f8bff, 0x0b0c12, 1.0); tetra.add(hemi);
+
+// ---- Geometry basis (regular tetra) ----
+const s = 0.9;
+const v0 = new THREE.Vector3( s,  s,  s);
+const v1 = new THREE.Vector3( s, -s, -s);
+const v2 = new THREE.Vector3(-s,  s, -s);
+const v3 = new THREE.Vector3(-s, -s,  s);
+
+const COLORS = {
+  ENH: new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue('--enh').trim()),
+  OBS: new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue('--obs').trim()),
+  RET: new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue('--ret').trim()),
+  REV: new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue('--rev').trim())
+};
+
+// Faces map (for planes)
+const FACES = [
+  { name:'ENH', verts:[v0, v1, v2] },
+  { name:'OBS', verts:[v0, v3, v1] },
+  { name:'RET', verts:[v0, v2, v3] },
+  { name:'REV', verts:[v1, v3, v2] },
+];
+
+// ---- Aligned per-face tunnels ----
+const LAYERS_PER_FACE = 16; // fuller granularity
+const TOTAL_LAYERS = LAYERS_PER_FACE * 4;
+const faceLayers = {ENH:[], OBS:[], RET:[], REV:[]};
+
+function makeLayerMesh(scale, color, opacity){
+  const geo = new THREE.TetrahedronGeometry(s*scale, 0);
+  const edges = new THREE.EdgesGeometry(geo);
+  const mat = new THREE.LineBasicMaterial({color, transparent:true, opacity, depthWrite:false});
+  const mesh = new THREE.LineSegments(edges, mat);
+  mesh.position.set(0,0,0); mesh.quaternion.identity();
+  return mesh;
+}
+
+for (const f of FACES){
+  for (let i=0;i<LAYERS_PER_FACE;i++){
+    const t = i/(LAYERS_PER_FACE-1);
+    const scale = THREE.MathUtils.lerp(2.0, 0.26, t);
+    const mesh = makeLayerMesh(scale, COLORS[f.name].getHex(), 0.10 + 0.12*t);
+    faceLayers[f.name].push(mesh); tetra.add(mesh);
+  }
+}
+
+// Face planes (aligned)
+function faceMaterial(baseColor){
+  return new THREE.MeshStandardMaterial({color: baseColor.clone().multiplyScalar(0.35), emissive: baseColor, emissiveIntensity: 0.42, roughness:0.25, metalness:0.0, side:THREE.DoubleSide, transparent:true, opacity:0.95, flatShading:true});
+}
+const faceMeshes = [];
+for (const f of FACES){
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
+    f.verts[0].x, f.verts[0].y, f.verts[0].z,
+    f.verts[1].x, f.verts[1].y, f.verts[1].z,
+    f.verts[2].x, f.verts[2].y, f.verts[2].z,
+  ]),3)); g.computeVertexNormals();
+  const m = faceMaterial(COLORS[f.name]);
+  const mesh = new THREE.Mesh(g,m); mesh.userData.law=f.name; tetra.add(mesh); faceMeshes.push(mesh);
+}
+
+// Core orb
+const core = new THREE.Mesh(new THREE.IcosahedronGeometry(0.1, 2), new THREE.MeshStandardMaterial({color:0x9fa7ff, emissive:0x2e3bff, emissiveIntensity:0.62, roughness:0.2}));
+tetra.add(core);
+
+// ---- Controls: slider (always on) + tiny toggle for panel ----
+const facesPanel = document.getElementById('facesPanel');
+const facesToggle = document.getElementById('facesToggle');
+facesToggle.addEventListener('click', ()=>{ facesPanel.classList.toggle('open'); buzz(8); });
+
+let layerFocus = 0; // 0 .. TOTAL_LAYERS-1
+const slider = document.getElementById('layerSlider');
+const badge = document.getElementById('layerValue');
+slider.max = String(TOTAL_LAYERS-1); slider.value = String(layerFocus); badge.textContent = slider.value;
+
+const selectedFaceOrder = ['ENH','OBS','RET','REV'];
+let selectedFace = 'ENH';
+const activeFace = {ENH:true, OBS:true, RET:true, REV:true};
+
+function setFaceActive(name, on){
+  activeFace[name] = on;
+  const vis = document.querySelector(`.face-vis[data-law="${name}"]`); if (vis) vis.checked = !!on;
+  const plane = faceMeshes.find(m=>m.userData.law===name); if (plane){ plane.visible = !!on; plane.material.opacity = on?0.95:0.08; plane.material.emissiveIntensity = on?0.48:0.05; }
+  for (const m of faceLayers[name]) m.visible = !!on;
+  buzz(6);
+}
+function selectFace(name){
+  selectedFace = name;
+  for (const btn of document.querySelectorAll('.face-btn')) btn.classList.toggle('selected', btn.dataset.law===name);
+  const faceIdx = selectedFaceOrder.indexOf(name);
+  layerFocus = faceIdx*LAYERS_PER_FACE + Math.floor(LAYERS_PER_FACE/2);
+  slider.value = String(layerFocus); badge.textContent = slider.value; buzz(8);
+}
+
+for (const btn of document.querySelectorAll('.face-btn')){ const law = btn.dataset.law; btn.addEventListener('click', ()=> selectFace(law)); }
+for (const chk of document.querySelectorAll('.face-vis')){ const law = chk.dataset.law; chk.addEventListener('change', ()=> setFaceActive(law, chk.checked)); }
+selectFace('ENH'); for (const k of Object.keys(activeFace)) setFaceActive(k, true);
+
+slider.addEventListener('input', ()=>{ layerFocus = Number(slider.value); badge.textContent = slider.value; buzz(4); });
+canvas.addEventListener('wheel', (e)=>{ e.preventDefault(); const step = Math.sign(e.deltaY); layerFocus = THREE.MathUtils.clamp(layerFocus + step, 0, TOTAL_LAYERS-1); slider.value = String(layerFocus); badge.textContent = slider.value; buzz(2); }, {passive:false});
+canvas.addEventListener('dblclick', ()=>{ for (const k of Object.keys(activeFace)) setFaceActive(k, true); selectFace('ENH'); });
+addEventListener('keydown', (e)=>{ if (e.key==='1') selectFace('ENH'); if (e.key==='2') selectFace('OBS'); if (e.key==='3') selectFace('RET'); if (e.key==='4') selectFace('REV'); if (e.key===' '){ const on = !activeFace[selectedFace]; setFaceActive(selectedFace, on); }});
+
+// ---- Animation ----
+let tClock = 0;
+function animate(){
+  requestAnimationFrame(animate); controls.update(); const dt=0.016; tClock+=dt;
+  const faceIndex = Math.floor(layerFocus / LAYERS_PER_FACE); const intra = layerFocus % LAYERS_PER_FACE;
+  const blend = new THREE.Color(0,0,0); for (const k of Object.keys(activeFace)) if (activeFace[k]) blend.add(COLORS[k]); blend.lerp(COLORS[selectedFace], 0.35); core.material.emissive.copy(blend.multiplyScalar(0.33));
+
+  for (const name of Object.keys(faceLayers)){
+    const arr = faceLayers[name]; const isActive = !!activeFace[name]; const faceIdx = selectedFaceOrder.indexOf(name);
+    for (let i=0;i<arr.length;i++){
+      const m = arr[i]; const localFocus = (faceIndex===faceIdx) ? intra : i; const d = Math.abs(i - localFocus);
+      const band = Math.max(0, 1.0 - d/2.0); const base = 0.03 + 0.12*(i/(LAYERS_PER_FACE-1)); const wave = 0.03*Math.sin(tClock*2.0 + i*0.35 + faceIdx);
+      const op = THREE.MathUtils.clamp((base + band*0.55 + wave) * (isActive?1.0:0.12), 0.02, 0.95);
+      m.material.opacity = op; m.visible = op > 0.025 && isActive; m.position.set(0,0,0); m.quaternion.identity();
+    }
+  }
+  for (const mesh of faceMeshes){ const sel=(mesh.userData.law===selectedFace); if (sel) mesh.material.emissiveIntensity = 0.58 + 0.05*Math.sin(tClock*2.1); }
+  tetra.rotation.y += 0.0011; tetra.rotation.x += 0.0007; renderer.render(scene, camera);
+}
+animate();
+
+// ---- Self-tests ----
+(function(){
+  console.group('%cTetrad Onion — Always-On Slider + Haptics','color:#9df');
+  try{
+    console.assert(Number(slider.max) === (LAYERS_PER_FACE*4 - 1), 'Slider bounds match total layers');
+    console.assert(faceLayers.ENH.length === LAYERS_PER_FACE, 'Layers per face OK');
+    const anyOff = Object.values(faceLayers).flat().some(m=> m.position.length()>1e-6 || Math.abs(m.quaternion.w-1)>1e-6 || Math.abs(m.quaternion.x)>1e-6 || Math.abs(m.quaternion.y)>1e-6 || Math.abs(m.quaternion.z)>1e-6 );
+    console.assert(!anyOff, 'All layers aligned');
+  }catch(e){ console.error(e); } finally { console.groupEnd(); }
+})();
+
+// Resize
+addEventListener('resize', ()=>{ renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix(); });
+</script>
+</body>
+</html>

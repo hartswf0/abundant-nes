@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>THE GOOD, THE BAD, AND THE SPUDDY — Canvas Intro</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rye&family=Almendra:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{ --bg:#120c08; --ink:#f5e6d3; --muted:#d4b896; --gold:#d39b3b; --shadow:0 20px 120px rgba(0,0,0,.5) }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);overflow:hidden}
+  canvas{display:block; inline-size:100vw; block-size:100svh; background:#0a0a08}
+
+  /* CRT overlay (visual polish) */
+  .crt{position:fixed; inset:0; pointer-events:none; z-index:5; mix-blend-mode:overlay;
+       background:
+         radial-gradient(ellipse at center, rgba(255,255,255,.05) 0%, rgba(0,0,0,.55) 70%, rgba(0,0,0,.92) 100%),
+         repeating-linear-gradient(to bottom, rgba(255,255,255,.03) 0 2px, rgba(0,0,0,0) 2px 4px);
+       filter: saturate(.95) contrast(1.05)}
+  .crt:before{content:""; position:absolute; inset:3vmin; border-radius:3vmin;
+       box-shadow:0 0 0 1.2vmin rgba(0,0,0,.75) inset, 0 0 90px rgba(0,0,0,.7) inset}
+
+  /* HUD */
+  .hud{position:fixed; inset:auto 0 1.75rem 0; display:grid; place-items:center; z-index:10; pointer-events:none}
+  .card{pointer-events:auto; width:min(100%,960px); margin:.5rem; padding:1rem 1.2rem;
+        background:linear-gradient(180deg, rgba(18,12,8,.8), rgba(10,7,5,.8));
+        border:1px solid rgba(245,230,211,.2); border-radius:14px; box-shadow:var(--shadow)}
+  .title{font:700 clamp(22px, 6vw, 56px) Rye, serif; letter-spacing:.02em; text-align:center}
+  .subtitle{margin-top:.15rem; font:600 clamp(12px,2.2vw,18px) Almendra, serif; color:var(--muted); text-align:center; letter-spacing:.08em}
+  .controls{display:flex; flex-wrap:wrap; justify-content:center; gap:.6rem; margin-top:.8rem}
+  .btn{border:0; padding:.75rem 1rem; border-radius:12px; font:700 14px Almendra,serif; letter-spacing:.12em; cursor:pointer;
+       background:linear-gradient(180deg,#a97b32,#6a4c1d); color:#120c08; box-shadow:0 6px 18px rgba(0,0,0,.35)}
+  .btn.secondary{background:linear-gradient(180deg,#3a2a19,#23180f); color:var(--ink); border:1px solid rgba(245,230,211,.18)}
+  .synopsis{max-width:80ch; margin:.7rem auto 0; font:400 clamp(13px,2.4vw,17px) Almendra,serif; color:var(--muted); text-align:center}
+
+  @keyframes fadeIn{from{opacity:0} to{opacity:1}}
+  @keyframes scaleIn{from{opacity:0; transform:scale(.7)} to{opacity:1; transform:scale(1)}}
+  @media (prefers-reduced-motion: reduce){ *{animation-duration:.01ms!important; transition-duration:.01ms!important} }
+</style>
+</head>
+<body>
+  <canvas id="stage" aria-label="Sepia CRT western intro"></canvas>
+  <div class="crt" aria-hidden="true"></div>
+
+  <!-- HUD -->
+  <section class="hud" aria-live="polite">
+    <div class="card">
+      <div class="title">THE GOOD, THE BAD, AND THE SPUDDY</div>
+      <div class="subtitle">Polished TV static + rails & ties + canvas-only title burn</div>
+      <div class="controls">
+        <button class="btn" id="start">START INTRO</button>
+        <button class="btn secondary" id="toggleTV" aria-pressed="true">TV STATIC: ON</button>
+        <button class="btn secondary" id="restart" disabled>RESTART</button>
+      </div>
+      <p class="synopsis">Rattle on rails, headlight bloom, and a flash to a <em>canvas-rendered</em> title card—no DOM overlays.</p>
+    </div>
+  </section>
+
+  <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+  <script>
+  (()=>{
+    /* -------------------- helpers -------------------- */
+    const clamp = (v,min,max)=>Math.max(min,Math.min(max,v));
+    const isMobile = () => matchMedia('(max-width: 768px)').matches;
+
+    /* -------------------- three setup -------------------- */
+    const canvas = document.getElementById('stage');
+    const renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:false, powerPreference:'high-performance'});
+    renderer.setPixelRatio(clamp(window.devicePixelRatio||1,1,2));
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color('#23160f');
+    scene.fog = new THREE.Fog(0x8B7355, 10, 60);
+
+    const camera = new THREE.PerspectiveCamera(65, innerWidth/innerHeight, .1, 1000);
+    camera.position.set(0, 2, 18);
+    camera.lookAt(0, 0.8, 0);
+    scene.add(camera);
+
+    // lights
+    const amb = new THREE.AmbientLight(0x3a2b1c, 0.5); scene.add(amb);
+    const key = new THREE.DirectionalLight(0xFFB366, 1.2); key.position.set(10, 6, 5); scene.add(key);
+    const head = new THREE.SpotLight(0xFFE4A0, 2.6, 42, Math.PI/6, 0.5, 1.8); head.position.set(-18, 1, 0); scene.add(head); scene.add(head.target);
+
+    // ground
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(160,160), new THREE.MeshStandardMaterial({color:0x6b533c, roughness:1, metalness:0}));
+    ground.rotation.x = -Math.PI/2; ground.position.y = -0.6; scene.add(ground);
+
+    // rails
+    const railMat = new THREE.MeshStandardMaterial({color:0x3B2C1D, roughness:0.9});
+    const railGeom = new THREE.BoxGeometry(80, 0.12, 0.14);
+    const railL = new THREE.Mesh(railGeom, railMat); railL.position.set(0,-0.5,0.85); scene.add(railL);
+    const railR = new THREE.Mesh(railGeom, railMat); railR.position.set(0,-0.5,-0.85); scene.add(railR);
+
+    // ties via InstancedMesh for perf
+    const tieCount = 120; // dense foreground
+    const tieGeom = new THREE.BoxGeometry(2.8, 0.12, 0.34);
+    const tieMat = new THREE.MeshStandardMaterial({color:0x5C4033, roughness:0.95});
+    const ties = new THREE.InstancedMesh(tieGeom, tieMat, tieCount);
+    const m = new THREE.Matrix4();
+    for(let i=0;i<tieCount;i++){
+      const z = -36 + i*0.6; // closer spacing for speed feel
+      m.makeTranslation(0, -0.54, z);
+      ties.setMatrixAt(i, m);
+    }
+    scene.add(ties);
+
+    // telegraph poles
+    function pole(x,z){
+      const g = new THREE.Group();
+      const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.08,0.1,6,6), new THREE.MeshStandardMaterial({color:0x5C4033, roughness:0.95}));
+      mast.position.set(x,2.4,z); g.add(mast);
+      const cross = new THREE.Mesh(new THREE.BoxGeometry(2.6,0.12,0.12), mast.material); cross.position.set(x,5,z); g.add(cross);
+      return g;
+    }
+    [-24,-12,0,12,24,36].forEach(z=> scene.add(pole(4.6, z)));
+
+    // saloon silhouette
+    const saloon = new THREE.Mesh(new THREE.BoxGeometry(7,4,4), new THREE.MeshStandardMaterial({color:0x8B6F47, roughness:1}));
+    saloon.position.set(-8,1.4,-4); scene.add(saloon);
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(8,0.4,5), new THREE.MeshStandardMaterial({color:0x4c3824, roughness:1}));
+    roof.position.set(-8,3.6,-4); scene.add(roof);
+
+    // TRAIN
+    function makeTrain(){
+      const g = new THREE.Group();
+      const bodyMat = new THREE.MeshStandardMaterial({color:0x1a1a1a, roughness:0.45, metalness:0.65});
+      const engine = new THREE.Mesh(new THREE.BoxGeometry(4,2.2,2), bodyMat); engine.position.set(0,0.7,0); g.add(engine);
+      const boiler = new THREE.Mesh(new THREE.CylinderGeometry(0.9,0.95,3.2,16), new THREE.MeshStandardMaterial({color:0x2b2317, roughness:0.35, metalness:0.7}));
+      boiler.rotation.z = Math.PI/2; boiler.position.set(-0.3,1.1,0); g.add(boiler);
+      const stack = new THREE.Mesh(new THREE.CylinderGeometry(0.34,0.4,1.2,12), bodyMat); stack.position.set(-1.7,2,0); g.add(stack);
+      const cow = new THREE.Mesh(new THREE.BoxGeometry(2.2,0.6,1.8), bodyMat); cow.position.set(2.2,0.3,0); g.add(cow);
+      // wheels
+      const wG = new THREE.CylinderGeometry(0.6,0.6,0.28,16); const wM = new THREE.MeshStandardMaterial({color:0x2a241d, roughness:0.3, metalness:0.85});
+      const offs = [-1.2, -0.2, 0.8, 1.8];
+      offs.forEach(x=>{ const wl = new THREE.Mesh(wG, wM); wl.rotation.z=Math.PI/2; wl.position.set(x,0,0.9); wl.userData.wheel=true; g.add(wl);
+                        const wr = new THREE.Mesh(wG, wM); wr.rotation.z=Math.PI/2; wr.position.set(x,0,-0.9); wr.userData.wheel=true; g.add(wr); });
+      // headlight bulb
+      const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.35,16,16), new THREE.MeshStandardMaterial({color:0xFFFFCC, emissive:0xFFFFCC, emissiveIntensity:2, transparent:true, opacity:0.85}));
+      bulb.position.set(-2.3,1,0); g.add(bulb);
+      g.position.set(-22,0,0);
+      return g;
+    }
+    const train = makeTrain(); scene.add(train);
+
+    // headlight cone
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(10,30,32,1,true), new THREE.MeshBasicMaterial({color:0xFFE4A0, transparent:true, opacity:0.07, side:THREE.DoubleSide, depthWrite:false, blending:THREE.AdditiveBlending}));
+    cone.rotation.z = -Math.PI/2; cone.position.set(-13,1,0); scene.add(cone);
+
+    // dust points
+    const dustCount = isMobile()? 8000 : 16000;
+    const dGeo = new THREE.BufferGeometry();
+    const dPos = new Float32Array(dustCount*3);
+    for(let i=0;i<dustCount;i++){ const i3=i*3; dPos[i3]=(Math.random()-0.5)*40; dPos[i3+1]=Math.random()*2-0.3; dPos[i3+2]=(Math.random()-0.5)*8; }
+    dGeo.setAttribute('position', new THREE.BufferAttribute(dPos,3));
+    const dMat = new THREE.PointsMaterial({color:0xC4A57B, size:0.08, transparent:true, opacity:0.6, sizeAttenuation:true});
+    const dust = new THREE.Points(dGeo, dMat); scene.add(dust);
+
+    // film grain (screen-space)
+    const grainCanvas = document.createElement('canvas'); grainCanvas.width=512; grainCanvas.height=512;
+    const gctx = grainCanvas.getContext('2d');
+    function updateGrain(){ const d = gctx.createImageData(512,512); for(let i=0;i<d.data.length;i+=4){ const v=Math.random()*255; d.data[i]=v; d.data[i+1]=v; d.data[i+2]=v; d.data[i+3]=Math.random()*70 } gctx.putImageData(d,0,0) }
+    updateGrain();
+    const grainTex = new THREE.CanvasTexture(grainCanvas);
+    const grainPlane = new THREE.Mesh(new THREE.PlaneGeometry(22, 14), new THREE.MeshBasicMaterial({map:grainTex, transparent:true, opacity:.22, depthTest:false, depthWrite:false}));
+    grainPlane.position.z = 17.9; camera.add(grainPlane);
+
+    // TV static overlay (screen-space) — can be toggled
+    const tvCanvas = document.createElement('canvas'); tvCanvas.width=256; tvCanvas.height=256; const tvCtx = tvCanvas.getContext('2d');
+    function drawTVNoise(intensity=1){ const img = tvCtx.createImageData(256,256); for(let i=0;i<img.data.length;i+=4){ const n = Math.random()*255; const v = n*intensity; img.data[i]=v; img.data[i+1]=v; img.data[i+2]=v; img.data[i+3]=255 } tvCtx.putImageData(img,0,0) }
+    const tvTex = new THREE.CanvasTexture(tvCanvas); tvTex.wrapS = tvTex.wrapT = THREE.RepeatWrapping; tvTex.repeat.set(6,6); tvTex.minFilter = THREE.LinearFilter;
+    const tvOverlay = new THREE.Mesh(new THREE.PlaneGeometry(22, 14), new THREE.MeshBasicMaterial({map:tvTex, transparent:true, opacity:.10, depthTest:false, depthWrite:false}));
+    tvOverlay.position.z = 18; camera.add(tvOverlay);
+    let tvOn = true;
+
+    // Impact flash quad (canvas-only, no DOM)
+    const flashMat = new THREE.MeshBasicMaterial({color:0xffffff, transparent:true, opacity:0});
+    const flashQuad = new THREE.Mesh(new THREE.PlaneGeometry(22,14), flashMat); flashQuad.position.z = 17.8; camera.add(flashQuad);
+
+    // Title canvas → texture → plane (canvas-only title)
+    const titleCanvas = document.createElement('canvas'); titleCanvas.width = 2048; titleCanvas.height = 1024; const tctx = titleCanvas.getContext('2d');
+    function drawTitleCanvas(){
+      const W = titleCanvas.width, H = titleCanvas.height;
+      tctx.clearRect(0,0,W,H);
+      // kinetic rings (soft)
+      tctx.save(); tctx.globalAlpha = 0.22; tctx.strokeStyle = '#D4A574'; tctx.lineWidth = 8;
+      for(let r=140;r<460;r+=40){ tctx.beginPath(); tctx.arc(W/2,H/2,r,0,Math.PI*2); tctx.stroke(); }
+      tctx.restore();
+      // text
+      const shadow = (x,y,blur,clr)=>{ tctx.shadowOffsetX=x; tctx.shadowOffsetY=y; tctx.shadowBlur=blur; tctx.shadowColor=clr };
+      tctx.textAlign='center'; tctx.textBaseline='middle';
+      // THE GOOD,
+      tctx.save(); shadow(24,24,0,'rgba(139,111,71,.6)'); tctx.font='900 160px Impact, Arial Black, sans-serif'; tctx.fillStyle='#D4A574'; tctx.strokeStyle='rgba(0,0,0,.3)'; tctx.lineWidth=6; tctx.fillText('THE GOOD,', W/2, H/2-180); tctx.strokeText('THE GOOD,', W/2, H/2-180); tctx.restore();
+      // THE BAD,
+      tctx.save(); shadow(24,24,0,'rgba(139,111,71,.6)'); tctx.font='900 160px Impact, Arial Black, sans-serif'; tctx.fillStyle='#D4A574'; tctx.strokeStyle='rgba(0,0,0,.3)'; tctx.lineWidth=6; tctx.fillText('THE BAD,', W/2, H/2-10); tctx.strokeText('THE BAD,', W/2, H/2-10); tctx.restore();
+      // AND THE SPUDDY
+      tctx.save(); shadow(32,32,0,'rgba(139,111,71,.8)'); tctx.font='900 200px Impact, Arial Black, sans-serif'; tctx.fillStyle='#FFD700'; tctx.strokeStyle='rgba(0,0,0,.4)'; tctx.lineWidth=8; tctx.fillText('AND THE SPUDDY', W/2, H/2+180); tctx.strokeText('AND THE SPUDDY', W/2, H/2+180); tctx.restore();
+      // subtitle
+      tctx.save(); tctx.font='700 42px Courier New, monospace'; tctx.fillStyle='#D4A574'; tctx.globalAlpha = 0.9; tctx.fillText('A TALE OF INFLUENCER JUSTICE', W/2, H-200); tctx.fillText('ON THE DIGITAL FRONTIER', W/2, H-140); tctx.restore();
+    }
+    drawTitleCanvas();
+    const titleTex = new THREE.CanvasTexture(titleCanvas);
+    const titlePlane = new THREE.Mesh(new THREE.PlaneGeometry(18,9), new THREE.MeshBasicMaterial({map:titleTex, transparent:true, opacity:0}));
+    titlePlane.position.set(0, 0.6, 12.5); scene.add(titlePlane);
+
+    /* -------------------- audio -------------------- */
+    let audioCtx = null; let trainOsc=null, trainGain=null, trainLP=null; let hissNode=null, hissGain=null, hissBP=null;
+    function initAudio(){ if(audioCtx) return; const AC = window.AudioContext || window.webkitAudioContext; audioCtx = new AC();
+      // Train rumble
+      trainOsc = audioCtx.createOscillator(); trainOsc.type='sawtooth'; trainOsc.frequency.setValueAtTime(38, audioCtx.currentTime);
+      trainLP = audioCtx.createBiquadFilter(); trainLP.type='lowpass'; trainLP.frequency.setValueAtTime(220, audioCtx.currentTime);
+      trainGain = audioCtx.createGain(); trainGain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+      trainOsc.connect(trainLP); trainLP.connect(trainGain); trainGain.connect(audioCtx.destination); trainOsc.start();
+      // TV hiss
+      const bufferSize = audioCtx.sampleRate * 2; const nb = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate); const out = nb.getChannelData(0);
+      for(let i=0;i<bufferSize;i++){ out[i] = Math.random()*2-1 }
+      hissNode = audioCtx.createBufferSource(); hissNode.buffer = nb; hissNode.loop = true;
+      hissBP = audioCtx.createBiquadFilter(); hissBP.type='bandpass'; hissBP.frequency.setValueAtTime(2200, audioCtx.currentTime);
+      hissGain = audioCtx.createGain(); hissGain.gain.setValueAtTime(0.0, audioCtx.currentTime);
+      hissNode.connect(hissBP); hissBP.connect(hissGain); hissGain.connect(audioCtx.destination); hissNode.start();
+    }
+    function crashSound(){ if(!audioCtx) return; const dur=.45; const N=Math.floor(audioCtx.sampleRate*dur); const b=audioCtx.createBuffer(1,N,audioCtx.sampleRate); const ch=b.getChannelData(0); for(let i=0;i<N;i++){ ch[i]=(Math.random()*2-1)*(1-i/N) }
+      const src=audioCtx.createBufferSource(); src.buffer=b; const lp=audioCtx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.setValueAtTime(420,audioCtx.currentTime); const g=audioCtx.createGain(); g.gain.setValueAtTime(.55,audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(.01,audioCtx.currentTime+dur); src.connect(lp); lp.connect(g); g.connect(audioCtx.destination); src.start(); }
+    function channelSwitchBurst(){ if(!audioCtx) return; hissGain.gain.cancelScheduledValues(audioCtx.currentTime); hissGain.gain.setValueAtTime(0.0,audioCtx.currentTime); hissGain.gain.linearRampToValueAtTime(0.18,audioCtx.currentTime+.04); hissGain.gain.exponentialRampToValueAtTime(0.02,audioCtx.currentTime+.25) }
+
+    /* -------------------- flow state -------------------- */
+    let started=false, finished=false; let progress=0, wheelRot=0; // train progress 0..1
+
+    const startBtn = document.getElementById('start');
+    const toggleTVBtn = document.getElementById('toggleTV');
+    const restartBtn = document.getElementById('restart');
+
+    startBtn.addEventListener('click', async ()=>{
+      initAudio(); if(audioCtx && audioCtx.state==='suspended'){ try{ await audioCtx.resume() }catch{}}
+      started=true; finished=false; progress=0; wheelRot=0; startBtn.disabled=true; restartBtn.disabled=true;
+      // reset positions and visuals
+      train.position.x=-22; head.position.x=-18; cone.position.x=-13;
+      flashMat.opacity=0; titlePlane.material.opacity=0;
+      // ramp rumble
+      if(trainGain){ trainGain.gain.cancelScheduledValues(audioCtx.currentTime); trainGain.gain.setValueAtTime(0.001,audioCtx.currentTime); trainGain.gain.exponentialRampToValueAtTime(0.22, audioCtx.currentTime+1.2) }
+      if(trainOsc){ trainOsc.frequency.linearRampToValueAtTime(58, audioCtx.currentTime+3) }
+      channelSwitchBurst();
+    });
+
+    toggleTVBtn.addEventListener('click',()=>{ tvOn=!tvOn; toggleTVBtn.setAttribute('aria-pressed', String(tvOn)); toggleTVBtn.textContent = tvOn? 'TV STATIC: ON' : 'TV STATIC: OFF'; tvOverlay.visible = tvOn; });
+
+    restartBtn.addEventListener('click',()=>{ if(!finished) return; startBtn.disabled=false });
+
+    /* -------------------- animation -------------------- */
+    const clock = new THREE.Clock();
+    function animate(){ requestAnimationFrame(animate); const t=clock.getElapsedTime();
+      // screen-space textures
+      if(tvOn){ drawTVNoise(1); tvTex.needsUpdate=true; if(Math.random()>0.985){ channelSwitchBurst() } }
+      if(Math.random()>0.94){ updateGrain(); grainTex.needsUpdate=true }
+
+      // subtle camera motion
+      camera.position.x = Math.sin(t*5)*0.05; camera.position.y = 2 + Math.sin(t*3)*0.06; camera.rotation.z = Math.sin(t*4)*0.01;
+
+      if(started && !finished){
+        progress += 0.002 + (1 - Math.max(0, (train.position.x + 22)/44)) * 0.0015;
+        train.position.x = THREE.MathUtils.lerp(-22, 8, Math.min(progress,1));
+        head.position.x = train.position.x + 4; cone.position.x = train.position.x + 9;
+        // wheels
+        wheelRot += 0.25; train.traverse(o=>{ if(o.userData && o.userData.wheel){ o.rotation.x = wheelRot } });
+        // dust drift forward
+        const arr = dGeo.attributes.position.array; for(let i=0;i<arr.length;i+=3){ arr[i] += (Math.random()-0.5)*0.02; arr[i+2] += 0.06; if(arr[i+2] > 8){ arr[i]=(Math.random()-0.5)*40; arr[i+1]=Math.random()*2-0.3; arr[i+2]=-8 } }
+        dGeo.attributes.position.needsUpdate=true;
+        // audio dynamics
+        if(audioCtx && trainGain && trainOsc){ const prox = 1 - Math.min(1, Math.max(0, (train.position.x + 22)/30)); const vol = 0.1 + prox * 0.22; trainGain.gain.linearRampToValueAtTime(vol, audioCtx.currentTime + 0.05); trainOsc.frequency.linearRampToValueAtTime(42 + prox*28, audioCtx.currentTime + 0.1); hissBP.frequency.setTargetAtTime(1800 + Math.sin(t*3)*400, audioCtx.currentTime, 0.05) }
+        // headlight flicker + exposure
+        if(Math.random()>0.96){ head.intensity=2.2+Math.random()*1.6; renderer.toneMappingExposure=0.7+Math.random()*0.4 } else { head.intensity=2.6; renderer.toneMappingExposure=0.85 }
+      }
+
+      // impact
+      if(started && !finished && train.position.x > 7.2){ finished=true; started=false; crashSound(); if(trainGain){ trainGain.gain.setTargetAtTime(0.0001, audioCtx.currentTime, 0.06) } if(hissGain){ hissGain.gain.setTargetAtTime(0.0, audioCtx.currentTime, 0.05) }
+        // flash
+        flashMat.opacity = 1; setTimeout(()=>{ flashMat.opacity = 0; }, 90);
+        // reveal title (fade in on canvas)
+        drawTitleCanvas(); titleTex.needsUpdate = true; const start = performance.now(); const dur = 900; function fade(){ const k = (performance.now()-start)/dur; titlePlane.material.opacity = Math.min(1, k); if(k<1){ requestAnimationFrame(fade) } else { restartBtn.disabled=false } } fade();
+      }
+
+      renderer.render(scene,camera);
+    }
+    animate();
+
+    /* -------------------- resize -------------------- */
+    addEventListener('resize', ()=>{ camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight) }, {passive:true});
+
+  })();
+  </script>
+</body>
+</html>

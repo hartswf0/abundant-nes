@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+  <title>The Unthinkable Instrument</title>
+  <style>
+    html,body{margin:0; height:100%; background:#000; color:#fff;}
+    canvas{width:100%; height:100%; display:block; touch-action:none;}
+    #stat{position:fixed; top:10px; left:10px; font-family:sans-serif; font-size:12px; opacity:.6}
+  </style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="stat">stopped</div>
+<script>
+(function(){
+  const AudioCtx=window.AudioContext||window.webkitAudioContext;
+  let ac, analyser, source, master, running=false;
+  const c=document.getElementById('c');
+  const ctx=c.getContext('2d');
+  const stat=document.getElementById('stat');
+
+  function resize(){c.width=window.innerWidth; c.height=window.innerHeight;}
+  window.onresize=resize; resize();
+
+  function init(){
+    ac=new AudioCtx();
+    master=ac.createGain(); master.gain.value=0.3;
+    analyser=ac.createAnalyser(); analyser.fftSize=1024;
+    source=makeNoise(ac);
+    source.connect(master);
+    master.connect(ac.destination);
+    master.connect(analyser);
+    draw();
+  }
+
+  function toggle(){
+    if(!ac){init();}
+    if(running){ac.suspend(); running=false; stat.textContent='stopped';}
+    else{ac.resume(); running=true; stat.textContent='running';}
+  }
+
+  // gesture mapping
+  let pitch=220, gain=0.3;
+  c.addEventListener('pointerdown', e=>{toggle();});
+  c.addEventListener('pointermove', e=>{
+    if(!ac||!running)return;
+    const x=e.clientX/c.width, y=e.clientY/c.height;
+    pitch=100+800*x;
+    gain=1-y;
+    if(source.frequency) source.frequency.setValueAtTime(pitch,ac.currentTime);
+    master.gain.value=gain;
+  });
+  c.addEventListener('wheel', e=>{
+    if(!ac)return;
+    master.gain.value=Math.max(0,Math.min(1,master.gain.value+(e.deltaY>0?-0.05:0.05)));
+  });
+
+  function draw(){requestAnimationFrame(draw);
+    if(!analyser)return;
+    const data=new Uint8Array(analyser.frequencyBinCount);
+    analyser.getByteFrequencyData(data);
+    ctx.fillStyle='rgba(0,0,0,0.2)'; ctx.fillRect(0,0,c.width,c.height);
+    for(let i=0;i<data.length;i++){
+      const v=data[i]/255, x=i/data.length*c.width, h=v*c.height;
+      ctx.fillStyle=`hsl(${200+v*160},80%,50%)`;
+      ctx.fillRect(x,c.height-h,2,h);
+    }
+  }
+
+  function makeNoise(ac){const b=ac.createBuffer(1,ac.sampleRate*2,ac.sampleRate);const d=b.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;const s=ac.createBufferSource();s.buffer=b;s.loop=true;s.start();return s;}
+})();
+</script>
+</body>
+</html>

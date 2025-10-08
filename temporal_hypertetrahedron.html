@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Tetrahedron — Layered Media Strata (Gestural)</title>
+  <style>
+    html, body { margin:0; height:100%; background:#000; overflow:hidden; }
+    canvas { display:block; touch-action:none; }
+  </style>
+  <script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js"}}</script>
+</head>
+<body>
+<script type="module">
+import * as THREE from 'three';
+
+// ===== Core setup =====
+const scene = new THREE.Scene();
+const renderer = new THREE.WebGLRenderer({ antialias:true, powerPreference:'high-performance' });
+const DPR = Math.min(devicePixelRatio || 1, 2);
+renderer.setPixelRatio(DPR);
+renderer.setSize(innerWidth, innerHeight);
+renderer.setClearColor(0x000000, 1);
+document.body.appendChild(renderer.domElement);
+
+let camera; const ORTHO = 3.4;
+function makeCamera(){
+  const a = innerWidth/innerHeight;
+  camera = new THREE.OrthographicCamera(-ORTHO*a, ORTHO*a, ORTHO, -ORTHO, 0.1, 100);
+  camera.position.set(4,4,4); camera.lookAt(0,0,0);
+}
+makeCamera();
+
+// ===== Tetrahedron Wireframe =====
+const tetGeo = new THREE.TetrahedronGeometry(2.4);
+const pos = tetGeo.getAttribute('position');
+const uniq = new Map();
+for(let i=0;i<pos.count;i++){
+  const x=pos.getX(i), y=pos.getY(i), z=pos.getZ(i);
+  const k=`${x.toFixed(5)},${y.toFixed(5)},${z.toFixed(5)}`; if(!uniq.has(k)) uniq.set(k, new THREE.Vector3(x,y,z));
+}
+const verts = [...uniq.values()];
+const apex = verts.reduce((a,b)=> (b.y>a.y? b:a), verts[0]);
+const base = verts.filter(v=>v!==apex);
+
+const tetEdges = new THREE.LineSegments(new THREE.EdgesGeometry(tetGeo), new THREE.LineBasicMaterial({ color:0xEAEAEA, transparent:true, opacity:0.95 }));
+scene.add(tetEdges);
+
+// Vertex spheres (pickable foci)
+const vertexGroup = new THREE.Group();
+for (const v of verts){
+  const s = new THREE.Mesh(new THREE.SphereGeometry(0.08, 16, 16), new THREE.MeshBasicMaterial({ color:0x8888ff }));
+  s.position.copy(v); vertexGroup.add(s);
+}
+scene.add(vertexGroup);
+
+// ===== Layered triangles (64) and pick meshes =====
+const LAYERS = 64;
+const strata = new THREE.Group();
+const pickGroup = new THREE.Group(); // invisible triangles for picking
+scene.add(strata, pickGroup);
+
+function triAt(t){
+  const a = apex; const [b0,b1,b2] = base;
+  const p0 = new THREE.Vector3().copy(a).multiplyScalar(1-t).add(new THREE.Vector3().copy(b0).multiplyScalar(t));
+  const p1 = new THREE.Vector3().copy(a).multiplyScalar(1-t).add(new THREE.Vector3().copy(b1).multiplyScalar(t));
+  const p2 = new THREE.Vector3().copy(a).multiplyScalar(1-t).add(new THREE.Vector3().copy(b2).multiplyScalar(t));
+  return [p0,p1,p2];
+}
+
+function lineTri(p0,p1,p2, opacity){
+  const g = new THREE.BufferGeometry();
+  const arr = new Float32Array([
+    p0.x,p0.y,p0.z, p1.x,p1.y,p1.z,
+    p1.x,p1.y,p1.z, p2.x,p2.y,p2.z,
+    p2.x,p2.y,p2.z, p0.x,p0.y,p0.z
+  ]);
+  g.setAttribute('position', new THREE.BufferAttribute(arr,3));
+  return new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color:0xEAEAEA, transparent:true, opacity }));
+}
+
+function meshTri(p0,p1,p2){
+  const g = new THREE.BufferGeometry();
+  const arr = new Float32Array([
+    p0.x,p0.y,p0.z, p1.x,p1.y,p1.z, p2.x,p2.y,p2.z
+  ]);
+  g.setAttribute('position', new THREE.BufferAttribute(arr,3));
+  g.setIndex([0,1,2]); g.computeVertexNormals();
+  return new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color:0x000000, transparent:true, opacity:0.0, depthWrite:false }));
+}
+
+const layerObjs = [], pickMeshes = [];
+for(let i=0;i<LAYERS;i++){
+  const t = i/(LAYERS-1);
+  const [p0,p1,p2] = triAt(t);
+  const op = THREE.MathUtils.lerp(0.75, 0.08, t);
+  const tri = lineTri(p0,p1,p2, op);
+  tri.userData.layerIndex = i;
+  strata.add(tri); layerObjs.push(tri);
+  const pm = meshTri(p0,p1,p2); pm.userData.layerIndex = i; pickGroup.add(pm); pickMeshes.push(pm);
+}
+
+// Gold point seams per layer
+const goldGroup = new THREE.Group(); scene.add(goldGroup);
+const goldMatBase = new THREE.PointsMaterial({ color:0xC9A227, size:0.016, transparent:true, opacity:0.35, depthWrite:false, blending:THREE.AdditiveBlending });
+for(let i=0;i<LAYERS;i++){
+  const t = i/(LAYERS-1); const [p0,p1,p2] = triAt(t);
+  const N=90, geo=new THREE.BufferGeometry(), pts=new Float32Array(N*3);
+  for(let k=0;k<N;k++){
+    const u=Math.random(), v=Math.random()*(1-u), w=1-u-v;
+    const p=new THREE.Vector3().addScaledVector(p0,u).addScaledVector(p1,v).addScaledVector(p2,w);
+    pts[k*3]=p.x; pts[k*3+1]=p.y; pts[k*3+2]=p.z;
+  }
+  geo.setAttribute('position', new THREE.BufferAttribute(pts,3));
+  const mat = goldMatBase.clone();
+  const cloud=new THREE.Points(geo,mat); cloud.userData.layerIndex=i; goldGroup.add(cloud);
+}
+
+// ===== Control state =====
+let idx = 0; // active layer
+let band = 3; // +/- layers highlighted around idx
+let emphasis = 'balanced'; // 'wire' | 'gold' | 'balanced'
+let hueRate = 0.7; // global chroma drift speed
+let autoBreath = true; // toggle with double-tap
+let dragStart = null; // for pan/rotate & swipe
+let touch2 = null; // for pinch & twist
+let rotateY = 0, rotateX = 0; // gentle orbit controlled by horizontal drag
+
+const vibe = (ms)=> navigator.vibrate && navigator.vibrate(ms);
+
+function setLayer(i, cause='program'){
+  const prev=idx; idx = Math.max(0, Math.min(LAYERS-1, i));
+  if (idx!==prev && cause!=='auto') vibe(6);
+  const fall = band;
+  layerObjs.forEach(tri=>{
+    const d=Math.abs((tri.userData.layerIndex||0)-idx);
+    const near=Math.max(0,1-d/(fall||1));
+    const m=tri.material;
+    const baseOp = THREE.MathUtils.lerp(0.06, 0.95, near);
+    m.opacity = emphasis==='wire'? baseOp : THREE.MathUtils.lerp(baseOp, baseOp*0.5, emphasis==='gold');
+    m.color.setHex(d===0?0xFFFFFF:0xEAEAEA);
+    m.needsUpdate=true;
+  });
+  goldGroup.children.forEach(cl=>{
+    const d=Math.abs((cl.userData.layerIndex||0)-idx);
+    const near=Math.max(0,1-d/(fall||1));
+    cl.material.opacity = emphasis==='gold' ? THREE.MathUtils.lerp(0.15, 0.95, near) : THREE.MathUtils.lerp(0.12, 0.7, near);
+  });
+}
+
+function setBand(b){ band = Math.max(0, Math.min(12, Math.round(b))); setLayer(idx, 'auto'); }
+function setHueRate(r){ hueRate = Math.max(0, Math.min(3, r)); }
+function cycleEmphasis(){ emphasis = emphasis==='balanced'?'wire': emphasis==='wire'?'gold':'balanced'; setLayer(idx,'auto'); }
+
+// Wheel => layer scrub
+addEventListener('wheel', e=>{ setLayer(idx + Math.sign(e.deltaY), 'wheel'); e.preventDefault(); }, { passive:false });
+
+// Pointer gestures
+addEventListener('pointerdown', e=>{
+  dragStart = { x:e.clientX, y:e.clientY, t:performance.now(), id:e.pointerId };
+});
+addEventListener('pointermove', e=>{
+  if(!dragStart || dragStart.id!==e.pointerId) return;
+  const dx=e.clientX-dragStart.x, dy=e.clientY-dragStart.y;
+  // vertical movement dominates => layer scrub; horizontal => rotate
+  if(Math.abs(dy)>Math.abs(dx)){
+    if(Math.abs(dy)>18){ setLayer(idx + Math.sign(dy), 'swipe'); dragStart.y = e.clientY; }
+  } else {
+    rotateY += dx*0.0008; rotateX += dy*0.0005; dragStart.x = e.clientX; dragStart.y = e.clientY;
+  }
+});
+addEventListener('pointerup', e=>{
+  if(!dragStart) return; const dt=performance.now()-dragStart.t; const dist=Math.hypot(e.clientX-dragStart.x, e.clientY-dragStart.y);
+  if(dt<220 && dist<8){ // tap
+    // Raycast to pick layer or vertex
+    pickAt(e.clientX, e.clientY);
+  }
+  dragStart=null;
+}, { passive:true });
+
+// Two-finger pinch & twist
+addEventListener('touchstart', e=>{
+  if(e.touches.length===2){
+    touch2 = {
+      a:{x:e.touches[0].clientX, y:e.touches[0].clientY},
+      b:{x:e.touches[1].clientX, y:e.touches[1].clientY},
+      dist:0, ang:0
+    };
+    touch2.dist = Math.hypot(touch2.a.x-touch2.b.x, touch2.a.y-touch2.b.y);
+    touch2.ang = Math.atan2(touch2.b.y-touch2.a.y, touch2.b.x-touch2.a.x);
+  }
+}, { passive:true });
+addEventListener('touchmove', e=>{
+  if(!touch2 || e.touches.length!==2) return;
+  const a={x:e.touches[0].clientX, y:e.touches[0].clientY};
+  const b={x:e.touches[1].clientX, y:e.touches[1].clientY};
+  const nd = Math.hypot(a.x-b.x, a.y-b.y);
+  const na = Math.atan2(b.y-a.y, b.x-a.x);
+  const pinch = (nd - touch2.dist) / 60; // scale factor proxy
+  if(Math.abs(pinch)>0.05){ setBand(band + pinch*2); touch2.dist = nd; }
+  let dAng = na - touch2.ang; while(dAng>Math.PI) dAng-=Math.PI*2; while(dAng<-Math.PI) dAng+=Math.PI*2;
+  if(Math.abs(dAng)>0.02){ setHueRate(hueRate + dAng*0.6); touch2.ang = na; }
+}, { passive:true });
+addEventListener('touchend', ()=>{ touch2=null; }, { passive:true });
+
+// Double-tap to toggle auto breath & cycle emphasis with triple-tap
+let tapTimes=[];
+addEventListener('pointerup', e=>{
+  const now=performance.now(); tapTimes = tapTimes.filter(t=> now - t < 420); tapTimes.push(now);
+  if(tapTimes.length===2){ autoBreath = !autoBreath; vibe(10); }
+  if(tapTimes.length===3){ cycleEmphasis(); vibe(20); tapTimes=[]; }
+});
+
+// Device tilt subtly influences rotation
+addEventListener('deviceorientation', e=>{
+  if(e.beta==null || e.gamma==null) return; rotateY += (e.gamma||0) * 0.00002; rotateX += (e.beta||0) * 0.00002;
+});
+
+// Raycaster picking
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+function pickAt(cx, cy){
+  mouse.x = (cx/innerWidth)*2-1; mouse.y = -(cy/innerHeight)*2+1;
+  raycaster.setFromCamera(mouse, camera);
+  const candidates = [...pickMeshes, ...vertexGroup.children];
+  const hits = raycaster.intersectObjects(candidates, false);
+  if(hits.length){
+    const h = hits[0];
+    if(h.object.userData.layerIndex!=null){ setLayer(h.object.userData.layerIndex, 'pick'); }
+    else { // vertex => focus rotation bias toward that vertex
+      const dir = new THREE.Vector3().copy(h.object.position).normalize();
+      rotateY += dir.x * 0.2; rotateX += dir.y * 0.15; vibe(12);
+    }
+  }
+}
+
+// ===== WebAudio (gestural, starts on first user gesture) =====
+let audioCtx=null, osc=null, gain=null, filt=null;
+function bootAudio(){
+  if(audioCtx) return;
+  audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+  osc = audioCtx.createOscillator();
+  gain = audioCtx.createGain();
+  filt = audioCtx.createBiquadFilter(); filt.type='lowpass';
+  osc.type='sine'; osc.connect(filt); filt.connect(gain); gain.connect(audioCtx.destination);
+  gain.gain.value = 0.0; osc.start();
+}
+function audioTick(){
+  if(!audioCtx) return;
+  const base = 80; // Hz at base
+  const f = base + (idx/(LAYERS-1))*420; // 80..500 Hz across layers
+  const q = 3 + band*0.5; filt.Q.value = q; filt.frequency.value = f*1.6;
+  // Emphasis => amplitude shape
+  const target = emphasis==='gold'? 0.12 : emphasis==='wire'? 0.06 : 0.09;
+  const t = audioCtx.currentTime;
+  gain.gain.linearRampToValueAtTime(target, t+0.08);
+  osc.frequency.exponentialRampToValueAtTime(Math.max(40,f), t+0.08);
+}
+addEventListener('pointerdown', ()=>{ bootAudio(); if(audioCtx.state==='suspended') audioCtx.resume(); }, { passive:true });
+
+// ===== Animate =====
+let t0=0;
+function animate(){
+  requestAnimationFrame(animate);
+  t0 += 0.005;
+  const wob = autoBreath? Math.sin(t0*0.6)*0.015 : 0.0;
+  strata.rotation.y += wob + rotateY*0.02; strata.rotation.x += wob*0.75 + rotateX*0.02;
+  goldGroup.rotation.y += wob*0.5; tetEdges.rotation.y += wob;
+  // chroma drift
+  const hue = (Math.sin(t0*hueRate)+1)*0.5; // 0..1
+  tetEdges.material.color.setHSL(hue, 0.6, 0.7);
+  layerObjs[idx].material.color.setHSL((hue+0.5)%1, 0.8, 0.8);
+  audioTick();
+  // gentle decay of manual rotation impulse
+  rotateY *= 0.94; rotateX *= 0.94;
+  renderer.render(scene, camera);
+}
+setLayer(0); animate();
+
+addEventListener('resize', ()=>{ renderer.setSize(innerWidth, innerHeight); makeCamera(); });
+
+// ===== Self-tests (console only) =====
+(function selfTests(){
+  try{
+    console.assert(layerObjs.length===64, '64 strata triangles');
+    console.assert(goldGroup.children.length===64, '64 gold clouds');
+    console.assert(tetEdges.isLineSegments===true, 'Wireframe present');
+    console.assert(vertexGroup.children.length===4, '4 vertex foci');
+    // Layer set/ band expand
+    const pIdx = idx; setLayer(10,'test'); console.assert(idx===10, 'Layer index set'); setBand(8); console.assert(band===8, 'Band width set'); setLayer(pIdx,'test');
+    console.log('[Tetra Gestural] self-tests passed');
+  }catch(err){ console.warn('[Tetra Gestural] self-test issue', err); }
+})();
+</script>
+</body>
+</html>

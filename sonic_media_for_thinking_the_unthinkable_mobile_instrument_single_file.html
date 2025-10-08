@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Sonic Media Instrument — Unthinkable Edition</title>
+<style>
+  body{margin:0;font-family:ui-sans-serif,system-ui,Arial,sans-serif;background:#0b0c10;color:#eee;}
+  canvas{display:block;width:100%;height:200px;background:#121318;border:1px solid #333;border-radius:10px;margin:1em 0;}
+  .controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:1em;padding:1em;}
+  .controls label{display:block;font-size:.8rem;margin-bottom:.2em;color:#aaa}
+  .controls input[type=range]{width:100%}
+  button{padding:.6em 1em;margin:.3em;border:none;border-radius:8px;background:#1f2937;color:#eee;cursor:pointer}
+  button:active{transform:scale(.96)}
+</style>
+</head>
+<body>
+<h1 style="padding:1em">Sonic Medium for Thinking the Unthinkable</h1>
+<canvas id="scope"></canvas>
+<div class="controls">
+  <div><label>Frequency</label><input type="range" id="freq" min="30" max="2000" value="220"></div>
+  <div><label>Time Dilation</label><input type="range" id="timeDil" min="0.05" max="20" value="1" step="0.01"></div>
+  <div><label>Feedback</label><input type="range" id="fb" min="0" max="0.95" value="0.3" step="0.01"></div>
+  <div><label>Granularity</label><input type="range" id="grain" min="0.01" max="0.5" value="0.1" step="0.01"></div>
+</div>
+<div style="padding:1em">
+  <button id="btnStart">▶️ Start</button>
+  <button id="btnSilence">🤫 Operative Silence</button>
+  <button id="btnChaos">🌀 Unthinkable Phase Field</button>
+</div>
+<script>
+const ctx=new (window.AudioContext||window.webkitAudioContext)();
+let analyser=ctx.createAnalyser();
+analyser.fftSize=2048;
+const scope=document.getElementById('scope');
+const freq=document.getElementById('freq');
+const timeDil=document.getElementById('timeDil');
+const fb=document.getElementById('fb');
+const grain=document.getElementById('grain');
+let master=ctx.createGain();master.gain.value=0.6;master.connect(ctx.destination);
+let delay=ctx.createDelay();delay.delayTime.value=0.2;
+let feedback=ctx.createGain();feedback.gain.value=0.3;
+delay.connect(feedback).connect(delay);
+delay.connect(master);
+let src;
+function makeNoiseBuf(){let b=ctx.createBuffer(1,ctx.sampleRate*2,ctx.sampleRate);let d=b.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;return b;}
+function start(){if(src){src.stop();}
+src=ctx.createBufferSource();src.buffer=makeNoiseBuf();src.loop=true;let g=ctx.createGain();g.gain.value=0.4;
+src.connect(g).connect(delay);
+src.connect(master);src.connect(analyser);
+src.start();draw();}
+function operativeSilence(){master.gain.setTargetAtTime(0.05,ctx.currentTime,0.05);setTimeout(()=>{master.gain.setTargetAtTime(0.6,ctx.currentTime,0.1)},1500);}
+function chaosPhase(){let shaper=ctx.createWaveShaper();let n=2048,curve=new Float32Array(n);for(let i=0;i<n;i++){let x=i*2/n-1;curve[i]=Math.sin(x*freq.value*0.01);}
+shaper.curve=curve;delay.disconnect();delay.connect(shaper).connect(master);}
+function draw(){const c=scope.getContext('2d');const w=scope.width=scope.clientWidth;const h=scope.height=scope.clientHeight;const d=new Uint8Array(analyser.frequencyBinCount);
+function loop(){analyser.getByteTimeDomainData(d);c.clearRect(0,0,w,h);c.beginPath();c.strokeStyle='#7dd3fc';for(let i=0;i<d.length;i++){let x=i/d.length*w;let y=(d[i]/255)*h;if(i===0)c.moveTo(x,y);else c.lineTo(x,y);}c.stroke();requestAnimationFrame(loop);}loop();}
+
+document.getElementById('btnStart').onclick=()=>{ctx.resume();start();};
+document.getElementById('btnSilence').onclick=()=>{operativeSilence();};
+document.getElementById('btnChaos').onclick=()=>{chaosPhase();};
+freq.oninput=()=>{if(src.playbackRate)src.playbackRate.value=freq.value/220;};
+timeDil.oninput=()=>{if(src)src.playbackRate.value=timeDil.value;};
+fb.oninput=()=>{feedback.gain.value=fb.value;};
+grain.oninput=()=>{delay.delayTime.value=grain.value;};
+</script>
+</body>
+</html>

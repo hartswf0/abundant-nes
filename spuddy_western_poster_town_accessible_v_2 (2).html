@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>THE GOOD, THE BAD, AND THE SPUDDY — Story Intro + Posters</title>
+  <style>
+    :root{
+      --bg:#0a0604; --ink:#f8ecd9; --ink-dim:#d8c4a5; --gold:#e8b862; --bronze:#8b5a2b;
+      --shadow:rgba(0,0,0,.65); --focus:#ffd166; --error:#ff595e; --gap:clamp(.75rem,2vw,1.2rem);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;overflow-x:hidden}
+
+    /* ====== INTRO (full-bleed storytelling space) ====== */
+    .intro{position:relative;width:100%;height:100vh;overflow:hidden;isolation:isolate}
+    .intro-canvas{position:absolute;inset:0;display:block}
+    .intro-webgl{position:absolute;inset:0;pointer-events:none}
+    .intro-vignette{position:absolute;inset:0;pointer-events:none;background:radial-gradient(70% 60% at 50% 40%, transparent 55%, rgba(0,0,0,.55) 100%)}
+    .intro-copy{position:relative;z-index:5;height:100%;display:grid;place-items:center;padding:2rem;text-align:center}
+    .intro h1{font-family: "Rye", serif;letter-spacing:.06em;color:var(--gold);text-shadow:0 .06em 0 var(--bronze),0 .25em .8em var(--shadow);font-size:clamp(2.4rem,8vw,6rem);margin:.2rem 0}
+    .intro .kicker{letter-spacing:.22em;color:var(--ink-dim);font-size:clamp(.9rem,2.4vw,1.4rem)}
+    .intro .slug{max-width:min(70ch,90vw);margin:.75rem auto 0;color:var(--ink);font-size:clamp(1rem,2.6vw,1.2rem)}
+    .intro .scroll{position:absolute;left:50%;bottom:1.1rem;transform:translateX(-50%);letter-spacing:.18em;color:var(--ink-dim);font-size:.95rem;animation:hint 3s ease-in-out infinite}
+    @keyframes hint{0%,100%{opacity:0}40%{opacity:1}}
+
+    /* ====== POSTERS ====== */
+    .section{position:relative;z-index:10;padding:clamp(1.2rem, 3vw, 2rem)}
+    .grid{width:min(1100px,100%);margin:0 auto;display:grid;gap:var(--gap);grid-template-columns:repeat(auto-fit,minmax(min(360px,100%),1fr))}
+    .card{background:#2d1810;border:4px solid var(--bronze);border-radius:14px;box-shadow:0 1rem 3rem var(--shadow);display:flex;flex-direction:column;overflow:hidden}
+    .card header{background:#1a0f08;border-bottom:3px solid var(--bronze);padding:1rem;text-align:center}
+    .card h3{font-family:"Rye",serif;color:var(--gold);font-size:1.8rem;margin:.1rem 0 .2rem;text-shadow:0 .1rem .3rem var(--shadow)}
+    .card p.label{letter-spacing:.18em;color:var(--ink-dim);font-size:.95rem}
+    .thumb{all:unset;display:grid;place-items:center;aspect-ratio:16/9;width:100%;background:#000;cursor:pointer;position:relative}
+    .thumb img{width:100%;height:100%;object-fit:cover;display:block;filter:saturate(.86) contrast(1.06)}
+    .thumb:focus-visible{outline:4px solid var(--focus);outline-offset:3px}
+    .play{position:absolute;width:3.25rem;height:3.25rem;border-radius:50%;border:3px solid var(--gold);display:grid;place-items:center;background:rgba(0,0,0,.35);backdrop-filter:blur(3px);box-shadow:0 .75rem 2rem var(--shadow)}
+    .play::after{content:"▶";margin-left:.12rem;color:var(--gold);font-size:1.1rem}
+    .meta{padding:.85rem 1rem;display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;border-top:3px solid var(--bronze)}
+    .pill{padding:.25rem .6rem;border:2px solid var(--bronze);border-radius:999px;font-size:.9rem;letter-spacing:.06em;color:var(--ink-dim)}
+    .act{margin-left:auto;display:flex;gap:.4rem}
+    .btn{background:#1a0f08;border:2px solid var(--bronze);color:var(--ink);padding:.45rem .7rem;border-radius:8px;letter-spacing:.06em;cursor:pointer}
+    .btn:focus-visible{outline:4px solid var(--focus);outline-offset:2px}
+    .details{display:none;border-top:3px solid var(--bronze);padding:.9rem 1rem;line-height:1.25;color:var(--ink-dim)}
+    .details.open{display:block}
+
+    /* ====== MODAL & TOAST ====== */
+    .toast{position:fixed;left:50%;top:1rem;transform:translateX(-50%);z-index:2000;max-width:min(800px,92vw);padding:.9rem 1rem;border-radius:10px;border:2px solid currentColor;background:color-mix(in oklab, #1a0f08, white 3%);box-shadow:0 .75rem 2rem var(--shadow);display:none}
+    .toast.show{display:block}
+    .toast.error{color:var(--error)}
+    .modal{position:fixed;inset:0;display:none;place-items:center;padding:1.5rem;background:rgba(0,0,0,.96);z-index:3000}
+    .modal.open{display:grid}
+    .dialog{width:min(1400px,96vw);aspect-ratio:16/9;border:8px solid var(--gold);box-shadow:0 0 80px color-mix(in oklab, var(--gold) 20%, black);position:relative;background:#000;border-radius:10px}
+    .dialog iframe{width:100%;height:100%;border:0}
+    .close{position:absolute;top:-3.25rem;right:0;background:var(--gold);color:#000;border:0;padding:.7rem 1.1rem;border-radius:10px;letter-spacing:.16em;font-weight:600;cursor:pointer}
+    .close:focus-visible{outline:4px solid var(--focus);outline-offset:3px}
+
+    .visually-hidden{position:absolute!important;height:1px;width:1px;overflow:hidden;clip:rect(1px,1px,1px,1px);white-space:nowrap}
+
+    @media (max-width:768px){.close{top:-3rem}}
+    @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+  </style>
+  <link href="https://fonts.googleapis.com/css2?family=Rye&display=swap" rel="stylesheet">
+</head>
+<body>
+  <!-- ===== INTRO ===== -->
+  <section class="intro" id="intro">
+    <canvas id="intro2d" class="intro-canvas" aria-hidden="true"></canvas>
+    <canvas id="intro3d" class="intro-webgl" aria-hidden="true"></canvas>
+    <div class="intro-vignette" aria-hidden="true"></div>
+    <div class="intro-copy" aria-live="polite" aria-atomic="true">
+      <div>
+        <p class="kicker">A WESTERN PICTURE</p>
+        <h1>THE GOOD, THE BAD,<br/>AND THE SPUDDY</h1>
+        <p class="slug">Cold dawn. Empty main street. The whistle carries first. A tumbleweed leans into the wind as the truth train rounds the bend.</p>
+      </div>
+      <div class="scroll">SCROLL TO ENTER TOWN ↓</div>
+    </div>
+  </section>
+
+  <!-- ===== POSTERS ===== -->
+  <section class="section" id="posters" aria-label="Feature posters">
+    <div class="grid">
+      <article class="card" data-id="OoQzeY2rd7o">
+        <header>
+          <h3>PART ONE</h3>
+          <p class="label">RISE OF THE SPUD</p>
+        </header>
+        <button class="thumb" aria-label="Play Part One: Rise of the Spud">
+          <img alt="Poster: Rise of the Spud" loading="lazy" src="https://i.ytimg.com/vi/OoQzeY2rd7o/hqdefault.jpg" />
+          <span class="play" aria-hidden="true"></span>
+        </button>
+        <div class="meta">
+          <span class="pill">7 min</span>
+          <span class="pill">Boise Gulch</span>
+          <div class="act">
+            <button class="btn js-more" aria-expanded="false" aria-controls="d1">Read more</button>
+            <button class="btn js-save">Save poster</button>
+          </div>
+        </div>
+        <div id="d1" class="details" hidden>
+          Idaho Potato rises from fryer-hand to frontier brand. GoPro glint, sermons on grit. The spudfolk cheer—until a whistle from the east.
+        </div>
+      </article>
+
+      <article class="card" data-id="cCzZ7JY2wtw">
+        <header>
+          <h3>PART TWO</h3>
+          <p class="label">THE RECKONING</p>
+        </header>
+        <button class="thumb" aria-label="Play Part Two: The Reckoning">
+          <img alt="Poster: The Reckoning" loading="lazy" src="https://i.ytimg.com/vi/cCzZ7JY2wtw/hqdefault.jpg" />
+          <span class="play" aria-hidden="true"></span>
+        </button>
+        <div class="meta">
+          <span class="pill">9 min</span>
+          <span class="pill">Exposé Express</span>
+          <div class="act">
+            <button class="btn js-more" aria-expanded="false" aria-controls="d2">Read more</button>
+            <button class="btn js-save">Save poster</button>
+          </div>
+        </div>
+        <div id="d2" class="details" hidden>
+          Dawn train. Paper rolls. Receipts fly. When headlines hit the dust, even a russet has to choose: myth maintenance or truth.
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <!-- ===== TOAST & MODAL ===== -->
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <div class="modal" id="modal" role="dialog" aria-modal="true" aria-label="Video player" aria-hidden="true">
+    <div class="dialog" role="document">
+      <button class="close" id="closeBtn" aria-label="Close video">✕ CLOSE</button>
+      <iframe id="player" title="Spuddy Player" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen loading="eager"></iframe>
+    </div>
+  </div>
+
+  <!-- THREE (inlined via CDN but single HTML file) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" defer></script>
+  <script>
+  // ===== Utilities =====
+  const qs=s=>document.querySelector(s), qsa=s=>Array.from(document.querySelectorAll(s));
+  const toast=qs('#toast');
+  function showToast(msg,kind='info',ms=2200){toast.textContent=msg;toast.className='toast '+kind+' show';clearTimeout(showToast._t);showToast._t=setTimeout(()=>toast.className='toast '+kind,ms)}
+
+  // ===== Posters interactions =====
+  (function posters(){
+    const modal=qs('#modal'), player=qs('#player'), closeBtn=qs('#closeBtn'); let lastFocus=null;
+    function openVideo(id){ try{ lastFocus=document.activeElement; player.src=`https://www.youtube.com/embed/${id}?autoplay=1&rel=0&modestbranding=1&playsinline=1`; modal.classList.add('open'); modal.setAttribute('aria-hidden','false'); closeBtn.focus(); document.body.style.overflow='hidden'; }catch(e){ showToast('Could not open video','error'); } }
+    function closeVideo(){ player.src=''; modal.classList.remove('open'); modal.setAttribute('aria-hidden','true'); document.body.style.overflow=''; if(lastFocus&&lastFocus.focus) lastFocus.focus(); }
+    qsa('.thumb').forEach(btn=>{ btn.addEventListener('click',()=> openVideo(btn.closest('.card').dataset.id)); btn.addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){e.preventDefault();openVideo(btn.closest('.card').dataset.id);} }); });
+    closeBtn.addEventListener('click', closeVideo); addEventListener('keydown', e=>{ if(e.key==='Escape'&&modal.classList.contains('open')) closeVideo(); });
+
+    // Expand/collapse details
+    qsa('.js-more').forEach(b=> b.addEventListener('click',()=>{ const d=b.closest('.card').querySelector('.details'); const open=d.classList.toggle('open'); d.hidden=!open; b.setAttribute('aria-expanded', String(open)); b.textContent=open?'Read less':'Read more'; }));
+
+    // Simple poster cache (metadata + thumbnail via Cache API where permitted)
+    const CACHE_NAME='spuddy-poster-cache-v2';
+    async function cachePoster(card){
+      const id=card.dataset.id; const img=card.querySelector('img');
+      try{ const meta={ id, title:card.querySelector('h3')?.textContent||'', label:card.querySelector('.label')?.textContent||'', details:card.querySelector('.details')?.textContent?.trim()||'' };
+        const list=JSON.parse(localStorage.getItem('spuddy:saved')||'[]').filter(x=>x&&x.id); const next=[...list.filter(x=>x.id!==id), meta]; localStorage.setItem('spuddy:saved', JSON.stringify(next));
+      }catch(e){ console.warn('Meta save failed',e) }
+      try{ if('caches' in window && img && img.src){ const c=await caches.open(CACHE_NAME); await c.add(new Request(img.src,{mode:'no-cors'})); } showToast('Poster saved for later'); }catch(e){ showToast('Saved info (thumbnail may be online-only)'); }
+      card.dataset.saved='true';
+    }
+    qsa('.js-save').forEach(btn=> btn.addEventListener('click',()=> cachePoster(btn.closest('.card'))));
+    try{ const saved=new Set((JSON.parse(localStorage.getItem('spuddy:saved')||'[]')).map(x=>x.id)); qsa('.card').forEach(c=>{ if(saved.has(c.dataset.id)) c.dataset.saved='true'; }); }catch(_e){}
+  })();
+
+  // ===== Story Intro: 2D scenery + Three.js particle veil (no React) =====
+  (function intro(){
+    const container=qs('#intro'); const c2d=qs('#intro2d'); const c3d=qs('#intro3d'); const ctx=c2d.getContext('2d');
+    let W=container.clientWidth, H=container.clientHeight; c2d.width=W; c2d.height=H; c3d.width=W; c3d.height=H;
+
+    // --- 2D scene elements ---
+    const grain=Array.from({length:1800},()=>({x:Math.random()*W,y:Math.random()*H,s:Math.random()*1.6,o:Math.random()*0.4}));
+    const dust=Array.from({length:60},()=>({x:Math.random()*W,y:H*0.7+Math.random()*H*0.3,vx:(Math.random()-.5)*2,vy:-Math.random()*0.5,s:Math.random()*8+2,o:Math.random()*0.3+0.1,l:Math.random()}));
+    const scratches=Array.from({length:4},()=>({x:Math.random()*W,len:Math.random()*H*0.6+H*0.2,o:Math.random()*0.3+0.1,spd:Math.random()*2+1}));
+    const train={p:0}; let frame=0; const dz={v:1}; const shake={x:0,y:0};
+
+    function sepia(){ ctx.globalCompositeOperation='multiply'; ctx.fillStyle='rgba(112,66,20,.35)'; ctx.fillRect(0,0,W,H); ctx.globalCompositeOperation='screen'; ctx.fillStyle='rgba(255,240,200,.12)'; ctx.fillRect(0,0,W,H); ctx.globalCompositeOperation='source-over'; }
+    function pole(x,y){ const z=dz.v, cx=W/2, X=cx+(x-cx)*z, Y=y*z; ctx.strokeStyle='#5D4E37'; ctx.lineWidth=8*z; ctx.beginPath(); ctx.moveTo(X,Y); ctx.lineTo(X,Y-180*z); ctx.stroke(); ctx.lineWidth=5*z; ctx.beginPath(); ctx.moveTo(X-40*z,Y-150*z); ctx.lineTo(X+40*z,Y-150*z); ctx.stroke(); ctx.strokeStyle='rgba(50,40,30,.6)'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(X-35*z,Y-150*z); ctx.quadraticCurveTo(X+100*z,Y-140*z,X+250*z,Y-150*z); ctx.stroke(); }
+    function bld(x,y,w,h,label){ const z=dz.v, cx=W/2, X=cx+(x-cx)*z, Y=y*z, Wd=w*z, Hd=h*z; ctx.fillStyle='rgba(20,10,5,.3)'; ctx.fillRect(X+15*z,Y+10*z,Wd,Hd); ctx.fillStyle='#8B6F47'; ctx.fillRect(X,Y,Wd,Hd); ctx.strokeStyle='#6B5635'; ctx.lineWidth=2; for(let i=0;i<8;i++){ ctx.beginPath(); ctx.moveTo(X, Y+i*Hd/8); ctx.lineTo(X+Wd, Y+i*Hd/8); ctx.stroke(); } ctx.fillStyle='#5D4E37'; ctx.beginPath(); ctx.moveTo(X-10*z,Y); ctx.lineTo(X+Wd/2,Y-40*z); ctx.lineTo(X+Wd+10*z,Y); ctx.closePath(); ctx.fill(); if(label){ ctx.fillStyle='#4A3728'; ctx.fillRect(X+Wd*.2,Y+20*z,Wd*.6,40*z); ctx.fillStyle='#D4AF37'; ctx.font=`bold ${20*z}px serif`; ctx.textAlign='center'; ctx.fillText(label, X+Wd/2, Y+50*z);} ctx.fillStyle='rgba(20,15,10,.7)'; ctx.fillRect(X+Wd*.15,Y+Hd*.3, Wd*.25, Hd*.25); ctx.fillRect(X+Wd*.6, Y+Hd*.3, Wd*.25, Hd*.25); }
+    function people(){ const y=H*.7; const ps=[[.35,1],[.42,.95],[.5,1.05],[.58,.9]]; ps.forEach(([rx,s])=>{ const z=dz.v, cx=W/2, X=cx+(W*rx-cx)*z, Y=y*z, k=s*z; ctx.fillStyle='rgba(30,20,15,.9)'; ctx.beginPath(); ctx.arc(X, Y-60*k, 12*k, 0, Math.PI*2); ctx.fill(); ctx.fillRect(X-15*k, Y-75*k, 30*k, 8*k); ctx.fillRect(X-10*k, Y-85*k, 20*k, 10*k); ctx.fillRect(X-12*k, Y-48*k, 24*k, 40*k); ctx.fillRect(X-25*k, Y-40*k, 10*k, 35*k); ctx.fillRect(X+15*k, Y-40*k, 10*k, 35*k); ctx.fillRect(X-12*k, Y-8*k, 10*k, 30*k); ctx.fillRect(X+2*k, Y-8*k, 10*k, 30*k); }); }
+    function rails(){ ctx.strokeStyle='#5D4E37'; ctx.lineWidth=6; for(let i=0;i<2;i++){ ctx.beginPath(); ctx.moveTo(0, H*.72+i*15); ctx.lineTo(W, H*.72+i*15); ctx.stroke(); } ctx.lineWidth=4; for(let x=0;x<W;x+=30){ ctx.beginPath(); ctx.moveTo(x, H*.71); ctx.lineTo(x, H*.73); ctx.stroke(); } }
+    function trainDraw(){ const x=-400+train.p*(W+800), y=H*.65, z=dz.v; for(let i=0;i<8;i++){ const sx=x-i*40-50, sy=y-100-i*15, ss=30+i*10; ctx.fillStyle=`rgba(80,70,60, ${0.3-i*0.03})`; ctx.beginPath(); ctx.arc(sx*z, sy*z, ss*z, 0, Math.PI*2); ctx.fill(); } ctx.fillStyle='#2C2416'; ctx.fillRect(x*z, y*z, 120*z, 80*z); ctx.fillStyle='#3D3020'; ctx.beginPath(); ctx.arc((x+60)*z, (y+40)*z, 50*z, 0, Math.PI*2); ctx.fill(); ctx.fillStyle='#2C2416'; ctx.fillRect((x+40)*z, (y-60)*z, 25*z, 60*z); ctx.fillRect((x+30)*z, (y-70)*z, 45*z, 15*z); ctx.fillStyle='#4A3728'; ctx.fillRect((x+130)*z, (y+10)*z, 60*z, 70*z); ctx.fillStyle='rgba(255,200,100,.3)'; ctx.fillRect((x+145)*z, (y+25)*z, 30*z, 25*z); const wy=y+85; for(let i=0;i<3;i++){ const wx=x+30+i*50; ctx.fillStyle='#1A1410'; ctx.beginPath(); ctx.arc(wx*z, wy*z, 20*z, 0, Math.PI*2); ctx.fill(); ctx.strokeStyle='#3D3020'; ctx.lineWidth=3; ctx.stroke(); } if(frame%30<15){ ctx.fillStyle='rgba(200,190,180,.4)'; ctx.beginPath(); ctx.arc((x+180)*z, (y+50)*z, 25*z, 0, Math.PI*2); ctx.fill(); } }
+
+    // --- Three.js particle veil ---
+    let scene,camera,renderer,points,mat,geom,clock; function init3d(){ try{ if(!window.THREE) throw new Error('THREE missing'); scene=new THREE.Scene(); camera=new THREE.PerspectiveCamera(75, W/H, .1, 1000); camera.position.z=5; renderer=new THREE.WebGLRenderer({canvas:c3d, antialias:true, alpha:true, powerPreference:'high-performance'}); renderer.setSize(W,H); renderer.setPixelRatio(Math.min(devicePixelRatio,2)); const count=28000; const positions=new Float32Array(count*3); const colors=new Float32Array(count*3); const sizes=new Float32Array(count); for(let i=0;i<count;i++){ const i3=i*3; const t=i/count; const r=Math.pow(t,.5); const a=t*Math.PI*40; const rr=r+(Math.random()-.5)*.05; const aa=a+(Math.random()-.5)*.1; positions[i3]=Math.cos(aa)*rr; positions[i3+1]=Math.sin(t*Math.PI)*1.8; positions[i3+2]=Math.sin(aa)*rr; const shade=0.15+Math.sqrt(r)*0.12+Math.random()*0.03; colors[i3]=shade; colors[i3+1]=shade*0.9; colors[i3+2]=shade*0.7; sizes[i]=(1-Math.abs(positions[i3+1]*.5))*.25+.12; }
+      geom=new THREE.BufferGeometry(); geom.setAttribute('position', new THREE.BufferAttribute(positions,3)); geom.setAttribute('customColor', new THREE.BufferAttribute(colors,3)); geom.setAttribute('size', new THREE.BufferAttribute(sizes,1));
+      mat=new THREE.ShaderMaterial({transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, uniforms:{ time:{value:0}, opacity:{value:.35}, trainProgress:{value:0}, dustEffect:{value:0}}, vertexShader:`uniform float time; uniform float trainProgress; uniform float dustEffect; attribute float size; attribute vec3 customColor; varying vec3 vColor; varying float vDust; void main(){ vColor=customColor; vec3 pos=position; float radius=length(pos.xz); float angle=atan(pos.z,pos.x); float vessel=smoothstep(0.3,0.7,radius)*smoothstep(1.0,0.7,radius); float trainDist=abs(pos.x+0.5-trainProgress*2.0); float trainEffect=exp(-trainDist*3.0)*0.3; angle+=time*0.08+trainEffect*sin(time*2.0); float space=sin(time*0.3+radius*3.0)*0.1; space+=trainEffect*sin(time*5.0)*0.2; float newRadius=(radius+space)*vessel; float dustLift=trainEffect*(1.0-vessel)*dustEffect; vec3 newPos; newPos.x=cos(angle)*newRadius; newPos.z=sin(angle)*newRadius; newPos.y=pos.y*vessel-1.2+dustLift*2.0; newPos*=2.75; vDust=dustLift; vec4 mvPosition=modelViewMatrix*vec4(newPos,1.0); gl_PointSize=size*(128.0/ -mvPosition.z)*(1.0+dustLift*0.5); gl_Position=projectionMatrix*mvPosition; }`, fragmentShader:`uniform float opacity; varying vec3 vColor; varying float vDust; void main(){ vec2 center=gl_PointCoord-vec2(0.5); float dist=dot(center,center); if(dist>0.25) discard; vec3 sepiaColor=vec3(vColor.r*0.9+0.15, vColor.g*0.7+0.1, vColor.b*0.4+0.05); float alpha=(1.0-smoothstep(0.2025,0.25,dist))*opacity; alpha*=1.0+vDust*0.8; gl_FragColor=vec4(sepiaColor, alpha); }`});
+      points=new THREE.Points(geom,mat); scene.add(points); clock=new THREE.Clock(); }catch(e){ console.warn('3D veil disabled',e) }
+    }
+
+    function draw2d(){ frame++; if(dz.v<1.3) dz.v+=0.001; if(train.p<1) train.p+=0.002; shake.x=(Math.random()-.5)*3; shake.y=(Math.random()-.5)*3; ctx.fillStyle='#E8DCC8'; ctx.fillRect(0,0,W,H); ctx.save(); ctx.translate(shake.x, shake.y); const sky=ctx.createLinearGradient(0,0,0,H*.6); sky.addColorStop(0,'#FFA07A'); sky.addColorStop(.5,'#FFD4A3'); sky.addColorStop(1,'#E8DCC8'); ctx.fillStyle=sky; ctx.fillRect(0,0,W,H*.6); ctx.fillStyle='#C9A97E'; ctx.fillRect(0,H*.65,W,H*.35); const shade=ctx.createLinearGradient(0,H*.65,0,H*.8); shade.addColorStop(0,'rgba(40,25,15,.4)'); shade.addColorStop(1,'rgba(40,25,15,0)'); ctx.fillStyle=shade; ctx.fillRect(0,H*.65,W,H*.15); pole(W*.25,H*.65); pole(W*.7,H*.65); bld(W*.15,H*.4,200,180,'SALOON'); bld(W*.65,H*.45,180,160,'GOODS'); ctx.fillStyle='#8B7355'; ctx.fillRect(0,H*.7,W,20*dz.v); people(); rails(); trainDraw(); dust.forEach(p=>{ p.x+=p.vx+train.p*2; p.y+=p.vy; p.l-=.008; if(p.l<0||p.y<H*.5){ p.x=Math.random()*W; p.y=H*.7+Math.random()*H*.3; p.l=1 } ctx.fillStyle=`rgba(180,160,130,${p.o*p.l})`; ctx.beginPath(); ctx.arc(p.x,p.y,p.s,0,Math.PI*2); ctx.fill(); }); ctx.restore(); sepia(); grain.forEach(g=>{ if(Math.random()>.97){ g.x=Math.random()*W; g.y=Math.random()*H; g.o=Math.random()*.4 } ctx.fillStyle=`rgba(50,40,30,${g.o})`; ctx.fillRect(g.x,g.y,g.s,g.s); }); ctx.strokeStyle='rgba(200,180,150,.15)'; ctx.lineWidth=1; scratches.forEach(s=>{ s.x+=s.spd; if(s.x>W) s.x=-10; ctx.globalAlpha=s.o; ctx.beginPath(); ctx.moveTo(s.x,0); ctx.lineTo(s.x,s.len); ctx.stroke(); }); ctx.globalAlpha=1; if(Math.random()>.96){ ctx.fillStyle=`rgba(0,0,0,${Math.random()*.25})`; ctx.fillRect(0,0,W,H); } const vg=ctx.createRadialGradient(W/2,H/2,H*.2, W/2,H/2,H*.8); vg.addColorStop(0,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(0,0,0,.5)'); ctx.fillStyle=vg; ctx.fillRect(0,0,W,H); }
+
+    function loop(){ draw2d(); if(mat){ const t=clock.getElapsedTime(); mat.uniforms.time.value=t; mat.uniforms.trainProgress.value=train.p; mat.uniforms.dustEffect.value=Math.min(train.p*2,1); if(renderer&&scene&&camera){ renderer.render(scene,camera); } } requestAnimationFrame(loop); }
+
+    function onResize(){ W=container.clientWidth; H=container.clientHeight; c2d.width=W; c2d.height=H; if(camera&&renderer){ camera.aspect=W/H; camera.updateProjectionMatrix(); renderer.setSize(W,H); } }
+
+    // boot
+    function boot(){ init3d(); loop(); }
+    if(document.readyState==='complete' || document.readyState==='interactive') boot(); else addEventListener('DOMContentLoaded', boot);
+    addEventListener('resize', onResize, {passive:true});
+  })();
+  </script>
+</body>
+</html>

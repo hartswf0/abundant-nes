@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Echoes & Algorithms — A Performance‑Lecture on Listening</title>
+<style>
+  :root{
+    --bg: #0b0b0c; --fg:#e9e9ee; --muted:#9aa0a6; --accent:#7bd0ff; --accent2:#b78bfa;
+    --ok:#84f0a6; --warn:#ffc66d; --bad:#ff7a7a;
+    --grid:#141417; --panel:#111114; --panel2:#0e0e11;
+  }
+  @media (prefers-color-scheme: light){
+    :root{ --bg:#fbfbfd; --fg:#0e0e11; --muted:#444851; --accent:#0066cc; --accent2:#8b4dff; --grid:#ececf2; --panel:#ffffff; --panel2:#f6f6fb; }
+  }
+  @media (prefers-reduced-motion: reduce){
+    *{animation-duration:0.001ms !important; animation-iteration-count:1 !important; transition-duration:0.001ms !important; scroll-behavior:auto !important}
+  }
+  html,body{height:100%;}
+  body{margin:0;background:var(--bg);color:var(--fg);font:400 16px/1.6 system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji","Segoe UI Emoji";}
+  .wrap{position:fixed;inset:0;display:grid;grid-template-rows:auto 1fr auto;}
+  header{display:flex;align-items:center;justify-content:space-between;padding:12px env(safe-area-inset-right) 12px env(safe-area-inset-left);border-bottom:1px solid var(--grid);background:linear-gradient(180deg,var(--panel),transparent 90%)}
+  header h1{font:600 16px/1.2 ui-sans-serif,system-ui;margin:0;letter-spacing:.2px}
+  header .sub{opacity:.7;font-size:12px}
+  .stage{position:relative;overflow:hidden}
+  canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .overlay{position:absolute;inset:0;pointer-events:none;display:flex;flex-direction:column;justify-content:flex-end}
+  .captions{margin:0 12px 12px;max-width:72ch;padding:10px 12px;border-radius:12px;background:color-mix(in oklab,var(--panel) 70%, transparent);box-shadow:0 6px 30px rgba(0,0,0,.25);pointer-events:auto}
+  .caption-text{font-size:14px}
+  .controls{display:flex;gap:10px;align-items:center}
+  .footer{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px env(safe-area-inset-right) 14px env(safe-area-inset-left);border-top:1px solid var(--grid);background:linear-gradient(0deg,var(--panel),transparent 90%)}
+  button, .toggle{appearance:none;border:0;border-radius:999px;background:var(--fg);color:var(--bg);padding:12px 16px;font-weight:600;letter-spacing:.2px}
+  button:focus-visible{outline:2px solid var(--accent)}
+  .ghost{background:transparent;color:var(--fg);border:1px solid var(--grid)}
+  .progress{flex:1;height:8px;background:var(--grid);border-radius:999px;overflow:hidden}
+  .progress>i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accent2));}
+  .kbd{font:600 11px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;padding:3px 6px;border-radius:6px;border:1px solid var(--grid);background:var(--panel2);color:var(--fg)}
+  .meta{display:flex;gap:10px;align-items:center}
+  .meter{height:10px;width:60px;border-radius:6px;background:var(--grid);overflow:hidden}
+  .meter>i{display:block;height:100%;width:10%;background:linear-gradient(90deg,var(--ok),var(--warn));}
+  .sr-only{position:absolute !important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+  /* Director panel (long-press) */
+  .director{position:fixed;inset:auto 10px 68px;right:10px;z-index:50;max-width:min(560px,92vw);background:var(--panel);border:1px solid var(--grid);border-radius:16px;box-shadow:0 10px 50px rgba(0,0,0,.35);padding:12px;display:none}
+  .director.open{display:block}
+  .director h2{margin:0 0 6px;font-size:14px}
+  .director .row{display:flex;gap:8px;flex-wrap:wrap}
+  .chip{padding:6px 10px;border-radius:999px;border:1px solid var(--grid);background:var(--panel2);cursor:pointer}
+  .chip.active{outline:2px solid var(--accent);}
+  .note{font-size:12px;opacity:.8;margin-top:6px}
+  .ref{opacity:.7;font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap" role="application" aria-label="Echoes and Algorithms performance-lecture">
+  <header>
+    <div>
+      <h1>Echoes & Algorithms</h1>
+      <div class="sub">A performance‑lecture on listening in the digital age</div>
+    </div>
+    <div class="meta">
+      <div class="meter" aria-hidden="true"><i id="level"></i></div>
+      <span class="ref" id="sceneLabel">Scene 0/10</span>
+    </div>
+  </header>
+  <main class="stage" id="stage">
+    <canvas id="viz" aria-hidden="true"></canvas>
+    <div class="overlay" aria-live="polite">
+      <figure class="captions" id="captions" role="group" aria-label="Captions">
+        <figcaption class="caption-text" id="captionText">Tap <span class="kbd">Start</span> to begin. Headphones recommended. Long‑press Start for Director Panel.</figcaption>
+      </figure>
+    </div>
+  </main>
+  <footer class="footer">
+    <div class="controls">
+      <button id="startStop" aria-pressed="false">Start</button>
+      <button id="captionsToggle" class="ghost" aria-pressed="true" title="Toggle captions">CC</button>
+      <button id="themeToggle" class="ghost" title="Toggle theme">Theme</button>
+    </div>
+    <div class="progress" aria-label="Progress"><i id="bar"></i></div>
+  </footer>
+</div>
+
+<!-- Director Panel (hidden; long-press Start) -->
+<div class="director" id="director" role="dialog" aria-modal="false" aria-label="Director Panel">
+  <h2>Director Panel</h2>
+  <div class="row" id="sceneChips"></div>
+  <div class="row" style="margin-top:8px">
+    <label class="chip"><input type="checkbox" id="safeMode"/> Safe mode (reduce DSP)</label>
+    <label class="chip"><input type="checkbox" id="reduceMotion"/> Reduce motion</label>
+    <label class="chip"><input type="checkbox" id="muteTTS"/> Mute TTS</label>
+  </div>
+  <div class="note">Tap a scene to jump. Long‑press Start again to close.</div>
+</div>
+
+<div class="sr-only" aria-live="assertive" id="ariaLive"></div>
+
+<script>
+(function(){
+  // ---------- State & Utilities ----------
+  const el = s=>document.querySelector(s);
+  const viz = el('#viz');
+  const ctx2d = viz.getContext('2d');
+  const captions = el('#captions');
+  const captionText = el('#captionText');
+  const startBtn = el('#startStop');
+  const captionsToggle = el('#captionsToggle');
+  const themeToggle = el('#themeToggle');
+  const bar = el('#bar');
+  const lvl = el('#level');
+  const sceneLabel = el('#sceneLabel');
+  const director = el('#director');
+  const ariaLive = el('#ariaLive');
+  const chips = el('#sceneChips');
+  const safeModeBox = el('#safeMode');
+  const reduceMotionBox = el('#reduceMotion');
+  const muteTTSBox = el('#muteTTS');
+
+  let reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  reduceMotionBox.checked = reduced;
+
+  let running = false, started = false; 
+  let current = 0; // scene index
+  let progress = 0; // 0..1 across all scenes
+  let holdTimer = null; // for long‑press
+
+  // Responsive canvas
+  function fitCanvas(){
+    const dpr = Math.max(1, window.devicePixelRatio||1);
+    viz.width = Math.floor(viz.clientWidth * dpr);
+    viz.height= Math.floor(viz.clientHeight* dpr);
+    ctx2d.setTransform(dpr,0,0,dpr,0,0);
+  }
+  addEventListener('resize', fitCanvas, {passive:true});
+  fitCanvas();
+
+  // Theme
+  themeToggle.addEventListener('click', ()=>{
+    const dark = document.documentElement.dataset.theme !== 'light';
+    document.documentElement.dataset.theme = dark ? 'light':'dark';
+  });
+
+  // Captions toggle
+  let captionsOn = true;
+  captionsToggle.addEventListener('click', ()=>{
+    captionsOn = !captionsOn; captions.style.display = captionsOn? 'block':'none';
+    captionsToggle.setAttribute('aria-pressed', captionsOn);
+  });
+
+  // Director panel via long‑press on Start
+  function openDirector(open){ director.classList.toggle('open', open); }
+  startBtn.addEventListener('touchstart', onPressStart, {passive:true});
+  startBtn.addEventListener('mousedown', onPressStart);
+  startBtn.addEventListener('touchend', onPressEnd, {passive:true});
+  startBtn.addEventListener('mouseup', onPressEnd);
+  function onPressStart(e){
+    holdTimer = setTimeout(()=> openDirector(!director.classList.contains('open')), 600);
+  }
+  function onPressEnd(e){
+    if(holdTimer){ clearTimeout(holdTimer); holdTimer=null; }
+  }
+
+  // ---------- Audio Engine ----------
+  let AC, master, analyser, meterJS;
+  let noiseNode, humOsc, delay, filter;
+  const FFT = 1024; // analyser FFT size
+
+  function dbFrom(arr){
+    // crude meter: average amplitude
+    let s=0; for(let i=0;i<arr.length;i++) s+=arr[i];
+    return s/arr.length/255; // 0..1
+  }
+
+  async function initAudio(){
+    if(AC) return;
+    AC = new (window.AudioContext||window.webkitAudioContext)({latencyHint:'interactive'});
+    master = AC.createGain(); master.gain.value = 0.9; master.connect(AC.destination);
+    analyser = AC.createAnalyser(); analyser.fftSize=FFT; analyser.smoothingTimeConstant=0.85; analyser.connect(master);
+
+    // Shared FX
+    delay = AC.createDelay(0.8); delay.delayTime.value = 0.23; // short room
+    const fb = AC.createGain(); fb.gain.value = 0.28; delay.connect(fb); fb.connect(delay);
+    filter = AC.createBiquadFilter(); filter.type='lowpass'; filter.frequency.value= 11000;
+
+    // Meter tap
+    meterJS = AC.createScriptProcessor(512,1,1);
+    meterJS.onaudioprocess = ()=>{}; // required for some browsers
+
+    // Base routing node per scene will connect -> filter -> delay -> analyser -> master
+  }
+
+  function makeBus(){
+    const bus = AC.createGain(); bus.gain.value=1;
+    bus.connect(filter); filter.connect(delay); delay.connect(analyser);
+    return bus;
+  }
+
+  function tone(f=220, t=0.5, type='sine', pan=0){
+    const bus = makeBus();
+    const p = AC.createStereoPanner(); p.pan.value = pan; bus.connect(p); p.connect(analyser);
+    const g = AC.createGain(); g.gain.value=0; g.connect(bus);
+    const o = AC.createOscillator(); o.type=type; o.frequency.value=f; o.connect(g);
+    o.start();
+    // ADSR
+    const now = AC.currentTime;
+    const A=0.03, D=0.15, S=0.35, R=0.25; const peak=0.25;
+    g.gain.setValueAtTime(0, now);
+    g.gain.linearRampToValueAtTime(peak, now+A);
+    g.gain.linearRampToValueAtTime(peak*S, now+A+D);
+    g.gain.setTargetAtTime(0, now+Math.max(A+D, t), R);
+    o.stop(now + Math.max(A+D, t) + R*4);
+  }
+
+  function noise(duration=2, color='pink', pan=0){
+    // simple noise using buffer
+    const rate = AC.sampleRate, len = Math.floor(rate*duration);
+    const buf = AC.createBuffer(1, len, rate);
+    const data = buf.getChannelData(0);
+    let b0=0,b1=0,b2=0; // for pink
+    for(let i=0;i<len;i++){
+      const white = Math.random()*2-1;
+      let sample = white;
+      if(color==='pink'){
+        b0 = 0.99765*b0 + white*0.0990460;
+        b1 = 0.96300*b1 + white*0.2965164;
+        b2 = 0.57000*b2 + white*1.0526913;
+        sample = b0 + b1 + b2 + white*0.1848; sample *= 0.05;
+      } else if(color==='brown'){
+        noise.lastOut = (noise.lastOut||0) + (0.02*white);
+        sample = noise.lastOut; sample *= 0.5;
+      } else {
+        sample *= 0.2;
+      }
+      data[i]=sample;
+    }
+    const src = AC.createBufferSource(); src.buffer=buf;
+    const g = AC.createGain(); g.gain.value=0.4; const pNode = AC.createStereoPanner(); pNode.pan.value=pan;
+    src.connect(g); g.connect(pNode); pNode.connect(analyser);
+    src.start(); src.stop(AC.currentTime + duration + 0.01);
+  }
+
+  // Speech synthesis helper (gate progression until speech ends)
+  function speak(text, opts={}){
+    return new Promise((resolve)=>{
+      if(muteTTSBox.checked || !('speechSynthesis' in window)){
+        // Fallback: show as caption longer
+        setCaption(text);
+        setTimeout(resolve, Math.min(8000, Math.max(1500, text.length*40)));
+        return;
+      }
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = opts.lang || 'en-US';
+      u.rate = opts.rate ?? 1.0;
+      u.pitch = opts.pitch ?? 1.0;
+      u.volume = opts.volume ?? 1.0;
+      const voice = speechSynthesis.getVoices().find(v=>/UK|British|Daniel|Serena/i.test(v.name)) || speechSynthesis.getVoices()[0];
+      if(voice) u.voice = voice;
+      u.onend = ()=> resolve();
+      u.onerror = ()=> resolve();
+      setCaption(text);
+      speechSynthesis.speak(u);
+    });
+  }
+
+  function setCaption(t){ captionText.textContent = t; ariaLive.textContent = t; }
+
+  // ---------- Scenes Definition ----------
+  // Each scene returns a Promise resolving when its audio/tts gesture completes.
+  const scenes = [
+    {
+      title:"Prologue — Room Tone",
+      dur: 12,
+      run: async ()=>{
+        setCaption("A small, windowless room. Silence is layered: footsteps, server hum, a synthetic voice rehearsing.");
+        // room bed: brown noise + low sine hum
+        noise(10,'brown', -0.2);
+        await wait(300);
+        await initToneBed(75);
+        await wait(400);
+        await speak("To listen now is to meet a layered quiet — human, machine, protocol.", {rate:1.02, pitch:1});
+      }
+    },
+    {
+      title:"Orality → Inscription (Ong)",
+      dur: 18,
+      run: async ()=>{
+        setCaption("Words are events. Repeat after me: memory lives in breath before it lives on the page.");
+        await callResponse(["Words are events.","Words are events.","Memory lives in breath.","Before it lives on the page."], 0.9);
+        for(let i=0;i<4;i++){ tone(220+ i*30, 0.2, 'sine', (i%2?0.6:-0.6)); await wait(220); }
+        await speak("Writing externalizes memory and changes how we think.");
+      }
+    },
+    {
+      title:"Hi‑Fi / Lo‑Fi / Algorithmic (Schafer)",
+      dur: 24,
+      run: async ()=>{
+        setCaption("Hi‑fi distance. Lo‑fi congestion. Then a third thing: algorithmic curation.");
+        // hi‑fi: sparse tones, distant pan
+        for(let i=0;i<6;i++){ tone(440 + i*30, 0.12, 'sine', -0.8 + i*0.3); await wait(400); }
+        // lo‑fi: pink noise swell
+        noise(4,'pink',0);
+        await wait(1000);
+        // algorithmic: arpeggio loop that feels 'curated'
+        await arp([220,277,330,415,440,554], 12, 0.11);
+        await speak("Platforms steer what we hear, not by nature, but by optimization.");
+      }
+    },
+    {
+      title:"Protocol Silence (Cage)",
+      dur: 12,
+      run: async ()=>{
+        setCaption("Silence is a rule set. For ten seconds, do nothing. Notice what remains.");
+        await structuredSilence(10000);
+      }
+    },
+    {
+      title:"Interspecies Aurality (Herndon)",
+      dur: 18,
+      run: async ()=>{
+        setCaption("Between human and machine voice: an uncanny, collaborative choir.");
+        // detuned dual tones simulating formant drift
+        for(let i=0;i<9;i++){
+          const base = 240 + (i%3)*40;
+          tone(base, 0.35, 'sawtooth', -0.2);
+          tone(base*1.01, 0.35, 'triangle', 0.2);
+          await wait(300);
+        }
+        await speak("Where does a voice stop and a model begin?");
+      }
+    },
+    {
+      title:"Linguistic Relativity of Pitch",
+      dur: 16,
+      run: async ()=>{
+        setCaption("Try this: when I say ‘high’, press up. When labels flip, follow the label, not the sound.");
+        await speak("High."); tone(880,0.3); await wait(600);
+        await speak("Low."); tone(220,0.3); await wait(600);
+        await speak("Labels swapped."); await wait(300);
+        await speak("High."); tone(220,0.3); await wait(600);
+        await speak("Low."); tone(880,0.3); await wait(600);
+      }
+    },
+    {
+      title:"Evolutionary Echoes (Anarchy)",
+      dur: 18,
+      run: async ()=>{
+        setCaption("Many voices share spectrum by rules of avoidance. No conductor; still, a chorus.");
+        await swarm(14, {seconds:12});
+      }
+    },
+    {
+      title:"Computational Audile Technique",
+      dur: 20,
+      run: async ()=>{
+        setCaption("Tap like / skip to teach a tiny recommender. It will change the next 20 seconds.");
+        await microRecommender(18);
+        await speak("When models learn us, we learn them back.");
+      }
+    },
+    {
+      title:"Ethics of Attention",
+      dur: 16,
+      run: async ()=>{
+        setCaption("Interruption vs. commons. Choose: Ad chime or Community mix.");
+        const choice = await choicePrompt(["Ad chime","Community mix"], 8000);
+        if(choice===0){ tone(987,0.1,'square'); await wait(300); tone(659,0.25,'square'); await wait(300); tone(784,0.15,'square'); }
+        else { for(let i=0;i<6;i++){ tone(220*(1+i/6),0.18,'sine', (i-3)/5); await wait(260);} }
+      }
+    },
+    {
+      title:"Coda — Critical Listening",
+      dur: 14,
+      run: async ()=>{
+        await speak("Listen to systems, not just sounds. Compose the spaces you inhabit.");
+        noise(6,'pink',0);
+        await wait(800);
+      }
+    }
+  ];
+
+  // Build chips for director
+  scenes.forEach((s,i)=>{
+    const chip = document.createElement('button'); chip.className='chip'; chip.textContent = (i+1)+'. '+s.title; chip.addEventListener('click', ()=> jumpTo(i)); chips.appendChild(chip);
+  });
+
+  function wait(ms){ return new Promise(r=>setTimeout(r, ms)); }
+
+  async function initToneBed(freq){
+    const bus = makeBus();
+    const o = AC.createOscillator(); o.type='sine'; o.frequency.value=freq;
+    const g = AC.createGain(); g.gain.value=0.12; o.connect(g); g.connect(bus);
+    o.start();
+    setTimeout(()=>{ try{o.stop();}catch{}} , 9000);
+  }
+
+  async function callResponse(lines, rate=1){
+    for(const L of lines){ await speak(L, {rate}); await wait(200);}  }
+
+  async function arp(notes, totalSeconds=12, step=0.12){
+    const t0 = AC.currentTime; let i=0; while(AC.currentTime < t0+totalSeconds){ tone(notes[i%notes.length], step*1.1, i%2? 'triangle':'sine', (i%4-1.5)/1.8); i++; await wait(step*1000); }
+  }
+
+  async function structuredSilence(ms){ await wait(ms); }
+
+  async function swarm(count=12, opts={seconds:10}){
+    const end = AC.currentTime + (opts.seconds||10);
+    while(AC.currentTime < end){
+      const f = 180 + Math.random()*900; const pan = -0.9 + Math.random()*1.8; const typ = ['sine','triangle','sawtooth'][Math.floor(Math.random()*3)];
+      tone(f, 0.12 + Math.random()*0.3, typ, pan); await wait(120 + Math.random()*140);
+    }
+  }
+
+  async function microRecommender(seconds=16){
+    const prefs = { sine:1, triangle:1, sawtooth:1 };
+    const end = performance.now() + seconds*1000;
+    const ui = makeLikeSkip();
+    while(performance.now() < end){
+      const typ = pickWeighted(prefs);
+      const f = 220 * Math.pow(2, Math.random()*2);
+      tone(f, 0.18, typ, (Math.random()*2-1)*0.7);
+      const choice = await ui.nextBeat(700);
+      if(choice==='like') prefs[typ]*=1.15; else if(choice==='skip') prefs[typ]*=0.85;
+    }
+    ui.destroy();
+  }
+
+  function pickWeighted(dict){
+    const entries = Object.entries(dict); const sum = entries.reduce((a,[,w])=>a+w,0); let r=Math.random()*sum;
+    for(const [k,w] of entries){ if((r-=w)<=0) return k; }
+    return entries[0][0];
+  }
+
+  function makeLikeSkip(){
+    const wrap = document.createElement('div'); wrap.className='controls'; wrap.style.position='absolute'; wrap.style.left='12px'; wrap.style.bottom='72px'; wrap.style.gap='6px';
+    const like = document.createElement('button'); like.className='ghost'; like.textContent='Like';
+    const skip = document.createElement('button'); skip.className='ghost'; skip.textContent='Skip';
+    wrap.append(like,skip); document.body.appendChild(wrap);
+    let resolver=null, timer=null;
+    like.addEventListener('click', ()=>{ if(resolver) resolver('like'); });
+    skip.addEventListener('click', ()=>{ if(resolver) resolver('skip'); });
+    return {
+      nextBeat(ms){ return new Promise(res=>{ resolver=res; clearTimeout(timer); timer=setTimeout(()=>res(null), ms); }); },
+      destroy(){ wrap.remove(); clearTimeout(timer); resolver=null; }
+    };
+  }
+
+  function choicePrompt(options=["Yes","No"], timeout=8000){
+    return new Promise(res=>{
+      const wrap = document.createElement('div'); wrap.className='controls'; wrap.style.position='absolute'; wrap.style.right='12px'; wrap.style.bottom='72px'; wrap.style.gap='6px';
+      const btns = options.map((t,i)=>{ const b=document.createElement('button'); b.className='ghost'; b.textContent=t; b.addEventListener('click', ()=>{cleanup(); res(i);}); return b; });
+      wrap.append(...btns); document.body.appendChild(wrap);
+      const to = setTimeout(()=>{ cleanup(); res(-1); }, timeout);
+      function cleanup(){ clearTimeout(to); wrap.remove(); }
+    });
+  }
+
+  // ---------- Transport ----------
+  async function play(){
+    await initAudio();
+    if(AC.state==='suspended') await AC.resume();
+    started = true; running = true; startBtn.textContent='Pause'; startBtn.setAttribute('aria-pressed','true');
+    for(; current<scenes.length && running; current++){
+      updateLabels(); highlightChip();
+      await scenes[current].run();
+    }
+    running = false; startBtn.textContent='Start'; startBtn.setAttribute('aria-pressed','false');
+  }
+
+  function pause(){ running=false; startBtn.textContent='Start'; startBtn.setAttribute('aria-pressed','false'); }
+
+  function jumpTo(i){ current = i; openDirector(false); if(!running && started){ play(); } }
+
+  function updateLabels(){ sceneLabel.textContent = `Scene ${Math.min(current+1, scenes.length)}/${scenes.length}`; }
+
+  function highlightChip(){ [...chips.children].forEach((c,idx)=> c.classList.toggle('active', idx===current)); }
+
+  startBtn.addEventListener('click', ()=>{ if(!started || !running) play(); else pause(); });
+  document.addEventListener('keydown', (e)=>{ if(e.code==='Space' || e.code==='Enter'){ e.preventDefault(); startBtn.click(); }});
+
+  // ---------- Visualizer Loop ----------
+  const freq = new Uint8Array(FFT/2); const time = new Uint8Array(FFT/2);
+  function draw(){
+    requestAnimationFrame(draw);
+    ctx2d.clearRect(0,0,viz.clientWidth,viz.clientHeight);
+    // grid
+    ctx2d.globalAlpha = 0.6; ctx2d.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--grid');
+    const w=viz.clientWidth,h=viz.clientHeight; const step=28; ctx2d.beginPath();
+    for(let x=0;x<w;x+=step){ ctx2d.moveTo(x,0); ctx2d.lineTo(x,h);} for(let y=0;y<h;y+=step){ ctx2d.moveTo(0,y); ctx2d.lineTo(w,y);} ctx2d.stroke();
+
+    if(analyser){ analyser.getByteFrequencyData(freq); analyser.getByteTimeDomainData(time); }
+
+    // spectrum bars
+    ctx2d.globalAlpha = 0.85; ctx2d.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--accent');
+    const bars = 72; const bw = w/bars; let max=0;
+    for(let i=0;i<bars;i++){
+      const idx = Math.floor(i*freq.length/bars); const v = freq[idx]/255; max=Math.max(max,v);
+      const bh = v*h*0.35; const x=i*bw; ctx2d.fillRect(x, h-bh-40, bw*0.8, bh);
+    }
+    // waveform line
+    ctx2d.globalAlpha = 0.7; ctx2d.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--accent2');
+    ctx2d.beginPath(); const L=time.length; for(let i=0;i<L;i++){ const vx = i/L*w; const vy = (time[i]/255)*h*0.4 + h*0.15; if(i===0) ctx2d.moveTo(vx,vy); else ctx2d.lineTo(vx,vy);} ctx2d.stroke();
+
+    // meter & progress
+    const level = dbFrom(freq); lvl.style.width = Math.max(6, level*100)+'%';
+  }
+  draw();
+
+})();
+</script>
+</body>
+</html>

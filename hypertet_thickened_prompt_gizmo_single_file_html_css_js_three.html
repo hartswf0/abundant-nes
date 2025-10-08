@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Hypertet — Thickened Prompt Gizmo (Tetrad × Haptics × Sonics)</title>
+<!--
+  FIX: Prevent "Cannot read properties of null (reading 'array')".
+  Root cause: Code assumed BufferGeometry.index exists (e.g., base.index.array),
+  but some THREE builds/primitives provide NON‑indexed geometries. This rewrite:
+    • Uses an import map so OrbitControls resolves 'three' (kept from last fix)
+    • Builds faces by iterating the position attribute directly (no index)
+    • Derives unique tetra vertices from positions (rounded keys) and constructs
+      rings/vertex orbs from those 4 unique points (no index dependency)
+    • Adds more self‑tests to validate geometry assumptions at runtime
+-->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+  }
+}
+</script>
+<style>
+  :root{
+    --bg:#0b0f14; --fg:#e6f2ff; --muted:#7c8aa5; --accent:#50e3c2; --ring:#9aa7bd; --hot:#ff6b6b; --cool:#7fd1ff;
+    --safe-t: env(safe-area-inset-top); --safe-b: env(safe-area-inset-bottom); --safe-l: env(safe-area-inset-left); --safe-r: env(safe-area-inset-right);
+  }
+  html,body{margin:0;height:100%;background:radial-gradient(1200px 1200px at 50% 20%, #111a26 0%, var(--bg) 55%, #05080c 100%); color:var(--fg); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";}
+  canvas{display:block; touch-action:none;}
+  .hud{position:fixed; inset:auto var(--safe-r) var(--safe-b) var(--safe-l); left:12px; right:12px; bottom:12px; display:grid; gap:8px; pointer-events:none;}
+  .row{display:flex; gap:8px; align-items:center; justify-content:space-between;}
+  .chip{pointer-events:auto; padding:10px 12px; border:1px solid #223046; background:rgba(10,16,24,.6); backdrop-filter: blur(6px); border-radius:16px; font-size:13px; color:var(--fg); user-select:none; display:inline-flex; align-items:center; gap:8px;}
+  .chip[aria-pressed="true"]{border-color:var(--accent); box-shadow:0 0 0 2px rgba(80,227,194,.15) inset;}
+  .chip .dot{width:9px;height:9px;border-radius:50%; background:var(--ring);} 
+  .chip .dot.enh{background:var(--accent);} .chip .dot.obs{background:#ffa24d;} .chip .dot.ret{background:#7fd1ff;} .chip .dot.rev{background:#ff6b6b;}
+  .help{position:fixed; top:12px; left:12px; right:12px; display:flex; gap:8px; align-items:center; justify-content:space-between; pointer-events:none;}
+  .help .card{pointer-events:auto; border:1px solid #223046; background:rgba(6,10,16,.6); backdrop-filter: blur(8px); border-radius:16px; padding:10px 12px; font-size:12px; color:var(--muted); max-width:min(680px, 92vw);} 
+  .btn{pointer-events:auto; border:1px solid #223046; color:var(--fg); background:rgba(10,16,24,.6); border-radius:12px; padding:8px 12px; font-size:13px;}
+  .btn:active{transform:translateY(1px);} 
+  .legend{display:flex; gap:8px; flex-wrap:wrap; align-items:center}
+  .legend span{display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--muted)}
+  .pill{border:1px solid #223046; background:rgba(8,12,18,.5); border-radius:999px; padding:6px 10px; font-size:12px; color:var(--muted)}
+  @media (prefers-reduced-motion: reduce){ *{scroll-behavior:auto !important; animation: none !important; transition: none !important;} }
+</style>
+</head>
+<body>
+<main id="app" aria-label="Hypertetrahedral control surface for temporal media" role="application"></main>
+<div class="help" aria-live="polite">
+  <div class="card" id="helpText">
+    <strong>Hypertet</strong> — 3D tetrahedron control surface. Tap faces or rings; drag to rotate; pinch to scale.
+    Each region maps to McLuhan's tetrad: <em>Enhance</em>, <em>Obsolesce</em>, <em>Retrieve</em>, <em>Reverse</em>.
+    Haptics pulse on interactions; audio spatializes from geometry.
+  </div>
+  <div class="legend">
+    <span><i class="dot enh"></i>Enhance</span>
+    <span><i class="dot obs"></i>Obsolesce</span>
+    <span><i class="dot ret"></i>Retrieve</span>
+    <span><i class="dot rev"></i>Reverse</span>
+  </div>
+</div>
+<div class="hud" aria-live="polite">
+  <div class="row">
+    <button id="btnAudio" class="chip" aria-pressed="false" title="Enable/disable audio"><span class="dot"></span>Audio</button>
+    <button id="btnHaptics" class="chip" aria-pressed="true" title="Enable/disable haptics"><span class="dot"></span>Haptics</button>
+    <button id="btnReset" class="chip" title="Reset View">Reset</button>
+    <button id="btnDiag" class="chip" title="Run diagnostics">Diag</button>
+    <span class="pill" id="readout">–</span>
+  </div>
+</div>
+
+<script type="module">
+// --- three.js imports via import map ---
+import * as THREE from 'three';
+import { OrbitControls } from 'https://unpkg.com/three@0.160.0/examples/jsm/controls/OrbitControls.js';
+
+// --- Globals ---
+const root = document.getElementById('app');
+const readout = document.getElementById('readout');
+const helpText = document.getElementById('helpText');
+const btnAudio = document.getElementById('btnAudio');
+const btnHaptics = document.getElementById('btnHaptics');
+const btnReset = document.getElementById('btnReset');
+const btnDiag = document.getElementById('btnDiag');
+
+let audioEnabled = false; // user gesture required
+let hapticsEnabled = true;
+let ac, masterGain;
+
+// --- Web Audio Setup ---
+function ensureAudio(){
+  if(audioEnabled && !ac){
+    ac = new (window.AudioContext || window.webkitAudioContext)();
+    masterGain = ac.createGain();
+    masterGain.gain.value = 0.2;
+    masterGain.connect(ac.destination);
+  }
+}
+
+function shortTone({freq=220, dur=0.12, pan=[0,0,0]}={}){
+  if(!audioEnabled){return;}
+  ensureAudio();
+  const osc = ac.createOscillator();
+  const gain = ac.createGain();
+  const panner = new PannerNode(ac, {panningModel:'HRTF', distanceModel:'linear', positionX:pan[0], positionY:pan[1], positionZ:pan[2], refDistance:1, maxDistance:50});
+  osc.type = 'triangle';
+  osc.frequency.setValueAtTime(freq, ac.currentTime);
+  gain.gain.setValueAtTime(0.0001, ac.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.35, ac.currentTime + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + dur);
+  osc.connect(gain).connect(panner).connect(masterGain);
+  osc.start();
+  osc.stop(ac.currentTime + dur + 0.02);
+}
+
+function chord({base=220, pan=[0,0,0]}){ [1, 5/4, 3/2].forEach((r,i)=> shortTone({freq:base*r, dur:0.18 + i*0.05, pan})); }
+function glitch({base=300, pan=[0,0,0]}){ for(let i=0;i<6;i++) shortTone({freq: base + (Math.random()*200-100), dur:0.05, pan}); }
+function echo({base=180, pan=[0,0,0]}){ [0,1,2,3].forEach(k=> setTimeout(()=> shortTone({freq: base*(1 + k*0.03), dur:0.1, pan}), 60*k)); }
+function invert({base=260, pan=[0,0,0]}){ [1, 4/3, 5/6].forEach((r,i)=> shortTone({freq: base*r*(i%2?-1:1), dur:0.12, pan})); }
+
+// --- Haptics ---
+function vibrate(pattern){ if(hapticsEnabled && navigator.vibrate){ navigator.vibrate(pattern); } }
+const HAPTICS = { ENH:[12,24,12], OBS:[60,20,60], RET:[8,8,8,8,8], REV:[30,10,10,10,30] };
+
+// --- Three.js Scene ---
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x0b0f14, 0.04);
+const camera = new THREE.PerspectiveCamera(50, 2, 0.01, 200);
+camera.position.set(2.4, 1.9, 2.8);
+
+const renderer = new THREE.WebGLRenderer({antialias:true, alpha:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+root.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08; controls.enablePan = false;
+controls.minDistance = 1.2; controls.maxDistance = 7.0;
+
+// Lighting
+const hemi = new THREE.HemisphereLight(0xa3ccff, 0x09121b, 0.9); scene.add(hemi);
+const dir = new THREE.DirectionalLight(0xffffff, 0.6); dir.position.set(3,4,5); scene.add(dir);
+
+// "Thickened" tetrahedron: outer + inner + edge rings
+const group = new THREE.Group(); scene.add(group);
+
+// Geometry helpers
+function tetraGeometry(scale=1){ return new THREE.TetrahedronGeometry(scale, 0); }
+
+const outerMat = new THREE.MeshPhysicalMaterial({color:0x1b2a3f, metalness:0.1, roughness:0.35, clearcoat:0.2, transparent:true, opacity:0.7, side:THREE.DoubleSide});
+const innerMat = new THREE.MeshStandardMaterial({color:0x0d1622, metalness:0.0, roughness:0.9, wireframe:true});
+
+const outer = new THREE.Mesh(tetraGeometry(1), outerMat);
+const inner = new THREE.Mesh(tetraGeometry(0.72), innerMat);
+
+// Utility: get 4 unique vertex positions from a (possibly non‑indexed) tetra geometry
+function getUniqueVerts(geom){
+  const pos = geom.getAttribute('position');
+  const uniq = []; const seen = new Map();
+  for(let i=0;i<pos.count;i++){
+    const v = new THREE.Vector3().fromBufferAttribute(pos, i);
+    const key = `${v.x.toFixed(5)},${v.y.toFixed(5)},${v.z.toFixed(5)}`;
+    if(!seen.has(key)){ seen.set(key, uniq.length); uniq.push(v); }
+  }
+  return uniq; // expect length = 4 for tetrahedron
+}
+
+// Face highlight materials for tetrad mapping
+const FACE_MATS = [
+  new THREE.MeshStandardMaterial({color:0x50e3c2, transparent:true, opacity:0.24, emissive:0x183a35, side:THREE.DoubleSide}), // Enhance
+  new THREE.MeshStandardMaterial({color:0xffa24d, transparent:true, opacity:0.22, emissive:0x3a2715, side:THREE.DoubleSide}), // Obsolesce
+  new THREE.MeshStandardMaterial({color:0x7fd1ff, transparent:true, opacity:0.22, emissive:0x143247, side:THREE.DoubleSide}), // Retrieve
+  new THREE.MeshStandardMaterial({color:0xff6b6b, transparent:true, opacity:0.22, emissive:0x3a1212, side:THREE.DoubleSide})  // Reverse
+];
+
+// Split each face into a separate mesh for hit‑testing and tinting (do NOT assume index)
+const faceGroup = new THREE.Group();
+{
+  const base = tetraGeometry(1.02); // slightly larger for easy hits
+  const pos = base.getAttribute('position');
+  for(let i=0;i<pos.count; i+=3){
+    const g = new THREE.BufferGeometry();
+    const v = new Float32Array(9);
+    for(let k=0;k<3;k++){
+      const vv = new THREE.Vector3().fromBufferAttribute(pos, i+k);
+      v[k*3+0]=vv.x; v[k*3+1]=vv.y; v[k*3+2]=vv.z;
+    }
+    g.setAttribute('position', new THREE.BufferAttribute(v,3));
+    g.computeVertexNormals();
+    const fIndex = (i/3)%4;
+    const f = new THREE.Mesh(g, FACE_MATS[fIndex]);
+    f.userData.faceId = fIndex; // 0..3 map to tetrad
+    faceGroup.add(f);
+  }
+}
+
+// Edge rings embedded along the 6 unique vertex pairs (no index required)
+const ringGroup = new THREE.Group();
+{
+  const verts = getUniqueVerts(outer.geometry);
+  window.__HypertetUniqueVerts = verts.length; // expose for tests
+  for(let a=0;a<verts.length;a++){
+    for(let b=a+1;b<verts.length;b++){
+      const A = verts[a], B = verts[b];
+      const mid = A.clone().add(B).multiplyScalar(0.5);
+      const ringGeo = new THREE.TorusGeometry(0.16, 0.012, 12, 40);
+      const ringMat = new THREE.MeshStandardMaterial({color:0x9aa7bd, metalness:0.4, roughness:0.35, emissive:0x0b1220});
+      const ring = new THREE.Mesh(ringGeo, ringMat);
+      ring.position.copy(mid);
+      const dirAB = B.clone().sub(A).normalize();
+      const up = new THREE.Vector3(0,1,0);
+      const quat = new THREE.Quaternion().setFromUnitVectors(up, dirAB);
+      ring.quaternion.copy(quat);
+      ring.userData.edge = [a,b];
+      ringGroup.add(ring);
+    }
+  }
+}
+
+// Vertex orbs at the 4 unique vertices (for spatial sonification)
+const orbGroup = new THREE.Group();
+{
+  const verts = getUniqueVerts(outer.geometry);
+  for(let i=0;i<verts.length;i++){
+    const p = verts[i];
+    const s = new THREE.Mesh(new THREE.SphereGeometry(0.05, 16, 16), new THREE.MeshStandardMaterial({color:0xcde4ff, emissive:0x0d1a2b}));
+    s.position.copy(p);
+    s.userData.vertexId = i;
+    orbGroup.add(s);
+  }
+}
+
+// Atmospherics
+const grid = new THREE.GridHelper(20, 40, 0x1c2433, 0x101723); grid.position.y = -1.3; grid.material.opacity = 0.2; grid.material.transparent = true; scene.add(grid);
+const stars = new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial({color:0x6ea8ff, size:0.01, transparent:true, opacity:0.6}));
+{
+  const N=600; const arr = new Float32Array(N*3);
+  for(let i=0;i<N;i++){ arr[i*3+0]=(Math.random()-0.5)*18; arr[i*3+1]=Math.random()*8+0.6; arr[i*3+2]=(Math.random()-0.5)*18; }
+  stars.geometry.setAttribute('position', new THREE.BufferAttribute(arr,3));
+}
+scene.add(stars);
+
+// Assemble
+group.add(outer); group.add(inner); group.add(faceGroup); group.add(ringGroup); group.add(orbGroup);
+
+// --- Interactions & Mapping ---
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+let down=false, lastPinchDist=null; let hit=null;
+
+const TETRAD = ['ENHANCE','OBSOLESCE','RETRIEVE','REVERSE'];
+
+function updateReadout(msg){ readout.textContent = msg; }
+
+function faceAction(faceId, point){
+  const world = point.clone();
+  const p = [world.x, world.y, world.z];
+  switch(faceId){
+    case 0: vibrate(HAPTICS.ENH); chord({base:240, pan:p}); updateReadout('Enhance: amplify + layer'); break;
+    case 1: vibrate(HAPTICS.OBS); glitch({base:320, pan:p}); updateReadout('Obsolesce: mask + filter'); break;
+    case 2: vibrate(HAPTICS.RET); echo({base:180, pan:p});   updateReadout('Retrieve: echo + recall'); break;
+    case 3: vibrate(HAPTICS.REV); invert({base:260, pan:p}); updateReadout('Reverse: flip + invert'); break;
+  }
+  // Visual flash
+  const idx = Math.max(0, Math.min(3, faceId|0));
+  const mesh = faceGroup.children[idx]; if(!mesh) return;
+  const m = mesh.material; const o = m.opacity; m.opacity = 0.6; setTimeout(()=> m.opacity=o, 120);
+}
+
+function ringAction(ring){
+  vibrate([10,10,10,10,10,30]);
+  glitch({base:200 + Math.random()*200, pan:[ring.position.x, ring.position.y, ring.position.z]});
+  updateReadout('Dial: micro‑tune (hold & drag to scrub)');
+}
+
+function orbAction(orb){
+  vibrate([6]); chord({base:180 + orb.userData.vertexId*30, pan:[orb.position.x, orb.position.y, orb.position.z]});
+  updateReadout('Vertex: keyframe ping');
+}
+
+function pick(clientX, clientY){
+  const rect = renderer.domElement.getBoundingClientRect();
+  pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+  pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(pointer, camera);
+  const targets = [...faceGroup.children, ...ringGroup.children, ...orbGroup.children];
+  const i = raycaster.intersectObjects(targets, true)[0];
+  hit = i || null;
+  return hit;
+}
+
+function onPointerDown(e){
+  down = true; lastPinchDist=null;
+  const t = (e.touches? e.touches[0]: e);
+  const i = pick(t.clientX, t.clientY);
+  if(i){
+    if(i.object.parent === faceGroup){ faceAction(i.object.userData.faceId, i.point); }
+    else if(i.object.parent === ringGroup){ ringAction(i.object); }
+    else if(i.object.parent === orbGroup){ orbAction(i.object); }
+  }
+}
+function onPointerMove(e){
+  if(e.touches && e.touches.length===2){
+    // pinch scale
+    const d = Math.hypot(
+      e.touches[0].clientX - e.touches[1].clientX,
+      e.touches[0].clientY - e.touches[1].clientY
+    );
+    if(lastPinchDist!=null){
+      const delta = (d - lastPinchDist) * 0.002;
+      group.scale.multiplyScalar(1 + delta);
+    }
+    lastPinchDist = d;
+  } else if(down && hit && hit.object.parent === ringGroup){
+    // ring scrub: rotate group slightly based on pointer x
+    const dx = (e.movementX || 0) * 0.005;
+    group.rotation.y += dx;
+  }
+}
+function onPointerUp(){ down = false; hit=null; lastPinchDist=null; }
+
+renderer.domElement.addEventListener('pointerdown', onPointerDown, {passive:false});
+renderer.domElement.addEventListener('pointermove', onPointerMove, {passive:false});
+window.addEventListener('pointerup', onPointerUp, {passive:false});
+
+// Touch events (for haptics feedback immediacy on mobile)
+renderer.domElement.addEventListener('touchstart', (e)=>{ onPointerDown(e); }, {passive:false});
+renderer.domElement.addEventListener('touchmove',  (e)=>{ onPointerMove(e); }, {passive:false});
+renderer.domElement.addEventListener('touchend',   (e)=>{ onPointerUp(e);   }, {passive:false});
+
+// UI controls
+btnAudio.addEventListener('click', async ()=>{
+  audioEnabled = !audioEnabled;
+  btnAudio.setAttribute('aria-pressed', String(audioEnabled));
+  if(audioEnabled){ ensureAudio(); chord({base:220, pan:[0,0,1]}); helpText.innerHTML = '<strong>Hypertet</strong> — Audio ON. Tap faces or rings; drag to rotate; pinch to scale.'; }
+  else { helpText.innerHTML = '<strong>Hypertet</strong> — Audio OFF. You can still use haptics + visuals.'; }
+});
+
+btnHaptics.addEventListener('click', ()=>{
+  hapticsEnabled = !hapticsEnabled;
+  btnHaptics.setAttribute('aria-pressed', String(hapticsEnabled));
+  if(hapticsEnabled) vibrate([6,6,6]);
+});
+
+btnReset.addEventListener('click', ()=>{
+  group.scale.set(1,1,1); group.rotation.set(0,0,0); controls.reset(); vibrate([10]); updateReadout('Reset');
+});
+
+// --- Diagnostics / Self‑tests ("test cases") ---
+function runSelfTests(){
+  const results = [];
+  const test = (name, fn) => { try { const val = fn(); const ok = !!val; results.push({name, ok, detail: val}); return ok; } catch(e){ console.error(name, e); results.push({name, ok:false, err:String(e)}); return false; } };
+
+  test('THREE present', ()=> !!THREE?.WebGLRenderer);
+  test('OrbitControls present', ()=> typeof OrbitControls === 'function');
+  test('faceGroup has 4 faces', ()=> faceGroup.children.length === 4);
+  test('ringGroup has 6 rings (edges)', ()=> ringGroup.children.length === 6);
+  test('orbGroup has 4 vertex orbs', ()=> orbGroup.children.length === 4);
+  test('Unique vertices == 4', ()=> window.__HypertetUniqueVerts === 4);
+  test('Renderer mounted in DOM', ()=> renderer.domElement.parentElement === root);
+  test('Raycaster can hit a face', ()=> { 
+    // cast from camera center toward group origin
+    const ndc = new THREE.Vector2(0,0); const rc = new THREE.Raycaster(); rc.setFromCamera(ndc, camera);
+    const hits = rc.intersectObjects(faceGroup.children, true); return hits.length>0; 
+  });
+
+  const pass = results.filter(r=>r.ok).length;
+  console.table(results);
+  readout.textContent = `Self‑test: ${pass}/${results.length} OK`;
+  helpText.innerHTML = `<strong>Hypertet</strong> — Diagnostics: ${pass}/${results.length} OK.`;
+  return results;
+}
+btnDiag.addEventListener('click', runSelfTests);
+
+// Animate
+function tick(){
+  group.rotation.y += 0.0016; stars.rotation.y += 0.0006; controls.update(); renderer.render(scene,camera); requestAnimationFrame(tick);
+}
+
+function onResize(){
+  const w = window.innerWidth, h = window.innerHeight;
+  renderer.setSize(w,h); camera.aspect = w/h; camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', onResize);
+
+onResize(); tick();
+
+// Accessibility: keyboard focus + actions
+window.addEventListener('keydown', (e)=>{
+  if(e.key==='1'){ faceAction(0, new THREE.Vector3(0,0,1)); }
+  if(e.key==='2'){ faceAction(1, new THREE.Vector3(1,0,0)); }
+  if(e.key==='3'){ faceAction(2, new THREE.Vector3(0,1,0)); }
+  if(e.key==='4'){ faceAction(3, new THREE.Vector3(-1,0,0)); }
+  if(e.key==='r'){ btnReset.click(); }
+  if(e.key==='d'){ runSelfTests(); }
+});
+
+// Initial cue + initial self‑test
+updateReadout('Tap a face (1‑Enhance, 2‑Obsolesce, 3‑Retrieve, 4‑Reverse). Press D or Diag to run tests.');
+setTimeout(runSelfTests, 300);
+</script>
+</body>
+</html>

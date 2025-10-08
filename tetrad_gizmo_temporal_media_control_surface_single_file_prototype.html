@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Tetrahedron — Tetrad Control (Pure Canvas)</title>
+<style>
+  :root{ --bg:#06080f; --fg:#eaf0ff; --muted:#8fa0b8; --accent:#7cc7ff; --accent2:#78ffd7; }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;background:radial-gradient(1000px 1000px at 50% 12%, #0a1120 0%, #06080f 55%, #04060b 100%);color:var(--fg);font:500 14px/1.4 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial}
+  .app{height:100%;display:grid;grid-template-rows:auto 1fr auto}
+  header{padding:12px 16px calc(env(safe-area-inset-top) + 6px);text-align:center;color:var(--muted)}
+  header b{color:var(--fg)}
+  footer{padding:8px 16px calc(env(safe-area-inset-bottom) + 10px);text-align:center;color:var(--muted);font-size:12px}
+  #c{width:100%;height:100%;display:block;touch-action:none}
+</style>
+</head>
+<body>
+<div class="app" role="application" aria-label="Tetrahedron tetrad controller">
+  <header> <b>Tetrahedron</b> · Tetrad-as-control · Touch the <b>four face rings</b> </header>
+  <canvas id="c" aria-label="Tetrahedron canvas"></canvas>
+  <footer>Enhance (E), Obsolesce (Ø), Retrieve (⟲), Reverse (↯). Everything is on the tetrahedron.</footer>
+</div>
+<script>
+(() => {
+  // --- Canvas setup ---
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+  const DPR = Math.max(1, Math.min(2, window.devicePixelRatio||1));
+  function resize(){ const w=canvas.clientWidth, h=canvas.clientHeight; canvas.width=w*DPR; canvas.height=h*DPR; ctx.setTransform(DPR,0,0,DPR,0,0);} 
+  new ResizeObserver(resize).observe(canvas);
+
+  // --- State mapped to tetrad ---
+  const state = {
+    t:0, running:true,
+    enhance:1.0,     // speed/complexity multiplier (E)
+    obsolesce:0.0,   // fade edges/faces (Ø)
+    reverse:false,   // direction flip (↯)
+    retrieve:0.0,    // time scrub 0..1 mapped to orbit phase (⟲)
+  };
+
+  // --- 3D tetrahedron geometry ---
+  // Regular tetrahedron centered at origin (edge length ~2)
+  const verts = [
+    [ 1,  1,  1],
+    [ 1, -1, -1],
+    [-1,  1, -1],
+    [-1, -1,  1]
+  ];
+  const faces = [ [0,1,2,'E'], [0,3,1,'Ø'], [0,2,3,'⟲'], [1,3,2,'↯'] ];
+
+  // helpers
+  function rotX(p,a){ const s=Math.sin(a), c=Math.cos(a); const [x,y,z]=p; return [x, c*y-s*z, s*y+c*z]; }
+  function rotY(p,a){ const s=Math.sin(a), c=Math.cos(a); const [x,y,z]=p; return [ c*x+s*z, y, -s*x+c*z]; }
+  function rotZ(p,a){ const s=Math.sin(a), c=Math.cos(a); const [x,y,z]=p; return [ c*x-s*y, s*x+c*y, z]; }
+  function project(p, w, h, fov=600){ const [x,y,z]=p; const d=fov/(fov - z*120); return [w/2 + x*120*d, h/2 + y*120*d, d]; }
+  function centroid(a,b,c){ return [(a[0]+b[0]+c[0])/3,(a[1]+b[1]+c[1])/3,(a[2]+b[2]+c[2])/3]; }
+  function normal(a,b,c){ const u=[b[0]-a[0],b[1]-a[1],b[2]-a[2]], v=[c[0]-a[0],c[1]-a[1],c[2]-a[2]]; return [u[1]*v[2]-u[2]*v[1], u[2]*v[0]-u[0]*v[2], u[0]*v[1]-u[1]*v[0]]; }
+  function dot(a,b){return a[0]*b[0]+a[1]*b[1]+a[2]*b[2];}
+
+  // ring targets (computed each frame) for picking
+  let rings2D = [];
+
+  function draw(){
+    const w=canvas.clientWidth, h=canvas.clientHeight;
+    ctx.clearRect(0,0,w,h);
+
+    // background glow
+    const g=ctx.createRadialGradient(w/2,h*0.25,10,w/2,h/2,Math.max(w,h)*0.8);
+    g.addColorStop(0,'#0b1528'); g.addColorStop(1,'#06080f');
+    ctx.fillStyle=g; ctx.fillRect(0,0,w,h);
+
+    // rotation parameters
+    const baseSpeed = 0.6; // rad/s
+    const sgn = state.reverse ? -1 : 1;
+    const phase = (state.t*baseSpeed*state.enhance*sgn + state.retrieve*Math.PI*2);
+
+    // transform verts
+    const tv = verts.map(p => rotZ(rotY(rotX(p, phase*0.6), phase*0.9), phase*0.3));
+
+    // project
+    const pv = tv.map(p => project(p,w,h));
+
+    // sort faces by depth for painter's algorithm
+    const faceProj = faces.map(([i,j,k,label])=>{
+      const c3 = centroid(tv[i],tv[j],tv[k]);
+      const n = normal(tv[i],tv[j],tv[k]);
+      const depth = (tv[i][2]+tv[j][2]+tv[k][2])/3;
+      const lit = Math.max(0.1, 0.5 + 0.5*dot(n,[0,0,1]) / (Math.hypot(...n)||1));
+      const cp = centroid(pv[i],pv[j],pv[k]);
+      return {i,j,k,label, depth, lit, cp};
+    }).sort((a,b)=>a.depth-b.depth);
+
+    rings2D = [];
+
+    // draw faces
+    for(const f of faceProj){
+      const a=pv[f.i], b=pv[f.j], c=pv[f.k];
+      ctx.beginPath(); ctx.moveTo(a[0],a[1]); ctx.lineTo(b[0],b[1]); ctx.lineTo(c[0],c[1]); ctx.closePath();
+      const alpha = 0.85 * (1 - state.obsolesce); // obsolesce removes face fill
+      const faceGrad = ctx.createLinearGradient(a[0],a[1],c[0],c[1]);
+      faceGrad.addColorStop(0, `rgba(124,199,255,${0.12*f.lit})`);
+      faceGrad.addColorStop(1, `rgba(120,255,215,${0.10*f.lit})`);
+      ctx.fillStyle = `rgba(255,255,255,${alpha*0.08})`;
+      ctx.fill();
+      ctx.fillStyle = faceGrad; ctx.fill();
+
+      // edges
+      ctx.lineWidth = 1.5; ctx.strokeStyle = `rgba(200,225,255,${0.7*(1-state.obsolesce)})`; ctx.stroke();
+
+      // ring controls anchored to each face centroid
+      const r = 26 + 8 * f.lit; // radius varies slightly with light
+      const k = 0.65 + 0.35*(1-state.obsolesce); // opacity vs obsolesce
+      ctx.beginPath(); ctx.arc(f.cp[0], f.cp[1], r, 0, Math.PI*2);
+      ctx.strokeStyle = `rgba(124,199,255,${0.9*k})`; ctx.lineWidth = 2; ctx.stroke();
+      ctx.beginPath(); ctx.arc(f.cp[0], f.cp[1], r-6, 0, Math.PI*2);
+      ctx.strokeStyle = `rgba(120,255,215,${0.5*k})`; ctx.lineWidth = 1; ctx.stroke();
+
+      // label
+      ctx.fillStyle = `rgba(235,245,255,${0.9})`; ctx.font = '700 14px ui-sans-serif, system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(f.label, f.cp[0], f.cp[1]);
+
+      rings2D.push({x:f.cp[0], y:f.cp[1], R:r, label:f.label});
+    }
+  }
+
+  // --- Animation loop ---
+  let last = performance.now();
+  function tick(now){ const dt=(now-last)/1000; last=now; if(state.running){ state.t += dt; } draw(); requestAnimationFrame(tick);} 
+
+  // --- Interaction: everything on the tetrahedron ---
+  let active=null, baseVal=0, start=0, startY=0;
+  function pick(x,y){
+    let hit=null, best=1e9; for(const r of rings2D){ const d=Math.hypot(x-r.x,y-r.y); if(d<r.R+20 && d<best){ best=d; hit=r; } }
+    return hit; }
+
+  function onDown(e){ const pt = e.touches? e.touches[0]:e; const rect=canvas.getBoundingClientRect(); const x=pt.clientX-rect.left, y=pt.clientY-rect.top; const h=pick(x,y); if(!h) return; e.preventDefault(); active=h.label; start= (Math.atan2(y-h.y, x-h.x)); startY=y; if(active==='E'){ baseVal=state.enhance; } if(active==='Ø'){ baseVal=state.obsolesce; } if(active==='⟲'){ baseVal=state.retrieve; } if(active==='↯'){ baseVal=state.reverse?1:0; }
+    window.addEventListener('pointermove', onMove); window.addEventListener('pointerup', onUp,{once:true}); }
+
+  function onMove(e){ const pt = e.touches? e.touches[0]:e; const rect=canvas.getBoundingClientRect(); const x=pt.clientX-rect.left, y=pt.clientY-rect.top; const angle = Math.atan2(y - (pick(x,y)?.y||0), x - (pick(x,y)?.x||0));
+    if(active==='E'){ // rotate around ring
+      const dA = angle - start; state.enhance = Math.max(0.1, Math.min(4, baseVal + dA*1.25));
+    } else if(active==='Ø'){ // vertical drag to mute
+      const dy = (y - startY)/220; state.obsolesce = Math.max(0, Math.min(1, baseVal + dy));
+    } else if(active==='⟲'){ // horizontal drag to scrub time
+      const rect=canvas.getBoundingClientRect(); const dx = (x - (pick(x,y)?.x||rect.width/2)) / (rect.width*0.5); state.retrieve = Math.max(0, Math.min(1, baseVal + dx));
+    } else if(active==='↯'){ // short drag toggles direction based on quadrant
+      state.reverse = (x % 200) > 100 ? true : false;
+    }
+  }
+  function onUp(){ active=null; window.removeEventListener('pointermove', onMove); }
+
+  canvas.addEventListener('pointerdown', onDown);
+
+  // Transport via spacebar (optional)
+  window.addEventListener('keydown', (e)=>{ if(e.code==='Space'){ state.running=!state.running; }});
+
+  // Start
+  resize(); requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>

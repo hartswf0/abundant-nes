@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+<title>Hypertetrahedral Temporal Control Surface</title>
+<style>
+  :root { --bg:#05060a; --fg:#e6f1ff; --accent:#6ae4ff; }
+  html,body{height:100%;margin:0;background:var(--bg);overscroll-behavior:none}
+  body{touch-action:none}
+  canvas{display:block;width:100vw;height:100vh;outline:none}
+  /* absolutely no text UI — only the artifact */
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script type="module">
+import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+
+// ===================== Core Setup =====================
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias:true, alpha:false, powerPreference:'high-performance' });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x05060a);
+
+// NOTE: camera must be created before resize() is called to avoid ReferenceError
+const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.01, 100);
+camera.position.set(0, 0.4, 2.6);
+scene.add(camera);
+
+const light = new THREE.DirectionalLight(0xffffff, 1.2); light.position.set(2,3,2); scene.add(light);
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+
+// Now that camera exists, safe to size & listen
+resize();
+window.addEventListener('resize', resize, { passive:true });
+
+// ===================== Temporal Engine =====================
+const timeState = {
+  rate: 1.0,    // global temporal speed
+  warp: 0.0,    // non-linear fold intensity
+  phase: 0.0,   // phase shift (vertex gestures)
+  jitter: 0.0,  // stochastic grains
+  faceRipples: new Map(),
+};
+
+// ===================== Geometry: Tetrahedron =====================
+const radius = 0.9;
+const tetraGeo = new THREE.TetrahedronGeometry(radius, 0);
+
+// Shimmering temporal membrane shader
+const faceMat = new THREE.ShaderMaterial({
+  uniforms: {
+    u_time:   { value: 0 },
+    u_rate:   { value: 1 },
+    u_warp:   { value: 0 },
+    u_phase:  { value: 0 },
+    u_jit:    { value: 0 },
+    u_colorA: { value: new THREE.Color('#1a9fff') },
+    u_colorB: { value: new THREE.Color('#ff7df2') },
+  },
+  vertexShader:`
+    varying vec3 vPos; varying vec3 vNorm;
+    void main(){ vPos = position; vNorm = normal; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }
+  `,
+  fragmentShader:`
+    precision highp float; varying vec3 vPos; varying vec3 vNorm;
+    uniform float u_time,u_rate,u_warp,u_phase,u_jit; uniform vec3 u_colorA,u_colorB;
+    float hash(vec3 p){ return fract(sin(dot(p, vec3(12.9898,78.233,37.719)))*43758.5453); }
+    void main(){
+      float t = u_time*u_rate + u_phase;
+      float n = hash(floor(vPos*7.0)+floor(t*2.0));
+      float wave = sin(dot(normalize(vPos), normalize(vNorm))*12.0 + t*3.0);
+      float warp = sin(length(vPos)*6.0 + t*2.0) * u_warp;
+      float flick = smoothstep(0.6,1.0,abs(wave))*0.4 + n*u_jit*0.5;
+      float shade = clamp(0.25 + 0.75*abs(wave + warp), 0.0, 1.0);
+      vec3 col = mix(u_colorA, u_colorB, shade);
+      float lit = 0.3 + 0.7 * pow(max(dot(normalize(vNorm), normalize(vec3(0.6,1.0,0.5))), 0.0), 1.5);
+      col *= (lit + flick);
+      gl_FragColor = vec4(col, 0.9);
+    }
+  `,
+  transparent:true,
+  side:THREE.DoubleSide,
+  blending:THREE.AdditiveBlending,
+});
+
+const tetraMesh = new THREE.Mesh(tetraGeo, faceMat);
+scene.add(tetraMesh);
+
+// Edge glow
+const edges = new THREE.LineSegments(new THREE.EdgesGeometry(tetraGeo), new THREE.LineBasicMaterial({ color:0x6ae4ff, transparent:true, opacity:0.35 }));
+scene.add(edges);
+
+// ===================== Vertex Anchors =====================
+const vertexSpheres = [];
+const vAttr = tetraGeo.attributes.position;
+const uniqueVerts = [];
+for (let i=0;i<vAttr.count;i+=3){ // collect unique by position string
+  for (let j=0;j<3;j++){
+    const idx=i+j; const p=new THREE.Vector3().fromBufferAttribute(vAttr, idx);
+    const key=p.toArray().map(x=>x.toFixed(3)).join(',');
+    if(!uniqueVerts.some(u=>u.key===key)) uniqueVerts.push({ key, p });
+  }
+}
+const vSphereMat = new THREE.MeshPhysicalMaterial({ color:0x87e8ff, emissive:0x104050, roughness:0.2, metalness:0.6, transmission:0.6, thickness:0.6 });
+uniqueVerts.forEach(({p})=>{ const s=new THREE.Mesh(new THREE.IcosahedronGeometry(0.06,1), vSphereMat); s.position.copy(p); tetraMesh.add(s); vertexSpheres.push(s); });
+
+// ===================== Edge Rings (embedded dials) =====================
+const edgeRings = [];
+(function makeEdgeRings(){
+  const pos = tetraGeo.attributes.position; const faces=[];
+  for(let i=0;i<pos.count;i+=3){
+    const a=new THREE.Vector3().fromBufferAttribute(pos,i);
+    const b=new THREE.Vector3().fromBufferAttribute(pos,i+1);
+    const c=new THREE.Vector3().fromBufferAttribute(pos,i+2);
+    faces.push([a,b,c]);
+  }
+  const edgesSet=new Set(); const uniqueEdges=[];
+  function edgeKey(a,b){ return [a.toArray().map(n=>n.toFixed(3)).join(','), b.toArray().map(n=>n.toFixed(3)).join(',')].sort().join('|'); }
+  faces.forEach(([a,b,c])=>{
+    [[a,b],[b,c],[c,a]].forEach(([p1,p2])=>{ const k=edgeKey(p1,p2); if(!edgesSet.has(k)){ edgesSet.add(k); uniqueEdges.push([p1.clone(),p2.clone()]); } });
+  });
+  const ringMat=new THREE.MeshPhysicalMaterial({ color:0x6ae4ff, emissive:0x102030, roughness:0.1, metalness:0.8, transmission:0.3, thickness:0.5 });
+  uniqueEdges.forEach(([a,b])=>{
+    const mid=a.clone().add(b).multiplyScalar(0.5); const dir=b.clone().sub(a).normalize(); const len=a.distanceTo(b);
+    const ring=new THREE.Mesh(new THREE.TorusGeometry(len*0.28, 0.01, 12, 64), ringMat);
+    const up=new THREE.Vector3(0,1,0); const q=new THREE.Quaternion().setFromUnitVectors(up, dir);
+    ring.quaternion.copy(q); ring.position.copy(mid); tetraMesh.add(ring); edgeRings.push(ring);
+  });
+})();
+
+// ===================== Face Pulse Emitters =====================
+const faceHitPlanes = [];
+if (tetraGeo.index){
+  for (let i=0;i<tetraGeo.index.count; i+=3){
+    const ia=tetraGeo.index.getX(i), ib=tetraGeo.index.getX(i+1), ic=tetraGeo.index.getX(i+2);
+    const a=new THREE.Vector3().fromBufferAttribute(tetraGeo.attributes.position, ia);
+    const b=new THREE.Vector3().fromBufferAttribute(tetraGeo.attributes.position, ib);
+    const c=new THREE.Vector3().fromBufferAttribute(tetraGeo.attributes.position, ic);
+    const tri=new THREE.Triangle(a,b,c);
+    const center=new THREE.Vector3(); tri.getMidpoint(center);
+    const normal=tri.getNormal(new THREE.Vector3());
+    const size=Math.max(0.1, Math.sqrt(tri.getArea()));
+    const planeGeo=new THREE.PlaneGeometry(size, size);
+    const m=new THREE.MeshBasicMaterial({ visible:false });
+    const plane=new THREE.Mesh(planeGeo, m);
+    plane.position.copy(center);
+    // orient plane to face outward along the triangle normal
+    const lookTarget=center.clone().add(normal);
+    plane.lookAt(lookTarget);
+    tetraMesh.add(plane);
+    faceHitPlanes.push(plane);
+  }
+}
+
+// ===================== Picking & Gestures =====================
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+let dragging=null; // { type:'vertex'|'edge'|'face', mesh, start, last }
+let pinchStart=null; // { d, rate }
+let rotating=false;
+let prev = new THREE.Vector2();
+
+function setPointer(x,y){ const rect=renderer.domElement.getBoundingClientRect(); pointer.x=((x-rect.left)/rect.width)*2-1; pointer.y=-((y-rect.top)/rect.height)*2+1; }
+function hitTest(groups){ if(!camera) return null; raycaster.setFromCamera(pointer, camera); return raycaster.intersectObjects(groups, true)[0]; }
+function vibrate(p){ try{ navigator.vibrate && navigator.vibrate(p); }catch(e){} }
+
+function onDown(clientX, clientY){
+  setPointer(clientX, clientY);
+  const vHit=hitTest(vertexSpheres);
+  const eHit=hitTest(edgeRings);
+  const fHit=hitTest(faceHitPlanes);
+  if (vHit){ dragging={type:'vertex', mesh:vHit.object, start:new THREE.Vector2(clientX,clientY), last:new THREE.Vector2(clientX,clientY)}; vibrate([8,8,8]); ensureAudio(); return; }
+  if (eHit){ dragging={type:'edge', mesh:eHit.object, start:new THREE.Vector2(clientX,clientY), last:new THREE.Vector2(clientX,clientY)}; vibrate([3,30,3]); ensureAudio(); return; }
+  if (fHit){ dragging={type:'face', mesh:fHit.object, start:new THREE.Vector2(clientX,clientY), last:new THREE.Vector2(clientX,clientY)}; vibrate([2,10,2,10,2]); ensureAudio(); return; }
+  rotating=true;
+}
+
+function onMove(clientX, clientY){
+  if(!dragging && !rotating) return;
+  const dx=clientX - (dragging? dragging.last.x : prev.x);
+  const dy=clientY - (dragging? dragging.last.y : prev.y);
+  if(dragging){
+    if(dragging.type==='vertex'){
+      timeState.phase += (dx - dy) * 0.004;
+      timeState.jitter = Math.max(0, Math.min(1, timeState.jitter + (Math.abs(dx)+Math.abs(dy))*0.0004));
+      audioSetPhase(timeState.phase, timeState.jitter);
+    } else if (dragging.type==='edge'){
+      timeState.rate = Math.max(0.05, Math.min(6.0, timeState.rate + dx*0.003));
+      timeState.warp = Math.max(0, Math.min(1.5, timeState.warp + (-dy)*0.003));
+      audioSetRate(timeState.rate, timeState.warp);
+    } else if (dragging.type==='face'){
+      const id=dragging.mesh.id; const now=performance.now()*0.001;
+      timeState.faceRipples.set(id, { t:now, amp:Math.min(1.0, (Math.abs(dx)+Math.abs(dy))*0.002 + 0.2) });
+      timeState.jitter = Math.min(1.0, timeState.jitter + 0.01);
+      audioPulse(timeState.faceRipples.get(id).amp);
+    }
+    dragging.last.set(clientX, clientY);
+  } else if (rotating){ tetraMesh.rotation.y += dx*0.005; tetraMesh.rotation.x += dy*0.005; }
+}
+function onUp(){ dragging=null; rotating=false; }
+
+// Pointer events
+canvas.addEventListener('pointerdown', (e)=>{ prev.set(e.clientX,e.clientY); canvas.setPointerCapture(e.pointerId); onDown(e.clientX,e.clientY); });
+canvas.addEventListener('pointermove', (e)=>{ onMove(e.clientX,e.clientY); });
+canvas.addEventListener('pointerup', onUp);
+canvas.addEventListener('pointercancel', onUp);
+
+// Pinch gesture for global dilation
+canvas.addEventListener('touchstart', (e)=>{
+  if(e.touches.length===2){ const d=distTouches(e.touches[0], e.touches[1]); pinchStart={ d, rate:timeState.rate }; }
+},{ passive:true });
+canvas.addEventListener('touchmove', (e)=>{
+  if(e.touches.length===2 && pinchStart){ const d=distTouches(e.touches[0], e.touches[1]); const s=d/pinchStart.d; timeState.rate=Math.max(0.05, Math.min(10.0, pinchStart.rate*s)); audioSetRate(timeState.rate, timeState.warp); }
+},{ passive:true });
+canvas.addEventListener('touchend', ()=>{ pinchStart=null; }, { passive:true });
+
+function distTouches(a,b){ const dx=a.clientX-b.clientX, dy=a.clientY-b.clientY; return Math.hypot(dx,dy); }
+
+// Device tilt as subtle modulation
+if (window.DeviceOrientationEvent){
+  window.addEventListener('deviceorientation', (e)=>{
+    const g=(Math.abs(e.beta||0)+Math.abs(e.gamma||0))/180; // 0..~1
+    timeState.warp = 0.15 + g*0.6;
+  }, { passive:true });
+}
+
+// ===================== Audio (WebAudio) =====================
+let audioCtx, master, oscA, oscB, noise, lp;
+function ensureAudio(){
+  if (audioCtx) return;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  master = audioCtx.createGain(); master.gain.value = 0.08; master.connect(audioCtx.destination);
+  oscA = audioCtx.createOscillator(); oscA.type='sine'; const gA=audioCtx.createGain(); gA.gain.value=0.15; oscA.connect(gA);
+  oscB = audioCtx.createOscillator(); oscB.type='triangle'; const gB=audioCtx.createGain(); gB.gain.value=0.12; oscB.connect(gB);
+  // Soft noise bed
+  const buffer=audioCtx.createBuffer(1, audioCtx.sampleRate*2, audioCtx.sampleRate); const data=buffer.getChannelData(0);
+  for(let i=0;i<data.length;i++) data[i]=(Math.random()*2-1)*0.25;
+  noise=audioCtx.createBufferSource(); noise.buffer=buffer; noise.loop=true;
+  lp=audioCtx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=800;
+  const gN=audioCtx.createGain(); gN.gain.value=0.08; noise.connect(lp).connect(gN);
+  const merger=audioCtx.createGain(); gA.connect(merger); gB.connect(merger); gN.connect(merger); merger.connect(master);
+  oscA.start(); oscB.start(); noise.start();
+}
+function audioSetRate(rate, warp){ if(!audioCtx) return; const t=audioCtx.currentTime; const base=110; const fA=base*(1+0.8*Math.tanh((rate-1)*0.9)); const fB=fA*(1.5+0.3*Math.sin(warp*2.0)); oscA.frequency.exponentialRampToValueAtTime(Math.max(40,fA), t+0.05); oscB.frequency.exponentialRampToValueAtTime(Math.max(60,fB), t+0.05); lp.frequency.exponentialRampToValueAtTime(400+warp*1400, t+0.1); }
+function audioSetPhase(phase, jit){ if(!audioCtx) return; const t=audioCtx.currentTime; const g=master.gain; const level=0.06+0.05*(0.5+0.5*Math.sin(phase*2.0)); g.cancelScheduledValues(t); g.linearRampToValueAtTime(level+0.1*jit, t+0.05); }
+function audioPulse(amp){ if(!audioCtx) return; const t=audioCtx.currentTime; master.gain.setTargetAtTime(master.gain.value + amp*0.05, t, 0.05); }
+
+// ===================== Animate =====================
+let last = performance.now()*0.001;
+function animate(){
+  const now = performance.now()*0.001; const dt=now-last; last=now;
+  timeState.phase += dt * 0.15 * (1.0 + timeState.warp*0.2);
+  timeState.jitter *= 0.985;
+  const breathe=0.02*Math.sin(timeState.phase*1.7); tetraMesh.scale.setScalar(1.0 + breathe);
+  edgeRings.forEach((r,i)=>{ r.rotation.y += 0.02*timeState.rate*(i%2?1:-1); r.rotation.x += 0.013*(1+timeState.warp*0.5)*(i%3?1:-1); });
+  vertexSpheres.forEach((s,i)=>{ const base=s.position.clone().normalize().multiplyScalar(radius); const ang=now*(0.6+0.4*timeState.rate)+i*1.7+timeState.phase*0.7; const offset=new THREE.Vector3(Math.sin(ang), Math.cos(ang*1.3), Math.sin(ang*0.7)).multiplyScalar(0.015+0.01*timeState.warp); s.position.copy(base.add(offset)); });
+  faceMat.uniforms.u_time.value=now; faceMat.uniforms.u_rate.value=timeState.rate; faceMat.uniforms.u_warp.value=timeState.warp; faceMat.uniforms.u_phase.value=timeState.phase; faceMat.uniforms.u_jit.value=timeState.jitter;
+  renderer.render(scene, camera);
+  requestAnimationFrame(animate);
+}
+requestAnimationFrame(animate);
+
+// ===================== Helpers =====================
+function resize(){
+  const w=innerWidth, h=innerHeight; renderer.setSize(w,h,false); if(!camera) return; camera.aspect=w/h; camera.updateProjectionMatrix();
+}
+
+// Wake lock-ish: keep audio context alive on interaction (silent until touched)
+window.addEventListener('pointerdown', ()=>{ ensureAudio(); audioSetRate(timeState.rate, timeState.warp); audioSetPhase(timeState.phase, timeState.jitter); }, { passive:true });
+
+// ===================== Self-Tests (non-UI) =====================
+(function runSelfTests(){
+  try{
+    console.assert(!!camera && camera.isPerspectiveCamera, 'Camera not initialized');
+    console.assert(renderer instanceof THREE.WebGLRenderer, 'Renderer not initialized');
+    console.assert(tetraGeo && tetraGeo.attributes && tetraGeo.attributes.position, 'Geometry missing positions');
+    console.assert(faceMat && faceMat.isMaterial, 'Shader material missing');
+    console.assert(typeof resize === 'function', 'Resize function missing');
+  }catch(e){ /* keep silent UI */ }
+})();
+
+</script>
+</body>
+</html>

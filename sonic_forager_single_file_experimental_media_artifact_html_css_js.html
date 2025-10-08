@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Sonic Forager · Unthinkable Instrument</title>
+<style>
+  :root{
+    --bg: #000; --fg:#f0f0ff; --accent:#ff2d95; --muted:#7f7fa0; --panel:#111; --panel-2:#181818; --shadow: 0 0 20px rgba(255,45,149,.5);
+  }
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font-family:ui-monospace, monospace;}
+  #scope{width:100%;height:100%;display:block;cursor:crosshair;}
+  #overlay{position:absolute;top:0;left:0;right:0;padding:6px;font-size:12px;color:var(--muted);pointer-events:none}
+  #controls{position:fixed;bottom:0;left:0;right:0;display:flex;flex-wrap:wrap;gap:4px;padding:8px;background:rgba(0,0,0,.6)}
+  button{background:var(--panel-2);border:1px solid var(--accent);color:var(--fg);border-radius:8px;padding:6px 12px;cursor:pointer}
+  button[aria-pressed="true"]{background:var(--accent);color:#000}
+</style>
+</head>
+<body>
+<canvas id="scope"></canvas>
+<div id="overlay">Sonic Forager — UNTHINKABLE MODE</div>
+<div id="controls">
+  <button id="btnStart">Start</button>
+  <button id="btnSilence">Silence</button>
+  <button id="btnChaos" aria-pressed="false">Chaos Morph</button>
+  <button id="btnTime" aria-pressed="false">Time Stretch</button>
+  <button id="btnTheme">Theme</button>
+</div>
+<script>
+let AC, master, analyser, canvas, ctx;
+canvas=document.getElementById('scope');ctx=canvas.getContext('2d');
+function fit(){canvas.width=innerWidth;canvas.height=innerHeight}window.onresize=fit;fit();
+
+// AUDIO ENGINE
+function ensure(){if(AC) return;AC=new (window.AudioContext||webkitAudioContext)();master=AC.createGain();master.connect(AC.destination);analyser=AC.createAnalyser();analyser.fftSize=1024;master.connect(analyser);}
+
+// Chaos oscillator cloud
+let chaosOn=false, timeOn=false;
+function chaos(){if(!AC) return;const t=AC.currentTime;for(let i=0;i<6;i++){let o=AC.createOscillator();o.type=['sine','square','sawtooth','triangle'][Math.floor(Math.random()*4)];o.frequency.setValueAtTime(40+Math.random()*2000,t);let g=AC.createGain();g.gain.setValueAtTime(0.2+Math.random()*0.3,t);g.gain.exponentialRampToValueAtTime(0.0001,t+1+Math.random()*2);o.connect(g).connect(master);o.start(t);o.stop(t+3);}}
+
+// Time stretch = frozen grains
+function timeFreeze(){if(!AC) return;const len=0.3;const b=AC.createBuffer(1,AC.sampleRate*len,AC.sampleRate);const d=b.getChannelData(0);for(let i=0;i<d.length;i++){d[i]=Math.random()*2-1;}const src=AC.createBufferSource();src.buffer=b;src.loop=true;const g=AC.createGain();g.gain.value=0.25;src.connect(g).connect(master);src.start();setTimeout(()=>g.gain.exponentialRampToValueAtTime(0.0001,AC.currentTime+2),2000);}
+
+// Silence cut
+function silence(){if(!AC)return;master.gain.cancelScheduledValues(AC.currentTime);master.gain.setTargetAtTime(0.0001,AC.currentTime,0.05);setTimeout(()=>master.gain.setTargetAtTime(0.5,AC.currentTime,0.5),1000);}
+
+// VISUAL
+function draw(){requestAnimationFrame(draw);ctx.fillStyle='rgba(0,0,0,0.25)';ctx.fillRect(0,0,canvas.width,canvas.height);if(!analyser)return;const arr=new Uint8Array(analyser.fftSize);analyser.getByteTimeDomainData(arr);ctx.beginPath();for(let i=0;i<arr.length;i++){const x=i/(arr.length-1)*canvas.width;const y=(arr[i]/255)*canvas.height; if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);}ctx.strokeStyle='rgba(255,45,149,0.8)';ctx.lineWidth=2;ctx.stroke();}
+draw();
+
+// CONTROLS
+const btnStart=document.getElementById('btnStart');const btnChaos=document.getElementById('btnChaos');const btnTime=document.getElementById('btnTime');document.getElementById('btnSilence').onclick=()=>silence();
+btnStart.onclick=async()=>{ensure();if(AC.state==='suspended') await AC.resume();chaos();setInterval(()=>{if(chaosOn)chaos();if(timeOn)timeFreeze();},800);};
+btnChaos.onclick=()=>{chaosOn=!chaosOn;btnChaos.setAttribute('aria-pressed',chaosOn)};
+btnTime.onclick=()=>{timeOn=!timeOn;btnTime.setAttribute('aria-pressed',timeOn)};
+document.getElementById('btnTheme').onclick=()=>{document.body.style.background=document.body.style.background==='#000'?'#fff':'#000';};
+
+canvas.addEventListener('click',()=>{chaos();});
+</script>
+</body>
+</html>
