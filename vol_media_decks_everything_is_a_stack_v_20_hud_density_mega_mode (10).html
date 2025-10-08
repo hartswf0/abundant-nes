@@ -165,10 +165,40 @@
 
   function makeStackSlider(label,get,set,onChange){ const s=document.createElement('div'); s.className='stack'; s.innerHTML=`<div class=\"glyph\">${label}</div><div class=\"layers\"></div>`; const L=s.querySelector('.layers'); const render=(vv)=>{buildLayers(L,12,Math.max(1,Math.round(1+vv*11)));}; let v=get(); render(v); let grabbing=false, sy=0, sv=v, last=-1; const dead=4; s.addEventListener('pointerdown',e=>{grabbing=true; sy=e.clientY; sv=v; s.setPointerCapture(e.pointerId); buzz(8)}); s.addEventListener('pointermove',e=>{ if(!grabbing) return; const dy=sy-e.clientY; let dv=(Math.abs(dy)>dead?(dy>0?(dy-dead):(dy+dead)):0)/100; v=clamp01(sv+dv); render(v); set(v); onChange&&onChange(v); const tick=Math.round(v*24); if(tick!==last){ last=tick; buzz(3);} }); s.addEventListener('pointerup',()=>{grabbing=false; buzz(10)}); return s; }
 
-  function openParamDock(side){ state.paramSide=side; const dock = side==='L'? $('paramDockL'): $('paramDockR'); dock.style.display='flex'; populateParamDock(side); }
+  function openParamDock(side){ 
+    state.paramSide=side; 
+    // Close both docks first
+    $('paramDockL').style.display='none';
+    $('paramDockR').style.display='none';
+    // Open on opposite side to avoid overlap with alley
+    const dock = side==='R'? $('paramDockL'): $('paramDockR'); 
+    dock.style.display='flex'; 
+    populateParamDock(side); 
+  }
 
-  function populateParamDock(side){ const dock= side==='L'? $('paramDockL'): $('paramDockR'); dock.innerHTML=''; const sel=state.selection; if(!sel) return; const cell=grid[sel.r][sel.c]; const SET= state.uiMode==='SOUND'? PARAMS_SOUND:PARAMS_VIS; const page=0; const slice=SET.slice(page*PAGE_SIZE,page*PAGE_SIZE+PAGE_SIZE);
-    slice.forEach(p=>{ const get=()=> value01(p.key, cell); const set=(v)=> state.uiMode==='SOUND'? applySound(cell,p.key,v): applyLook(cell,p.key,v); const onChange=(v)=>{ if(state.uiMode==='SOUND' && p.key!=='prob'){ instantPulse(sel.r, sel.c, true); trig(sel.r, cell, true);} else { instantPulse(sel.r, sel.c, true);} }; dock.appendChild(makeStackSlider(p.label,get,set,onChange)); });
+  function populateParamDock(side){ 
+    // Use opposite dock to avoid overlap
+    const dock = side==='R'? $('paramDockL'): $('paramDockR'); 
+    dock.innerHTML=''; 
+    const sel=state.selection; 
+    if(!sel) return; 
+    const cell=grid[sel.r][sel.c]; 
+    const SET= state.uiMode==='SOUND'? PARAMS_SOUND:PARAMS_VIS; 
+    const page=0; 
+    const slice=SET.slice(page*PAGE_SIZE,page*PAGE_SIZE+PAGE_SIZE);
+    slice.forEach(p=>{ 
+      const get=()=> value01(p.key, cell); 
+      const set=(v)=> state.uiMode==='SOUND'? applySound(cell,p.key,v): applyLook(cell,p.key,v); 
+      const onChange=(v)=>{ 
+        if(state.uiMode==='SOUND' && p.key!=='prob'){ 
+          instantPulse(sel.r, sel.c, true); 
+          trig(sel.r, cell, true);
+        } else { 
+          instantPulse(sel.r, sel.c, true);
+        } 
+      }; 
+      dock.appendChild(makeStackSlider(p.label,get,set,onChange)); 
+    });
   }
 
   /* =================== Audio =================== */

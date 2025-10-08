@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Abundant NES Radio v2 - Interactive Gauge</title>
+  <meta name="theme-color" content="#c4b896" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='%23c4b896'/><path d='M20,60 A30,30 0 0,1 80,60' stroke='%232d4a3e' stroke-width='8' fill='none'/><circle cx='50' cy='60' r='8' fill='%23ef4444'/><rect x='30' y='70' width='40' height='15' rx='3' fill='%232d4a3e'/></svg>" />
+  <style>
+    :root{
+      --sand:#c4b896; --dark:#2d4a3e; --cream:#e8dcc4; --accent:#5a7c6e;
+      --fg-led:#8dff5a;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace;
+    }
+    *{box-sizing:border-box; -webkit-tap-highlight-color:transparent; margin:0; padding:0; touch-action:none}
+    html,body{height:100%; overflow:hidden}
+    body{
+      background:linear-gradient(135deg, #b8a57e 0%, var(--sand) 50%, #d4c8a8 100%);
+      color:var(--dark); font:600 16px/1.3 var(--mono);
+      display:flex; flex-direction:column;
+    }
+
+    .led{position:fixed; top:10px; right:10px; width:12px; height:12px; border-radius:3px; background:#516659; box-shadow:inset 0 0 0 2px #1d2a24}
+    .led.on{background:var(--fg-led); box-shadow:0 0 10px var(--fg-led)}
+
+    .console{flex:1; display:flex; flex-direction:column; padding:20px; max-width:1000px; margin:0 auto; width:100%}
+
+    /* GAUGE */
+    .gauge-wrap{
+      background:linear-gradient(180deg, rgba(255,255,255,.22), rgba(0,0,0,.10));
+      border:4px solid var(--dark); border-radius:20px 20px 10px 10px;
+      padding:20px 20px 20px; margin-bottom:12px; position:relative;
+      box-shadow:inset 0 2px 8px rgba(0,0,0,.2), 0 8px 24px rgba(0,0,0,.15);
+    }
+    .gauge{width:100%; height:auto; display:block; cursor:grab; transition:transform 0.1s cubic-bezier(0.4, 0, 0.2, 1)}
+    .gauge.dragging{cursor:grabbing; transform:scale(1.02)}
+
+    .station{position:absolute; bottom:28px; left:50%; transform:translateX(-50%);
+      background:linear-gradient(180deg,#1a1a1a,#0a0a0a); border:3px solid var(--dark); border-radius:12px;
+      padding:12px 32px; font-size:2.2rem; font-weight:900; color:#9ef59e; letter-spacing:.1em;
+      text-shadow:0 0 20px rgba(158,245,158,.4); box-shadow:inset 0 0 30px rgba(0,0,0,.6), 0 4px 12px rgba(0,0,0,.3);
+      min-width:140px; text-align:center}
+
+    /* SCREEN */
+    .screen-wrap{flex:1; background:linear-gradient(180deg, rgba(0,0,0,.15), rgba(0,0,0,.25)); border:4px solid var(--dark); border-radius:10px; padding:8px; margin-bottom:12px; position:relative; box-shadow:inset 0 2px 12px rgba(0,0,0,.3)}
+    .screen{width:100%; height:100%; background:#000; border:2px solid rgba(0,0,0,.4); border-radius:6px; position:relative; overflow:hidden}
+    .screen iframe{width:100%; height:100%; border:0}
+
+    /* CONTROLS */
+    .controls{display:flex; gap:12px; justify-content:center; padding:12px; background:linear-gradient(180deg, rgba(255,255,255,.15), rgba(0,0,0,.05)); border:4px solid var(--dark); border-radius:8px 8px 20px 20px; box-shadow:inset 0 2px 4px rgba(255,255,255,.2), 0 6px 20px rgba(0,0,0,.2)}
+    .knob{width:72px; height:72px; border-radius:50%; border:4px solid var(--dark); cursor:pointer; background:radial-gradient(circle at 35% 35%, var(--cream), #a89775); box-shadow:inset 0 0 0 4px rgba(45,74,62,.2), 0 6px 0 rgba(0,0,0,.3), 0 8px 16px rgba(0,0,0,.2); transition:all .15s cubic-bezier(0.4, 0, 0.2, 1); display:flex; align-items:center; justify-content:center; font-size:28px; font-weight:900; color:var(--dark)}
+    .knob:hover{transform:translateY(-2px); box-shadow:inset 0 0 0 4px rgba(45,74,62,.2), 0 8px 0 rgba(0,0,0,.3), 0 10px 20px rgba(0,0,0,.25)}
+    .knob:active{transform:translateY(4px) scale(0.98); box-shadow:inset 0 0 0 4px rgba(45,74,62,.2), 0 2px 0 rgba(0,0,0,.3), 0 4px 8px rgba(0,0,0,.2)}
+
+    @media (max-width:600px){
+      .console{padding:12px}
+      .gauge-wrap{padding:15px}
+      .station{font-size:1.6rem; padding:8px 20px}
+      .knob{width:60px; height:60px; font-size:22px}
+    }
+  </style>
+</head>
+<body>
+  <div class="led" id="led" title="power"></div>
+  <div class="console">
+    <!-- GAUGE -->
+    <div class="gauge-wrap">
+      <svg id="gauge" class="gauge" viewBox="0 0 400 200" preserveAspectRatio="xMidYMid meet">
+        <line id="needle" x1="200" y1="190" x2="200" y2="50" stroke="#ef4444" stroke-width="4" stroke-linecap="round"/>
+        <g id="arcs"></g>
+        <g id="ticks"></g>
+        <g id="dragRing"></g>
+        <circle cx="200" cy="190" r="8" fill="#ef4444"/>
+        <circle cx="200" cy="190" r="4" fill="var(--sand)"/>
+      </svg>
+      <div class="station" id="station">---</div>
+    </div>
+
+    <!-- SCREEN -->
+    <div class="screen-wrap">
+      <div class="screen">
+        <iframe id="frame" title="station"></iframe>
+      </div>
+    </div>
+
+    <!-- CONTROLS -->
+    <div class="controls">
+      <div style="display:flex; gap:8px">
+        <button class="knob" id="prev" aria-label="previous">◄</button>
+        <button class="knob" id="next" aria-label="next">►</button>
+      </div>
+      <div style="display:flex; gap:8px">
+        <button class="knob" id="open" aria-label="open" title="open in new window">↗</button>
+        <button class="knob" id="eject" aria-label="eject" title="clear">╳</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+(function(){
+  'use strict';
+  const ghOwner='hartswf0', ghRepo='abundant-nes';
+  const MANIFEST_URL = 'manifest.json';
+  const isLocal = window.location.protocol === 'file:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  const site = (n) => isLocal ? n : `https://${ghOwner}.github.io/${ghRepo}/${encodeURIComponent(n)}`;
+
+  const gauge = document.getElementById('gauge');
+  const frame = document.getElementById('frame');
+  const station = document.getElementById('station');
+  const needle = document.getElementById('needle');
+  const arcsGroup = document.getElementById('arcs');
+  const ticksGroup = document.getElementById('ticks');
+  const dragRingGroup = document.getElementById('dragRing');
+  const led = document.getElementById('led');
+
+  let list = [], index = 0, isDragging = false;
+  let prefixArcs = [], tickMarks = [];
+
+  // Muted colors matching interface theme (sand/dark palette)
+  const PREFIX_COLORS = {
+    vol: '#8b6f47', abu: '#a0826d', ais: '#b8a57e', orc: '#7a9b8e',
+    rhm: '#6b8b7d', ven: '#8b7d9b', bti: '#9b6b7d', sta: '#a08b6b',
+    exc: '#7d8b9b', geo: '#7d9b8b', ind: '#9b8b6b', sea: '#8b9b7d'
+  };
+
+  function vib(ms=15){ try{ if(navigator.vibrate) navigator.vibrate(ms); }catch(_){} }
+
+  // Angle utilities (bottom semicircle: 270° to 90° clockwise)
+  const normalizeAngle = (a) => { while(a>=360) a-=360; while(a<0) a+=360; return a; };
+  const toRad = (deg) => (deg - 90) * Math.PI / 180;
+  
+  // Convert file index to gauge angle (270° to 90°)
+  const indexToAngle = (i, total) => {
+    const ratio = i / (total - 1 || 1);
+    return normalizeAngle(270 + ratio * 180); // 270° -> 360° -> 0° -> 90°
+  };
+
+  // Find which arc contains an angle
+  const findArcAtAngle = (angle) => {
+    const norm = normalizeAngle(angle);
+    return prefixArcs.find(arc => {
+      const start = normalizeAngle(arc.startAngle);
+      const end = normalizeAngle(arc.endAngle);
+      if(end > start) return norm >= start && norm < end;
+      return norm >= start || norm < end;
+    }) || prefixArcs[0];
+  };
+
+  // Build full-coverage arcs with tick marks
+  function buildArcs(){
+    if(!arcsGroup || !list.length) return;
+    arcsGroup.innerHTML = '';
+    ticksGroup.innerHTML = '';
+    dragRingGroup.innerHTML = '';
+
+    // Get unique prefixes
+    const uniquePrefixes = [];
+    const prefixMap = {};
+    list.forEach((entry, i) => {
+      if(!prefixMap[entry.prefix]) {
+        prefixMap[entry.prefix] = {prefix: entry.prefix, firstIndex: i};
+        uniquePrefixes.push(entry.prefix);
+      }
+    });
+
+    prefixArcs = [];
+    tickMarks = [];
+
+    // Draw arcs based on ACTUAL file positions (not equal distribution)
+    uniquePrefixes.forEach((prefix) => {
+      const color = PREFIX_COLORS[prefix] || '#888';
+      const firstIdx = prefixMap[prefix].firstIndex;
+      
+      // Find last index for this prefix
+      let lastIdx = firstIdx;
+      for(let i = firstIdx + 1; i < list.length; i++){
+        if(list[i].prefix === prefix) lastIdx = i;
+        else break;
+      }
+      
+      const startAngle = indexToAngle(firstIdx, list.length);
+      const endAngle = indexToAngle(lastIdx, list.length);
+      
+      prefixArcs.push({prefix, startAngle, endAngle, color, firstIndex: firstIdx});
+
+      const startRad = toRad(startAngle);
+      const endRad = toRad(endAngle);
+      const R = 165;
+      const cx = 200, cy = 190;
+
+      const x1 = cx + Math.cos(startRad) * R;
+      const y1 = cy + Math.sin(startRad) * R;
+      const x2 = cx + Math.cos(endRad) * R;
+      const y2 = cy + Math.sin(endRad) * R;
+
+      const arc = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      arc.setAttribute('d', `M ${x1} ${y1} A ${R} ${R} 0 0 1 ${x2} ${y2}`);
+      arc.setAttribute('stroke', color);
+      arc.setAttribute('stroke-width', '16');
+      arc.setAttribute('opacity', '0.9');
+      arc.setAttribute('stroke-linecap', 'round');
+      arc.style.cursor = 'pointer';
+      arc.style.transition = 'opacity 0.2s, stroke-width 0.2s';
+      arc.onmouseenter = () => { arc.setAttribute('opacity', '1'); arc.setAttribute('stroke-width', '18'); };
+      arc.onmouseleave = () => { arc.setAttribute('opacity', '0.9'); arc.setAttribute('stroke-width', '16'); };
+      arc.onclick = () => { setIndex(prefixMap[prefix].firstIndex); vib([8,16,8]); };
+      arcsGroup.appendChild(arc);
+
+      // Label curved along outside edge (tight overlap)
+      const labelR = 177;
+      const labelStartRad = toRad(startAngle);
+      const labelEndRad = toRad(endAngle);
+      const lx1 = cx + Math.cos(labelStartRad) * labelR;
+      const ly1 = cy + Math.sin(labelStartRad) * labelR;
+      const lx2 = cx + Math.cos(labelEndRad) * labelR;
+      const ly2 = cy + Math.sin(labelEndRad) * labelR;
+      
+      // Create curved path for text
+      const pathId = `label-path-${prefix}`;
+      const labelPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      labelPath.setAttribute('id', pathId);
+      labelPath.setAttribute('d', `M ${lx1} ${ly1} A ${labelR} ${labelR} 0 0 1 ${lx2} ${ly2}`);
+      labelPath.setAttribute('fill', 'none');
+      arcsGroup.appendChild(labelPath);
+      
+      const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      text.setAttribute('font-size', '15');
+      text.setAttribute('font-weight', '900');
+      text.setAttribute('fill', '#8a8a7a');
+      text.setAttribute('stroke', 'rgba(0,0,0,0.6)');
+      text.setAttribute('stroke-width', '1');
+      text.setAttribute('paint-order', 'stroke');
+      text.style.cursor = 'pointer';
+      text.style.transition = 'fill 0.3s, font-size 0.2s';
+      text.dataset.prefix = prefix;
+      text.dataset.fullName = prefix.toUpperCase();
+      text.onclick = () => { setIndex(prefixMap[prefix].firstIndex); vib([8,16,8]); };
+      
+      // Hover: expand to full name
+      text.onmouseenter = () => {
+        const tp = text.querySelector('textPath');
+        if(tp && text.dataset.prefix !== list[index]?.prefix) {
+          tp.textContent = text.dataset.fullName;
+          text.setAttribute('font-size', '16');
+          text.setAttribute('fill', '#b8b8a8');
+        }
+      };
+      text.onmouseleave = () => {
+        const tp = text.querySelector('textPath');
+        if(tp && text.dataset.prefix !== list[index]?.prefix) {
+          tp.textContent = text.dataset.prefix.charAt(0).toUpperCase();
+          text.setAttribute('font-size', '15');
+          text.setAttribute('fill', '#8a8a7a');
+        }
+      };
+      
+      const textPathElem = document.createElementNS('http://www.w3.org/2000/svg', 'textPath');
+      textPathElem.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', `#${pathId}`);
+      textPathElem.setAttribute('startOffset', '50%');
+      textPathElem.setAttribute('text-anchor', 'middle');
+      textPathElem.textContent = prefix.charAt(0).toUpperCase(); // Start with single letter
+      
+      text.appendChild(textPathElem);
+      arcsGroup.appendChild(text);
+    });
+
+    // Draw individual tick marks + alternating number labels (classic radio style)
+    list.forEach((entry, i) => {
+      const angle = indexToAngle(i, list.length);
+      const rad = toRad(angle);
+      const cx = 200, cy = 190;
+      
+      // Longer ticks for every 5th
+      const isEvery5 = i % 5 === 0;
+      const R1 = isEvery5 ? 150 : 158;
+      const R2 = 172;
+      
+      const tick = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      tick.setAttribute('x1', cx + Math.cos(rad) * R1);
+      tick.setAttribute('y1', cy + Math.sin(rad) * R1);
+      tick.setAttribute('x2', cx + Math.cos(rad) * R2);
+      tick.setAttribute('y2', cy + Math.sin(rad) * R2);
+      tick.setAttribute('stroke', 'var(--dark)');
+      tick.setAttribute('stroke-width', isEvery5 ? '3' : '2');
+      tick.setAttribute('opacity', '0.5');
+      tick.style.cursor = 'pointer';
+      tick.dataset.index = i;
+      tick.onclick = () => { setIndex(i); vib(12); };
+      ticksGroup.appendChild(tick);
+      
+      // Alternating number labels: even=outside, odd=inside (classic radio style)
+      const isOutside = i % 2 === 0;
+      const labelRadius = isOutside ? 190 : 140;
+      
+      const numLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      numLabel.setAttribute('x', cx + Math.cos(rad) * labelRadius);
+      numLabel.setAttribute('y', cy + Math.sin(rad) * labelRadius);
+      numLabel.setAttribute('text-anchor', 'middle');
+      numLabel.setAttribute('dominant-baseline', 'middle');
+      numLabel.setAttribute('fill', '#8a8a7a');
+      numLabel.setAttribute('font-size', '10');
+      numLabel.setAttribute('font-weight', '900');
+      numLabel.setAttribute('opacity', '0');
+      numLabel.textContent = entry.last3;
+      numLabel.style.pointerEvents = 'none';
+      numLabel.style.transition = 'fill 0.3s, opacity 0.3s';
+      ticksGroup.appendChild(numLabel);
+      
+      tickMarks.push({angle, index: i, element: tick, label: numLabel});
+    });
+
+    // NO black ring - classic radio style with alternating numbers
+
+    // Drag indicator (small triangle pointer)
+    const dragIndicator = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    dragIndicator.setAttribute('id', 'dragIndicator');
+    dragIndicator.style.cursor = 'grab';
+    
+    // Small triangle pointer
+    const pointer = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+    pointer.setAttribute('points', '0,-8 -5,3 5,3');
+    pointer.setAttribute('fill', '#ef4444');
+    pointer.setAttribute('stroke', 'none');
+    dragIndicator.appendChild(pointer);
+    
+    dragRingGroup.appendChild(dragIndicator);
+
+    updateDragDot();
+  }
+
+  function updateDragDot(){
+    const indicator = document.getElementById('dragIndicator');
+    if(!indicator || !list.length) return;
+    const angle = indexToAngle(index, list.length);
+    const rad = toRad(angle);
+    const R = 178; // Position on outer edge
+    const x = 200 + Math.cos(rad) * R;
+    const y = 190 + Math.sin(rad) * R;
+    indicator.setAttribute('transform', `translate(${x},${y}) rotate(${angle - 180})`);
+  }
+
+  function setIndex(i, play=true){
+    if(!list.length) return;
+    index = (i % list.length + list.length) % list.length;
+    
+    const entry = list[index];
+    station.textContent = entry.id.toUpperCase();
+    
+    // Update needle with smooth physics
+    const angle = indexToAngle(index, list.length);
+    const rad = toRad(angle);
+    const needleLen = 140;
+    needle.style.transition = 'x2 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), y2 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)';
+    needle.setAttribute('x2', 200 + Math.cos(rad) * needleLen);
+    needle.setAttribute('y2', 190 + Math.sin(rad) * needleLen);
+    
+    // Update arc labels - expand to 3 letters + green for current, collapse + grey for others
+    document.querySelectorAll('[data-prefix]').forEach(label => {
+      const textPath = label.querySelector('textPath');
+      if(!textPath) return;
+      
+      if(label.dataset.prefix === entry.prefix) {
+        // Current: full 3 letters, green, larger, z-index front
+        label.setAttribute('fill', '#9ef59e');
+        label.setAttribute('font-size', '17');
+        label.style.zIndex = '100';
+        textPath.textContent = label.dataset.fullName;
+      } else {
+        // Others: single letter, grey, smaller
+        label.setAttribute('fill', '#8a8a7a');
+        label.setAttribute('font-size', '15');
+        label.style.zIndex = '1';
+        textPath.textContent = label.dataset.prefix.charAt(0).toUpperCase();
+      }
+    });
+    
+    // Highlight current tick and show nearby numbers
+    tickMarks.forEach(tick => {
+      const angleDiff = Math.abs(normalizeAngle(indexToAngle(tick.index, list.length) - indexToAngle(index, list.length)));
+      const adjustedDiff = angleDiff > 180 ? 360 - angleDiff : angleDiff;
+      
+      // Fire mechanic: grey → green based on proximity
+      if(tick.index === index){
+        tick.element.setAttribute('stroke-width', '4');
+        tick.element.setAttribute('opacity', '1');
+        tick.label.setAttribute('opacity', '1');
+        tick.label.setAttribute('fill', '#9ef59e');
+        tick.label.setAttribute('font-size', '12');
+        tick.label.setAttribute('font-weight', '900');
+      } else if(adjustedDiff < 20) {
+        // Immediate neighbors - hot green
+        const heat = 1 - (adjustedDiff / 20);
+        const opacity = heat * 0.95;
+        const green = Math.round(158 + heat * 97);
+        const grey = Math.round(138 - heat * 20);
+        tick.element.setAttribute('stroke-width', '2');
+        tick.element.setAttribute('opacity', '0.6');
+        tick.label.setAttribute('opacity', opacity);
+        tick.label.setAttribute('fill', `rgb(${grey}, ${green}, ${grey})`);
+        tick.label.setAttribute('font-size', '11');
+        tick.label.setAttribute('font-weight', '900');
+      } else if(adjustedDiff < 40) {
+        // Further neighbors - warming up
+        if(tick.index % 3 === 0) {
+          const heat = 0.3 * (1 - (adjustedDiff - 20) / 20);
+          const opacity = 0.4 * (1 - (adjustedDiff - 20) / 20);
+          const green = Math.round(138 + heat * 80);
+          tick.element.setAttribute('stroke-width', '2');
+          tick.element.setAttribute('opacity', '0.5');
+          tick.label.setAttribute('opacity', opacity);
+          tick.label.setAttribute('fill', `rgb(138, ${green}, 122)`);
+          tick.label.setAttribute('font-size', '9');
+          tick.label.setAttribute('font-weight', '700');
+        } else {
+          tick.element.setAttribute('stroke-width', '2');
+          tick.element.setAttribute('opacity', '0.5');
+          tick.label.setAttribute('opacity', '0');
+        }
+      } else if(tick.index % 10 === 0) {
+        // Far away - cool grey
+        tick.element.setAttribute('stroke-width', '3');
+        tick.element.setAttribute('opacity', '0.5');
+        tick.label.setAttribute('opacity', '0.3');
+        tick.label.setAttribute('fill', '#8a8a7a');
+        tick.label.setAttribute('font-size', '8');
+        tick.label.setAttribute('font-weight', '600');
+      } else {
+        tick.element.setAttribute('stroke-width', '2');
+        tick.element.setAttribute('opacity', '0.5');
+        tick.label.setAttribute('opacity', '0');
+      }
+    });
+    
+    updateDragDot();
+    
+    if(play){ 
+      frame.src = site(entry.file);
+      vib(12);
+    }
+  }
+
+  // Drag handling
+  function calculateAngleFromPoint(x, y){
+    const rect = gauge.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const dx = x - cx;
+    const dy = y - cy;
+    return normalizeAngle(Math.atan2(dy, dx) * 180 / Math.PI + 90);
+  }
+
+  function handlePointerMove(e){
+    if(!isDragging && e.type === 'mousemove') return;
+    
+    const x = e.touches ? e.touches[0].clientX : e.clientX;
+    const y = e.touches ? e.touches[0].clientY : e.clientY;
+    const angle = calculateAngleFromPoint(x, y);
+    
+    // Only valid range: 270° to 90° (bottom semicircle)
+    if((angle >= 270 && angle <= 360) || (angle >= 0 && angle <= 90)){
+      // Find closest TICK MARK (file) for this angle
+      let closestIdx = 0;
+      let minDiff = 999;
+      tickMarks.forEach(tick => {
+        let diff = Math.abs(normalizeAngle(angle - tick.angle));
+        if(diff > 180) diff = 360 - diff;
+        if(diff < minDiff){ minDiff = diff; closestIdx = tick.index; }
+      });
+      
+      if(closestIdx !== index){
+        setIndex(closestIdx);
+        vib(10); // Haptic feedback on each tick
+      }
+    }
+  }
+
+  function handlePointerDown(e){
+    isDragging = true;
+    gauge.classList.add('dragging');
+    const indicator = document.getElementById('dragIndicator');
+    if(indicator) indicator.style.cursor = 'grabbing';
+    handlePointerMove(e);
+    e.preventDefault();
+  }
+
+  function handlePointerUp(){
+    isDragging = false;
+    gauge.classList.remove('dragging');
+    const indicator = document.getElementById('dragIndicator');
+    if(indicator) indicator.style.cursor = 'grab';
+  }
+
+  gauge.addEventListener('mousedown', handlePointerDown);
+  gauge.addEventListener('touchstart', handlePointerDown, {passive:false});
+  document.addEventListener('mousemove', handlePointerMove);
+  document.addEventListener('touchmove', handlePointerMove, {passive:false});
+  document.addEventListener('mouseup', handlePointerUp);
+  document.addEventListener('touchend', handlePointerUp);
+
+  // Controls with haptic
+  document.getElementById('prev').onclick = ()=> { setIndex(index-1); vib(15); };
+  document.getElementById('next').onclick = ()=> { setIndex(index+1); vib(15); };
+  document.getElementById('open').onclick = ()=>{ if(list.length) window.open(site(list[index].file), '_blank','noopener'); vib(20); };
+  document.getElementById('eject').onclick = ()=>{ frame.src = 'about:blank'; vib(8); };
+
+  // Keyboard
+  document.addEventListener('keydown', (e)=>{
+    if(e.key==='ArrowRight' || e.key==='ArrowUp') setIndex(index+1);
+    else if(e.key==='ArrowLeft' || e.key==='ArrowDown') setIndex(index-1);
+    else if(e.key==='Enter') document.getElementById('open').click();
+    else if(e.key==='Escape') document.getElementById('eject').click();
+  });
+
+  // Boot
+  async function boot(){
+    try{
+      const r = await fetch(MANIFEST_URL, {cache:'no-store'});
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      
+      list = await r.json();
+      
+      buildArcs();
+      if(list.length){ 
+        setIndex(0,false); 
+        led.classList.add('on');
+        console.log(`✅ Loaded ${list.length} files, ${prefixArcs.length} prefix arcs`);
+      }
+    }catch(e){ 
+      console.warn('Failed to load manifest:', e); 
+    }
+  }
+
+  boot();
+})();
+</script>
+</body>
+</html>

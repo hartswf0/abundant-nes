@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Arc Alignment Test Apparatus</title>
+  <style>
+    body{margin:0; padding:20px; font-family:monospace; background:#0a0a0a; color:#0f0}
+    .test{margin:20px 0; padding:20px; border:2px solid #0f0; background:#111}
+    h2{color:#0ff}
+    svg{display:block; margin:20px auto; background:#000; border:1px solid #333}
+    .info{background:#222; padding:10px; margin:10px 0; border-left:3px solid #0f0}
+    .error{border-left-color:#f00; color:#f00}
+    .success{border-left-color:#0f0; color:#0f0}
+    pre{background:#000; padding:10px; overflow-x:auto}
+  </style>
+</head>
+<body>
+
+<h1>🔬 Arc Alignment Test Apparatus</h1>
+
+<div class="test">
+  <h2>Problem Definition</h2>
+  <div class="info">
+    <strong>NEEDLE SYSTEM:</strong> Uses ABSOLUTE file index to calculate rotation<br>
+    Formula: <code>angle = -90 + (fileIndex / (totalFiles - 1)) * 180</code>
+  </div>
+  <div class="info error">
+    <strong>ARC SYSTEM (BROKEN):</strong> Groups by prefix but loses absolute position<br>
+    Problem: Arc position ≠ Needle position for same file
+  </div>
+</div>
+
+<div class="test">
+  <h2>Test Data (Simplified)</h2>
+  <pre id="testData"></pre>
+</div>
+
+<div class="test">
+  <h2>Visual Test: Needle vs Arc Alignment</h2>
+  <svg id="testSvg" width="600" height="300" viewBox="0 0 600 300">
+    <!-- Background arc -->
+    <path d="M 50,250 A 200,200 0 0 1 550,250" stroke="#333" stroke-width="2" fill="none"/>
+    
+    <!-- Test arcs will be drawn here -->
+    <g id="arcs"></g>
+    
+    <!-- Needle will be drawn here -->
+    <g id="needle"></g>
+    
+    <!-- Center point -->
+    <circle cx="300" cy="250" r="3" fill="#fff"/>
+  </svg>
+</div>
+
+<div class="test">
+  <h2>Calculation Proof</h2>
+  <div id="calculations"></div>
+</div>
+
+<div class="test">
+  <h2>Solution</h2>
+  <div class="info success">
+    <strong>FIX:</strong> Arcs must use the SAME absolute index mapping as needle<br>
+    <code>arcStart = -90 + (group.firstFileIndex / (totalFiles - 1)) * 180</code><br>
+    <code>arcEnd = -90 + (group.lastFileIndex / (totalFiles - 1)) * 180</code>
+  </div>
+</div>
+
+<script>
+// Simplified test data matching your manifest structure
+const testFiles = [
+  {id: 'abu_004', prefix: 'abu', index: 0},
+  {id: 'abu_005', prefix: 'abu', index: 1},
+  {id: 'abu_000', prefix: 'abu', index: 2},
+  {id: 'abu_007', prefix: 'abu', index: 3},
+  {id: 'ais_895', prefix: 'ais', index: 4},
+  {id: 'ais_073', prefix: 'ais', index: 5},
+  {id: 'ais_831', prefix: 'ais', index: 6},
+  {id: 'ais_580', prefix: 'ais', index: 7},
+  {id: 'orc_001', prefix: 'orc', index: 8},
+  {id: 'orc_002', prefix: 'orc', index: 9},
+  {id: 'orc_003', prefix: 'orc', index: 10},
+  {id: 'orc_000', prefix: 'orc', index: 11}
+];
+
+const totalFiles = testFiles.length;
+const colors = {abu: '#f77f00', ais: '#fcbf49', orc: '#06d6a0'};
+
+// Display test data
+document.getElementById('testData').textContent = JSON.stringify(testFiles, null, 2);
+
+// Group by prefix
+const groups = {};
+testFiles.forEach(file => {
+  if(!groups[file.prefix]) {
+    groups[file.prefix] = {prefix: file.prefix, files: [], start: file.index, end: file.index};
+  }
+  groups[file.prefix].files.push(file);
+  groups[file.prefix].end = file.index;
+});
+
+// Draw arcs using CORRECT absolute index mapping
+const arcGroup = document.getElementById('arcs');
+const cx = 300, cy = 250, R = 210;
+
+Object.values(groups).forEach(group => {
+  const startDeg = -90 + (group.start / (totalFiles - 1)) * 180;
+  const endDeg = -90 + (group.end / (totalFiles - 1)) * 180;
+  
+  const startRad = startDeg * Math.PI / 180;
+  const endRad = endDeg * Math.PI / 180;
+  const x1 = cx + Math.cos(startRad) * R;
+  const y1 = cy + Math.sin(startRad) * R;
+  const x2 = cx + Math.cos(endRad) * R;
+  const y2 = cy + Math.sin(endRad) * R;
+  
+  const arc = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  arc.setAttribute('d', `M ${x1} ${y1} A ${R} ${R} 0 0 1 ${x2} ${y2}`);
+  arc.setAttribute('stroke', colors[group.prefix]);
+  arc.setAttribute('stroke-width', '12');
+  arc.setAttribute('fill', 'none');
+  arc.setAttribute('opacity', '0.7');
+  arcGroup.appendChild(arc);
+  
+  // Label
+  const midDeg = (startDeg + endDeg) / 2;
+  const midRad = midDeg * Math.PI / 180;
+  const lx = cx + Math.cos(midRad) * (R + 20);
+  const ly = cy + Math.sin(midRad) * (R + 20);
+  const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  label.setAttribute('x', lx);
+  label.setAttribute('y', ly);
+  label.setAttribute('text-anchor', 'middle');
+  label.setAttribute('fill', colors[group.prefix]);
+  label.textContent = group.prefix.toUpperCase();
+  arcGroup.appendChild(label);
+});
+
+// Draw needle for first file (index 0)
+const needleGroup = document.getElementById('needle');
+const currentIndex = 0; // Testing ABU_004
+const needleDeg = -90 + (currentIndex / (totalFiles - 1)) * 180;
+const needleRad = needleDeg * Math.PI / 180;
+const needleX = cx + Math.cos(needleRad) * 180;
+const needleY = cy + Math.sin(needleRad) * 180;
+
+const needleLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+needleLine.setAttribute('x1', cx);
+needleLine.setAttribute('y1', cy);
+needleLine.setAttribute('x2', needleX);
+needleLine.setAttribute('y2', needleY);
+needleLine.setAttribute('stroke', '#f00');
+needleLine.setAttribute('stroke-width', '3');
+needleGroup.appendChild(needleLine);
+
+// Show calculations
+const calcDiv = document.getElementById('calculations');
+let calcHTML = '';
+
+Object.values(groups).forEach(group => {
+  const startDeg = -90 + (group.start / (totalFiles - 1)) * 180;
+  const endDeg = -90 + (group.end / (totalFiles - 1)) * 180;
+  
+  calcHTML += `<div class="info">
+    <strong>${group.prefix.toUpperCase()}</strong><br>
+    Files: ${group.files.map(f => f.id).join(', ')}<br>
+    Absolute indices: ${group.start} to ${group.end}<br>
+    Arc start: -90 + (${group.start}/${totalFiles-1}) * 180 = ${startDeg.toFixed(1)}°<br>
+    Arc end: -90 + (${group.end}/${totalFiles-1}) * 180 = ${endDeg.toFixed(1)}°<br>
+    Arc span: ${(endDeg - startDeg).toFixed(1)}°
+  </div>`;
+});
+
+calcHTML += `<div class="info error">
+  <strong>NEEDLE (pointing to ${testFiles[currentIndex].id})</strong><br>
+  Index: ${currentIndex}<br>
+  Angle: -90 + (${currentIndex}/${totalFiles-1}) * 180 = ${needleDeg.toFixed(1)}°
+</div>`;
+
+calcDiv.innerHTML = calcHTML;
+</script>
+
+</body>
+</html>

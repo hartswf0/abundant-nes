@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>abundant-nes — Cool Radio Hybrid</title>
+  <meta name="theme-color" content="#c4b896" />
+  <style>
+    :root{
+      /* Sand radio palette + NES soul */
+      --sand:#c4b896; --dark:#2d4a3e; --cream:#e8dcc4; --accent:#5a7c6e; /* sand theme */
+      --fg-led:#8dff5a; /* keep DMG LED pop */
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace;
+    }
+    *{box-sizing:border-box; -webkit-tap-highlight-color:transparent; margin:0; padding:0}
+    html,body{height:100%; overflow:hidden}
+    body{
+      background:linear-gradient(135deg, #b8a57e 0%, var(--sand) 50%, #d4c8a8 100%);
+      color:var(--dark); font:600 16px/1.3 var(--mono);
+      display:flex; flex-direction:column;
+    }
+
+    /* LED power dot from NES vibe */
+    .led{position:fixed; top:10px; right:10px; width:12px; height:12px; border-radius:3px; background:#516659; box-shadow:inset 0 0 0 2px #1d2a24}
+    .led.on{background:var(--fg-led); box-shadow:0 0 10px var(--fg-led)}
+
+    /* RADIO CONSOLE */
+    .console{flex:1; display:flex; flex-direction:column; padding:20px; max-width:1000px; margin:0 auto; width:100%}
+
+    /* DIAL METER */
+    .meter-wrap{
+      background:linear-gradient(180deg, rgba(255,255,255,.22), rgba(0,0,0,.10));
+      border:4px solid var(--dark); border-radius:20px 20px 10px 10px;
+      padding:28px 18px 20px; margin-bottom:12px; position:relative;
+      box-shadow:inset 0 2px 8px rgba(0,0,0,.2), 0 8px 24px rgba(0,0,0,.15);
+    }
+    .meter{width:100%; height:180px; display:block}
+    .dial-arc{stroke:var(--dark); stroke-width:4; fill:none}
+    .ticks line{opacity:.45; stroke:var(--dark); stroke-width:2}
+    .needle{transform-origin:200px 180px; transition:transform .35s cubic-bezier(.4,0,.2,1); stroke:var(--dark); stroke-width:4}
+    
+    /* PREFIX ARCS - clickable segments */
+    .prefix-arc{fill:none; stroke-width:12; opacity:.65; cursor:pointer; transition:all .25s cubic-bezier(.4,0,.2,1); filter:drop-shadow(0 0 4px rgba(0,0,0,.3))}
+    .prefix-arc:hover{opacity:1; stroke-width:16; filter:drop-shadow(0 0 12px currentColor)}
+    .prefix-arc:active{opacity:.5; stroke-width:14}
+    .prefix-label{font-size:11px; font-weight:900; fill:var(--dark); cursor:pointer; user-select:none; opacity:.75; transition:all .2s}
+    .prefix-label:hover{opacity:1; font-size:12px}
+
+    /* STATION DISPLAY (keeps slug glow soul) */
+    .station{position:absolute; bottom:28px; left:50%; transform:translateX(-50%);
+      background:linear-gradient(180deg,#1a1a1a,#0a0a0a); border:3px solid var(--dark); border-radius:12px;
+      padding:12px 32px; font-size:2.2rem; font-weight:900; color:#9ef59e; letter-spacing:.1em;
+      text-shadow:0 0 20px rgba(158,245,158,.4); box-shadow:inset 0 0 30px rgba(0,0,0,.6), 0 4px 12px rgba(0,0,0,.3);
+      min-width:140px; text-align:center}
+
+    /* SCREEN */
+    .screen-wrap{flex:1; background:linear-gradient(180deg, rgba(0,0,0,.15), rgba(0,0,0,.25)); border:4px solid var(--dark); border-radius:10px; padding:8px; margin-bottom:12px; position:relative; box-shadow:inset 0 2px 12px rgba(0,0,0,.3)}
+    .screen{width:100%; height:100%; background:#000; border:2px solid rgba(0,0,0,.4); border-radius:6px; position:relative; overflow:hidden}
+    .screen iframe{width:100%; height:100%; border:0}
+    .noise{position:absolute; inset:0; pointer-events:none; opacity:0; background:repeating-linear-gradient(0deg, transparent 0 2px, rgba(255,255,255,.03) 2px 3px)}
+    .noise.on{opacity:.8; animation:noise .15s steps(2) infinite}
+    @keyframes noise{to{transform:translateY(1px)}}
+
+    /* CONTROLS (hybrid: sand knobs + NES icons) */
+    .controls{display:flex; gap:12px; justify-content:center; padding:12px; background:linear-gradient(180deg, rgba(255,255,255,.15), rgba(0,0,0,.05)); border:4px solid var(--dark); border-radius:8px 8px 20px 20px; box-shadow:inset 0 2px 4px rgba(255,255,255,.2), 0 6px 20px rgba(0,0,0,.2)}
+    .knob{width:72px; height:72px; border-radius:50%; border:4px solid var(--dark); cursor:pointer; background:radial-gradient(circle at 35% 35%, var(--cream), #a89775); box-shadow:inset 0 0 0 4px rgba(45,74,62,.2), 0 6px 0 rgba(0,0,0,.3), 0 8px 16px rgba(0,0,0,.2); transition:all .1s; display:flex; align-items:center; justify-content:center; font-size:28px; font-weight:900; color:var(--dark)}
+    .knob:active{transform:translateY(4px); box-shadow:inset 0 0 0 4px rgba(45,74,62,.2), 0 2px 0 rgba(0,0,0,.3), 0 4px 8px rgba(0,0,0,.2)}
+    .btn-group{display:flex; gap:8px}
+
+    /* Small screens */
+    @media (max-width:600px){
+      .console{padding:12px}
+      .meter-wrap{padding:20px 12px 16px}
+      .meter{height:140px}
+      .needle{transform-origin:200px 140px}
+      .station{font-size:1.6rem; padding:8px 20px}
+      .knob{width:60px; height:60px; font-size:22px}
+      .controls{gap:8px; padding:8px}
+    }
+  </style>
+</head>
+<body>
+  <div class="led" id="led" title="power"></div>
+  <div class="console">
+    <!-- DIAL METER -->
+    <div class="meter-wrap">
+      <svg class="meter" viewBox="0 0 400 180" preserveAspectRatio="xMidYMax meet" aria-hidden="true">
+        <path class="dial-arc" d="M30,180 A170,170 0 0 1 370,180"/>
+        <g id="prefixArcs"></g>
+        <g class="ticks" id="ticks"></g>
+        <line id="needle" class="needle" x1="200" y1="180" x2="200" y2="40"/>
+      </svg>
+      <div class="station" id="station">---</div>
+    </div>
+
+    <!-- SCREEN -->
+    <div class="screen-wrap">
+      <div class="screen">
+        <div class="noise" id="noise"></div>
+        <iframe id="frame" title="station"></iframe>
+      </div>
+    </div>
+
+    <!-- CONTROLS -->
+    <div class="controls">
+      <div class="btn-group">
+        <button class="knob" id="prev" aria-label="previous">◄</button>
+        <button class="knob" id="next" aria-label="next">►</button>
+      </div>
+      <div class="btn-group">
+        <button class="knob" id="open" aria-label="open" title="open in new window">↗</button>
+        <button class="knob" id="eject" aria-label="eject" title="clear">╳</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+(function(){
+  'use strict';
+  const ghOwner='hartswf0', ghRepo='abundant-nes';
+  const MANIFEST_URL = 'manifest.json';
+  
+  // Smart path resolver: use relative paths locally, GitHub Pages in production
+  const isLocal = window.location.protocol === 'file:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  const site = (n) => isLocal ? n : `https://${ghOwner}.github.io/${ghRepo}/${encodeURIComponent(n)}`;
+
+  const frame = document.getElementById('frame');
+  const station = document.getElementById('station');
+  const needle = document.getElementById('needle');
+  const ticksGroup = document.getElementById('ticks');
+  const prefixArcsGroup = document.getElementById('prefixArcs');
+  const noise = document.getElementById('noise');
+  const prev = document.getElementById('prev');
+  const next = document.getElementById('next');
+  const open = document.getElementById('open');
+  const eject = document.getElementById('eject');
+  const led = document.getElementById('led');
+
+  let list = [], index = 0, prefixGroups = [];
+
+  function vib(ms=15){ try{ if(navigator.vibrate) navigator.vibrate(ms); }catch(_){} }
+
+  // Audio hiss
+  let actx = null;
+  function playHiss(ms=180){
+    try{
+      if(!actx) actx = new (window.AudioContext||window.webkitAudioContext)();
+      const sr = actx.sampleRate;
+      const len = Math.max(1, Math.floor(sr*ms/1000));
+      const buf = actx.createBuffer(1, len, sr);
+      const d = buf.getChannelData(0);
+      for(let i=0; i<len; i++){ d[i] = (Math.random()*2-1)*0.25; }
+      const src = actx.createBufferSource(); src.buffer = buf;
+      const g = actx.createGain();
+      g.gain.setValueAtTime(0.001, actx.currentTime);
+      g.gain.linearRampToValueAtTime(0.4, actx.currentTime+0.02);
+      g.gain.exponentialRampToValueAtTime(0.001, actx.currentTime+ms/1000);
+      src.connect(g).connect(actx.destination);
+      src.start();
+      noise.classList.add('on'); setTimeout(()=> noise.classList.remove('on'), ms);
+    }catch(_){/* ignore */}
+  }
+
+  // Prefix colors - vibrant and distinct
+  const PREFIX_COLORS = {
+    vol: '#e63946', abu: '#f77f00', ais: '#fcbf49', orc: '#06d6a0',
+    rhm: '#118ab2', ven: '#8338ec', bti: '#ff006e', sta: '#fb5607',
+    exc: '#3a86ff', geo: '#06ffa5', ind: '#ffbe0b', sea: '#8ac926',
+    amx: '#ff6b9d', rad: '#00f5ff'
+  };
+
+  // REMOVED: mountTicks() - consolidated into buildPrefixArcs() for single source of truth
+
+  // FULL COVERAGE SYSTEM - Zero dead space, every angle maps to a prefix
+  // Lesson from React example: EQUAL arcs eliminate ambiguity
+  function buildPrefixArcs(){
+    if(!prefixArcsGroup || !list.length) return;
+    prefixArcsGroup.innerHTML = '';
+    
+    const cx = 200, cy = 180;
+    const totalFiles = list.length;
+    
+    // Get unique prefixes in order
+    const uniquePrefixes = [];
+    const prefixMap = {};
+    list.forEach((entry, i) => {
+      if(!prefixMap[entry.prefix]) {
+        prefixMap[entry.prefix] = {prefix: entry.prefix, firstIndex: i, files: []};
+        uniquePrefixes.push(entry.prefix);
+      }
+      prefixMap[entry.prefix].files.push(i);
+    });
+    
+    const numPrefixes = uniquePrefixes.length;
+    const arcSize = 180 / numPrefixes; // EQUAL distribution - NO GAPS
+    
+    // Needle formula (maps file index to angle)
+    const indexToDeg = (i) => -90 + (i / (totalFiles - 1 || 1)) * 180;
+    
+    // Find which arc a given angle falls into
+    const angleToPrefix = (deg) => {
+      const normalized = ((deg + 90) % 180 + 180) % 180; // 0-180 range
+      const arcIndex = Math.floor(normalized / arcSize);
+      return uniquePrefixes[Math.min(arcIndex, numPrefixes - 1)];
+    };
+    
+    // 1. Draw FULL COVERAGE arcs (no gaps)
+    uniquePrefixes.forEach((prefix, idx) => {
+      const color = PREFIX_COLORS[prefix] || '#888';
+      const startDeg = -90 + (idx * arcSize);
+      const endDeg = -90 + ((idx + 1) * arcSize);
+      const startRad = startDeg * Math.PI / 180;
+      const endRad = endDeg * Math.PI / 180;
+      const R = 172;
+      
+      const arc = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      arc.setAttribute('d', `M ${cx + Math.cos(startRad)*R} ${cy + Math.sin(startRad)*R} A ${R} ${R} 0 0 1 ${cx + Math.cos(endRad)*R} ${cy + Math.sin(endRad)*R}`);
+      arc.setAttribute('stroke', color);
+      arc.setAttribute('stroke-width', '12');
+      arc.setAttribute('opacity', '0.7');
+      arc.style.cursor = 'pointer';
+      arc.onclick = () => { setIndex(prefixMap[prefix].firstIndex); vib([8,16,8]); };
+      prefixArcsGroup.appendChild(arc);
+      
+      // Label
+      const midDeg = (startDeg + endDeg) / 2;
+      const midRad = midDeg * Math.PI / 180;
+      const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      label.setAttribute('x', cx + Math.cos(midRad) * 190);
+      label.setAttribute('y', cy + Math.sin(midRad) * 190);
+      label.setAttribute('text-anchor', 'middle');
+      label.setAttribute('dominant-baseline', 'middle');
+      label.setAttribute('class', 'prefix-label');
+      label.textContent = prefix.toUpperCase();
+      label.style.cursor = 'pointer';
+      label.onclick = () => { setIndex(prefixMap[prefix].firstIndex); vib([8,16,8]); };
+      prefixArcsGroup.appendChild(label);
+      
+      // Arc dividers
+      if(idx < numPrefixes - 1) {
+        const divRad = endDeg * Math.PI / 180;
+        const R1 = 160, R2 = 184;
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.setAttribute('x1', cx + Math.cos(divRad) * R1);
+        line.setAttribute('y1', cy + Math.sin(divRad) * R1);
+        line.setAttribute('x2', cx + Math.cos(divRad) * R2);
+        line.setAttribute('y2', cy + Math.sin(divRad) * R2);
+        line.setAttribute('stroke', 'var(--dark)');
+        line.setAttribute('stroke-width', '2');
+        line.setAttribute('opacity', '0.6');
+        prefixArcsGroup.appendChild(line);
+      }
+    });
+    
+    // 2. Individual file tick marks (shows actual file positions)
+    list.forEach((entry, i) => {
+      const deg = indexToDeg(i);
+      const rad = deg * Math.PI / 180;
+      const R1 = 158, R2 = 168;
+      
+      const tick = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      tick.setAttribute('x1', cx + Math.cos(rad) * R1);
+      tick.setAttribute('y1', cy + Math.sin(rad) * R1);
+      tick.setAttribute('x2', cx + Math.cos(rad) * R2);
+      tick.setAttribute('y2', cy + Math.sin(rad) * R2);
+      tick.setAttribute('stroke', PREFIX_COLORS[entry.prefix] || '#888');
+      tick.setAttribute('stroke-width', '2');
+      tick.setAttribute('opacity', '0.5');
+      tick.style.cursor = 'pointer';
+      tick.onclick = () => { setIndex(i); vib(8); };
+      prefixArcsGroup.appendChild(tick);
+    });
+    
+    // 3. Background reference ticks
+    for(let i = 0; i < 21; i++){
+      const deg = -90 + (i/20) * 180;
+      const rad = deg * Math.PI / 180;
+      const R1 = 152, R2 = 158;
+      
+      const tick = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      tick.setAttribute('x1', cx + Math.cos(rad) * R1);
+      tick.setAttribute('y1', cy + Math.sin(rad) * R1);
+      tick.setAttribute('x2', cx + Math.cos(rad) * R2);
+      tick.setAttribute('y2', cy + Math.sin(rad) * R2);
+      tick.setAttribute('stroke', 'var(--dark)');
+      tick.setAttribute('stroke-width', '1');
+      tick.setAttribute('opacity', '0.3');
+      ticksGroup.appendChild(tick);
+    }
+  }
+
+  async function boot(){
+    try{
+      // Load manifest.json
+      const r = await fetch(MANIFEST_URL, {cache:'no-store'});
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      
+      const manifest = await r.json();
+      
+      // Store full manifest entries
+      if(Array.isArray(manifest)){
+        list = manifest;
+      } else {
+        console.warn('Unexpected manifest format', manifest);
+        list = [];
+      }
+
+      buildPrefixArcs(); // Unified system renders all ticks + arcs
+      if(list.length){ 
+        setIndex(0,false); 
+        led.classList.add('on'); 
+        console.log(`Loaded ${list.length} files from manifest`);
+      }
+    }catch(e){ 
+      console.warn('Failed to load manifest:', e); 
+    }
+  }
+
+  function setIndex(i, play=true){
+    if(!list.length) return;
+    index = (i % list.length + list.length) % list.length;
+    
+    const entry = list[index];
+    
+    // Get the ID and filename from manifest entry
+    const displayId = entry.id ? entry.id.toUpperCase() : '---';
+    const name = entry.file;
+    
+    station.textContent = displayId;
+    
+    const deg = -90 + (index/(list.length-1||1))*180;
+    needle.style.transform = `rotate(${deg}deg)` ;
+    
+    if(play){ 
+      frame.src = site(name); 
+      playHiss(200); 
+      vib(12); 
+    }
+  }
+
+  prev.onclick = ()=> setIndex(index-1);
+  next.onclick = ()=> setIndex(index+1);
+  open.onclick = ()=>{ 
+    if(!list.length) return; 
+    const name = list[index].file;
+    window.open(site(name), '_blank','noopener'); 
+    vib(20); 
+  };
+  eject.onclick = ()=>{ frame.src = 'about:blank'; vib(8); };
+
+  // Keyboard
+  document.addEventListener('keydown', (e)=>{
+    if(e.key==='ArrowRight' || e.key==='ArrowUp') setIndex(index+1);
+    else if(e.key==='ArrowLeft' || e.key==='ArrowDown') setIndex(index-1);
+    else if(e.key==='Enter') open.click();
+    else if(e.key==='Escape') eject.click();
+  });
+
+  // Swipe
+  let touchX = 0;
+  document.addEventListener('touchstart', (e)=>{ touchX = e.touches[0].clientX; }, {passive:true});
+  document.addEventListener('touchend', (e)=>{
+    const diff = touchX - e.changedTouches[0].clientX;
+    if(Math.abs(diff) > 60){ if(diff > 0) next.click(); else prev.click(); }
+  }, {passive:true});
+
+  boot();
+})();
+</script>
+</body>
+</html>
